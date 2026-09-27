@@ -16,6 +16,9 @@
   --color-brand-800: #3730a3;
   --color-brand-900: #312e81;
 
+  /* Karta va panellar yuzasi (qorong‘u rejimda to‘q rangga almashadi; bg-white o‘rniga ishlatiladi). */
+  --color-surface: #ffffff;
+
   /* Grafiklar (dataviz qoidalari bo‘yicha tekshirilgan qiymatlar). */
   --color-viz-series: #2a78d6;
   --color-viz-series-hover: #1f63b8;

@@ -4,6 +4,7 @@
  */
 import type {
   AchievementLevel,
+  AttemptLockReason,
   AttemptPolicy,
   AttemptStatus,
   Blueprint,
@@ -15,6 +16,7 @@ import type {
   ExportStatus,
   GradingOverride,
   ParticipationStatus,
+  PortfolioDetails,
   PortfolioItemType,
   PortfolioStatus,
   PortfolioVisibility,
@@ -30,6 +32,7 @@ import type {
   SharePermission,
   SubmitSource,
   TestStatus,
+  TestVisibility,
   UserStatus,
   ValidationIssue,
 } from '@ijod/shared';
@@ -66,6 +69,8 @@ export interface Me {
   mustChangePassword: boolean;
   mfa: { enabled: boolean; verified: boolean; required: boolean };
   homeroomClassIds: string[];
+  /** Profil rasmi manzili (`/api/files/<id>`) yoki null. */
+  avatarUrl: string | null;
 }
 
 export interface AuthSessionItem {
@@ -300,8 +305,10 @@ export interface TestListItem {
   tags: string[];
   folder: string | null;
   status: TestStatus;
+  /** SCHOOL — maktab test bankida (barcha o‘qituvchi va rahbariyatga ko‘rinadi). */
+  visibility: TestVisibility;
   owner: PersonRef;
-  permission: 'OWNER' | SharePermission;
+  permission: 'OWNER' | SharePermission | 'SCHOOL';
   questionCount: number;
   totalPoints: number;
   hasDraftChanges: boolean;
@@ -333,6 +340,7 @@ export interface TestQuestionView {
 export interface TestDetail {
   id: string;
   title: string;
+  visibility: TestVisibility;
   subject: Ref;
   gradeLevel: number;
   topic: string | null;
@@ -419,6 +427,7 @@ export interface SessionDetail {
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
   allowBackNavigation: boolean;
+  requireFullscreen: boolean;
   scoreVisibility: ScoreVisibility;
   reviewVisibility: ReviewVisibility;
   passPercent: number | null;
@@ -471,6 +480,10 @@ export interface LiveRow {
   focusLossCount: number;
   deviceChangeCount: number;
   extraMinutes: number;
+  /** To‘xtatilgan urinish: qachon va nima sababdan (o‘qituvchi ruxsat berishi kerak). */
+  lockedAt: string | null;
+  lockReason: AttemptLockReason | null;
+  lockCount: number;
 }
 
 export interface LiveView {
@@ -487,6 +500,8 @@ export interface LiveView {
     finished: number;
     connectionIssue: number;
     cancelled: number;
+    /** To‘xtatilgan (ruxsat kutayotgan) urinishlar. */
+    locked: number;
   };
   rows: LiveRow[];
 }
@@ -686,8 +701,13 @@ export interface AttemptView {
     subject: Ref;
     instructions: string | null;
     allowBackNavigation: boolean;
+    /** Test to‘liq ekranda ishlanadi; chiqilsa urinish to‘xtatiladi. */
+    requireFullscreen: boolean;
     totalPoints: number;
   };
+  /** To‘xtatilgan urinish (o‘qituvchi ruxsatini kutmoqda) yoki null. */
+  lock: { lockedAt: string; reason: AttemptLockReason } | null;
+  lockCount: number;
   progressIndex?: number;
   deviceConflict?: boolean;
   questions: AttemptQuestion[];
@@ -756,6 +776,8 @@ export interface PortfolioItemView {
   result: string | null;
   evidenceUrl: string | null;
   evidenceFile: FileRef | null;
+  /** Turga xos maydonlar (milliy sertifikat, CEFR, IELTS, SAT, olimpiada). */
+  details: PortfolioDetails | null;
   visibility: PortfolioVisibility;
   status: PortfolioStatus;
   returnReason: string | null;

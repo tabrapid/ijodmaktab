@@ -106,6 +106,14 @@ export const SHARE_PERMISSION_LABELS: Record<SharePermission, string> = {
   EDIT: 'Birgalikda tahrirlash',
 };
 
+export const TEST_VISIBILITIES = ['PRIVATE', 'SCHOOL'] as const;
+export type TestVisibility = (typeof TEST_VISIBILITIES)[number];
+
+export const TEST_VISIBILITY_LABELS: Record<TestVisibility, string> = {
+  PRIVATE: 'Shaxsiy',
+  SCHOOL: 'Maktab test banki',
+};
+
 // ---------------------------------------------------------------- Sessiyalar
 
 export const SESSION_STATES = ['SCHEDULED', 'OPEN', 'CLOSED', 'CANCELLED'] as const;
@@ -175,6 +183,15 @@ export const SUBMIT_SOURCE_LABELS: Record<SubmitSource, string> = {
   STAFF: 'Xodim yakunladi',
 };
 
+/** Urinish nima uchun to‘xtatildi (o‘qituvchi ruxsatigacha). */
+export const ATTEMPT_LOCK_REASONS = ['FULLSCREEN_EXIT', 'PAGE_HIDDEN'] as const;
+export type AttemptLockReason = (typeof ATTEMPT_LOCK_REASONS)[number];
+
+export const ATTEMPT_LOCK_REASON_LABELS: Record<AttemptLockReason, string> = {
+  FULLSCREEN_EXIT: 'To‘liq ekrandan chiqdi',
+  PAGE_HIDDEN: 'Test sahifasidan chiqdi (boshqa oyna yoki ilova)',
+};
+
 // ---------------------------------------------------------------- Qayta baholash
 
 export const GRADING_OVERRIDE_MODES = ['EXCLUDE', 'FULL_CREDIT', 'CHANGE_KEY'] as const;
@@ -189,17 +206,21 @@ export const GRADING_OVERRIDE_MODE_LABELS: Record<GradingOverrideMode, string> =
 // ---------------------------------------------------------------- Portfolio
 
 export const PORTFOLIO_ITEM_TYPES = [
+  'NATIONAL_CERTIFICATE',
+  'CEFR',
+  'IELTS',
+  'SAT',
+  'OLYMPIAD',
+  'CONTEST',
+  'CERTIFICATE',
   'POEM',
   'STORY',
   'ESSAY',
   'ARTICLE',
   'TRANSLATION',
   'BOOK_PUBLICATION',
-  'CONTEST',
-  'OLYMPIAD',
   'RESEARCH_PROJECT',
   'SOFTWARE_PROJECT',
-  'CERTIFICATE',
   'METHODICAL_WORK',
   'PROFESSIONAL_DEVELOPMENT',
   'OPEN_LESSON',
@@ -219,7 +240,11 @@ export const PORTFOLIO_ITEM_TYPE_LABELS: Record<PortfolioItemType, string> = {
   OLYMPIAD: 'Olimpiada',
   RESEARCH_PROJECT: 'Ilmiy loyiha',
   SOFTWARE_PROJECT: 'Dasturiy loyiha',
-  CERTIFICATE: 'Sertifikat',
+  CERTIFICATE: 'Boshqa sertifikat',
+  NATIONAL_CERTIFICATE: 'Milliy sertifikat',
+  CEFR: 'CEFR sertifikati',
+  IELTS: 'IELTS',
+  SAT: 'SAT',
   METHODICAL_WORK: 'Metodik ishlanma',
   PROFESSIONAL_DEVELOPMENT: 'Malaka oshirish',
   OPEN_LESSON: 'Ochiq dars',
@@ -234,6 +259,19 @@ export const TEACHER_ONLY_PORTFOLIO_TYPES: readonly PortfolioItemType[] = [
   'OPEN_LESSON',
   'PUBLICATION',
 ];
+
+/** Sertifikat turlari (sertifikatlar ro‘yxati va yuklab olish uchun). */
+export const CERTIFICATE_PORTFOLIO_TYPES: readonly PortfolioItemType[] = [
+  'NATIONAL_CERTIFICATE',
+  'CEFR',
+  'IELTS',
+  'SAT',
+  'CERTIFICATE',
+];
+
+/** Turga xos tuzilgan maydonlari (details) bo‘lgan turlar — @ijod/shared portfolio.ts dagi sxemalar. */
+export const STRUCTURED_PORTFOLIO_TYPES = ['NATIONAL_CERTIFICATE', 'CEFR', 'IELTS', 'SAT', 'OLYMPIAD'] as const;
+export type StructuredPortfolioType = (typeof STRUCTURED_PORTFOLIO_TYPES)[number];
 
 /** Ijodiy ish turlari: eksportda muallifligi alohida ko‘rsatiladi. */
 export const CREATIVE_PORTFOLIO_TYPES: readonly PortfolioItemType[] = [
@@ -307,7 +345,17 @@ export const NOTIFICATION_TYPES = [
   'EXPORT_READY',
   'GRADES_REVISED',
   'ATTEMPT_CANCELLED',
+  'ATTEMPT_LOCKED',
   'QUESTION_SCHOOL_APPROVED',
   'QUESTION_SCHOOL_REJECTED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// ---------------------------------------------------------------- Hisoblar va profil rasmlari
+
+/** Direktor o‘rinbosari yarata oladigan va boshqara oladigan hisob rollari. */
+export const DEPUTY_MANAGED_ROLES: readonly Role[] = ['TEACHER', 'STUDENT'];
+
+/** Profil rasmi: yuklanadigan fayl chegarasi (server kichraytirib WEBP ga o‘giradi). */
+export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+export const AVATAR_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;

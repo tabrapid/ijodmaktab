@@ -32,7 +32,7 @@ function EnterCode() {
     if (code.trim().length >= 4) find.mutate(code.trim());
   };
   return (
-    <Card className="border-brand-200 bg-gradient-to-br from-brand-50 to-white">
+    <Card className="border-brand-200 bg-gradient-to-br from-brand-50 to-surface">
       <CardBody className="py-5">
         <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">

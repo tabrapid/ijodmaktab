@@ -40,9 +40,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
   const icons = { success: CheckCircle2, error: AlertCircle, info: Info };
   const tones = {
-    success: 'border-emerald-200 bg-white text-emerald-800',
-    error: 'border-red-200 bg-white text-red-800',
-    info: 'border-slate-200 bg-white text-slate-800',
+    success: 'border-emerald-200 bg-surface text-emerald-800',
+    error: 'border-red-200 bg-surface text-red-800',
+    info: 'border-slate-200 bg-surface text-slate-800',
   };
   return (
     <ToastContext.Provider value={api}>

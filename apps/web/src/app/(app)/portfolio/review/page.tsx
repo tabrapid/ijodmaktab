@@ -21,7 +21,7 @@ import type { PortfolioItemView } from '@/lib/types';
 
 function QueueItem({ item, onReview }: { item: PortfolioItemView; onReview: (target: ReviewTarget) => void }) {
   return (
-    <li className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+    <li className="rounded-xl border border-slate-200 bg-surface p-4 shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <p className="font-medium text-slate-900">{item.owner.fullName}</p>

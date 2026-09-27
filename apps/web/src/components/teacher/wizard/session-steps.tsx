@@ -138,7 +138,7 @@ export function AudienceStep({ test, draft, update }: { test: TestDetail; draft:
           return (
             <li
               key={item.id}
-              className={cn('rounded-xl border bg-white', whole ? 'border-brand-300' : 'border-slate-200')}
+              className={cn('rounded-xl border bg-surface', whole ? 'border-brand-300' : 'border-slate-200')}
             >
               <div className="flex flex-wrap items-center gap-3 p-3">
                 <Checkbox
@@ -293,7 +293,7 @@ export function TimingStep({ draft, update }: { draft: SessionDraft; update: Upd
           </Field>
         )}
       </div>
-      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-surface p-4">
         <Checkbox
           checked={draft.shuffleQuestions}
           onChange={(event) => update({ shuffleQuestions: event.target.checked })}
@@ -507,7 +507,7 @@ export function PublishStep({
         </Field>
       </div>
 
-      <dl className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm sm:grid-cols-2">
+      <dl className="grid gap-3 rounded-xl border border-slate-200 bg-surface p-4 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-slate-500">Test</dt>
           <dd className="font-medium">

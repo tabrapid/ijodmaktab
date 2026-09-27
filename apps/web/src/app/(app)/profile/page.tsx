@@ -286,13 +286,13 @@ function MfaSetup({ onDone, onCancel }: { onDone: () => void; onCancel: () => vo
           alt="Autentifikator ilovasi uchun QR kod"
           width={200}
           height={200}
-          className="size-50 shrink-0 self-center rounded-lg border border-slate-200 bg-white"
+          className="size-50 shrink-0 self-center rounded-lg border border-slate-200 bg-surface"
         />
         <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-700">
           <li>Ilovada “Hisob qo‘shish” → “QR kodni skanerlash”ni tanlang.</li>
           <li>
             Skanerlab bo‘lmasa, kalitni qo‘lda kiriting:
-            <code className="mt-1 block rounded bg-white px-2 py-1 font-mono text-[13px] break-all text-slate-800">
+            <code className="mt-1 block rounded bg-surface px-2 py-1 font-mono text-[13px] break-all text-slate-800">
               {start.data.secret}
             </code>
           </li>

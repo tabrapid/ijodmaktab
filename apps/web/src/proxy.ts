@@ -16,6 +16,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // API, statik fayllar va rasmlar proksi orqali o‘tmaydi (fayl yuklash bufferlanmasin).
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|icon.svg|robots.txt).*)'],
+  // API, statik fayllar, logotip va ikonkalar proksi orqali o‘tmaydi (fayl yuklash bufferlanmasin,
+  // kirish sahifasida logotip ko‘rinsin).
+  matcher: ['/((?!api|_next/static|_next/image|brand/|favicon.ico|icon.png|apple-icon.png|robots.txt).*)'],
 };

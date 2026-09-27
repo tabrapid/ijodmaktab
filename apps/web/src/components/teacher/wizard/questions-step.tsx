@@ -230,7 +230,7 @@ function QuestionRow({
   onMove: (direction: -1 | 1) => void;
 }) {
   return (
-    <li id={`question-${question.number}`} className="rounded-xl border border-slate-200 bg-white p-4">
+    <li id={`question-${question.number}`} className="rounded-xl border border-slate-200 bg-surface p-4">
       <div className="flex flex-wrap items-start gap-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700 tabular">
           {question.number}

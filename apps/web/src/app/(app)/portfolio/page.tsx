@@ -94,7 +94,7 @@ function StatusSummary({
             aria-pressed={pressed}
             onClick={() => onSelect(status)}
             className={cn(
-              'rounded-xl border bg-white p-4 text-left shadow-xs transition-colors hover:border-brand-300',
+              'rounded-xl border bg-surface p-4 text-left shadow-xs transition-colors hover:border-brand-300',
               pressed ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-slate-200',
             )}
           >
@@ -140,7 +140,7 @@ function ItemCard({
   return (
     <li
       className={cn(
-        'rounded-xl border bg-white p-4 shadow-xs transition-colors',
+        'rounded-xl border bg-surface p-4 shadow-xs transition-colors',
         selected ? 'border-brand-300 ring-1 ring-brand-200' : 'border-slate-200',
       )}
     >
@@ -379,7 +379,7 @@ function MyPortfolio() {
       </Card>
 
       {(items.length > 0 || selected.size > 0) && (
-        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-xs lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-surface px-4 py-3 shadow-xs lg:flex-row lg:items-center lg:justify-between">
           <Checkbox
             label="Sahifadagi barcha yozuvlarni tanlash"
             description="Chop etilgan hujjatda faqat tasdiqlangan yozuvlar “Tasdiqlangan yutuqlar” bo‘limiga kiradi."

@@ -98,7 +98,7 @@ export function AnswerMatrix({ session }: { session: SessionDetail }) {
               <tr key={row.studentId} className="border-b border-slate-100 hover:bg-slate-50/60">
                 <th
                   scope="row"
-                  className="sticky left-0 z-10 bg-white px-3 py-1.5 text-left font-normal whitespace-nowrap"
+                  className="sticky left-0 z-10 bg-surface px-3 py-1.5 text-left font-normal whitespace-nowrap"
                 >
                   <span className="font-medium text-slate-900">{row.fullName}</span>
                   <span className="ml-2 text-xs text-slate-500">{formatInternalId(row.internalId)}</span>

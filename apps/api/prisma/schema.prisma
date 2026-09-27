@@ -65,6 +65,12 @@ enum TestStatus {
   ARCHIVED
 }
 
+/// Test kimga ko‘rinadi: faqat egasi (va ulashilganlar) yoki butun maktab test banki.
+enum TestVisibility {
+  PRIVATE
+  SCHOOL
+}
+
 enum TestVersionStatus {
   DRAFT
   FROZEN
@@ -102,6 +108,12 @@ enum AttemptStatus {
   CANCELLED
 }
 
+/// Urinish nima uchun to‘xtatildi (o‘quvchi to‘liq ekrandan chiqdi yoki sahifadan ketdi).
+enum AttemptLockReason {
+  FULLSCREEN_EXIT
+  PAGE_HIDDEN
+}
+
 enum SubmitSource {
   STUDENT
   TIMEOUT
@@ -120,6 +132,10 @@ enum PortfolioItemType {
   RESEARCH_PROJECT
   SOFTWARE_PROJECT
   CERTIFICATE
+  NATIONAL_CERTIFICATE
+  CEFR
+  IELTS
+  SAT
   METHODICAL_WORK
   PROFESSIONAL_DEVELOPMENT
   OPEN_LESSON
@@ -208,6 +224,8 @@ model User {
   totpEnabledAt      DateTime?
   /// Oxirgi ishlatilgan TOTP qadami: bitta kodni ikki marta ishlatib bo‘lmaydi.
   totpLastStep       Int?
+  /// Profil rasmi (kichraytirilgan, EXIF’siz WEBP).
+  avatarFileId       String?    @unique @db.Uuid
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
   archivedAt         DateTime?
@@ -236,7 +254,9 @@ model User {
   portfolioItems         PortfolioItem[]      @relation("PortfolioOwner")
   reviewedPortfolioItems PortfolioItem[]      @relation("PortfolioReviewer")
   portfolioReviews       PortfolioReview[]
-  files                  FileAsset[]
+  files                  FileAsset[]          @relation("FileOwner")
+  avatarFile             FileAsset?           @relation("UserAvatar", fields: [avatarFileId], references: [id], onDelete: SetNull)
+  unlockedAttempts       Attempt[]            @relation("AttemptUnlocker")
   notifications          Notification[]
   exportJobs             ExportJob[]
   importBatches          ImportBatch[]
@@ -443,25 +463,28 @@ model QuestionVersion {
 
 /// Test shabloni: savollar to‘plami, ballar, ketma-ketlik va asosiy sozlamalar.
 model TestTemplate {
-  id               String     @id @default(uuid(7)) @db.Uuid
-  ownerId          String     @db.Uuid
+  id               String         @id @default(uuid(7)) @db.Uuid
+  ownerId          String         @db.Uuid
   /// Dastlabki muallif (nusxa olinganda ham saqlanadi).
-  originalAuthorId String     @db.Uuid
-  copiedFromId     String?    @db.Uuid
+  originalAuthorId String         @db.Uuid
+  copiedFromId     String?        @db.Uuid
   title            String
-  subjectId        String     @db.Uuid
+  subjectId        String         @db.Uuid
   gradeLevel       Int
   topic            String?
   goal             String?
-  language         String     @default("uz")
-  academicYearId   String?    @db.Uuid
+  language         String         @default("uz")
+  academicYearId   String?        @db.Uuid
   tags             String[]
   folder           String?
   instructions     String?
-  status           TestStatus @default(DRAFT)
-  searchText       String     @default("")
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  status           TestStatus     @default(DRAFT)
+  /// Maktab test banki: SCHOOL — barcha o‘qituvchi va rahbariyatga ko‘rinadi, sessiyada ishlatiladi.
+  visibility       TestVisibility @default(PRIVATE)
+  schoolSharedAt   DateTime?
+  searchText       String         @default("")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   owner          User           @relation("TestOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   originalAuthor User           @relation("TestAuthor", fields: [originalAuthorId], references: [id], onDelete: Restrict)
@@ -474,6 +497,7 @@ model TestTemplate {
 
   @@index([ownerId, status])
   @@index([subjectId, gradeLevel])
+  @@index([visibility, status])
 }
 
 /// Test versiyasi. `DRAFT` — tahrirlanadigan ish nusxasi; `FROZEN` — sessiyalar ishlatadigan
@@ -556,6 +580,8 @@ model AssessmentSession {
   shuffleQuestions         Boolean          @default(false)
   shuffleOptions           Boolean          @default(false)
   allowBackNavigation      Boolean          @default(true)
+  /// Test to‘liq ekranda ishlanadi; chiqilsa urinish o‘qituvchi ruxsatigacha to‘xtatiladi.
+  requireFullscreen        Boolean          @default(true)
   scoreVisibility          ScoreVisibility  @default(AFTER_ALL_DONE)
   reviewVisibility         ReviewVisibility @default(AFTER_CLOSE)
   passPercent              Decimal?         @db.Decimal(5, 2)
@@ -619,13 +645,13 @@ model SessionAssignment {
 
 /// Bitta o‘quvchining aynan shu sessiyadagi javoblari, holati va bahosi.
 model Attempt {
-  id                String        @id @default(uuid(7)) @db.Uuid
-  sessionId         String        @db.Uuid
-  assignmentId      String        @db.Uuid
-  studentId         String        @db.Uuid
+  id                String             @id @default(uuid(7)) @db.Uuid
+  sessionId         String             @db.Uuid
+  assignmentId      String             @db.Uuid
+  studentId         String             @db.Uuid
   attemptNo         Int
-  status            AttemptStatus @default(IN_PROGRESS)
-  startedAt         DateTime      @default(now())
+  status            AttemptStatus      @default(IN_PROGRESS)
+  startedAt         DateTime           @default(now())
   /// Server hisoblagan yakun vaqti. Brauzer soati bunga ta’sir qilmaydi.
   deadlineAt        DateTime
   submittedAt       DateTime?
@@ -633,32 +659,39 @@ model Attempt {
   /// Urinish boshlanishida saqlangan savollar tartibi (TestQuestion.id ro‘yxati).
   questionOrder     String[]
   /// { [testQuestionId]: [optionId, ...] }
-  optionOrder       Json          @default("{}")
+  optionOrder       Json               @default("{}")
   /// Ortga qaytish taqiqlanganda o‘quvchi yetib kelgan eng uzoq savol.
-  progressIndex     Int           @default(0)
+  progressIndex     Int                @default(0)
   /// Javob yozishga ruxsat berilgan qurilma (bir vaqtda ikki qurilmadan yozishni cheklash).
   activeClientId    String?
-  deviceChangeCount Int           @default(0)
+  deviceChangeCount Int                @default(0)
   lastSeenAt        DateTime?
-  focusLossCount    Int           @default(0)
-  score             Decimal?      @db.Decimal(8, 2)
-  maxScore          Decimal?      @db.Decimal(8, 2)
+  focusLossCount    Int                @default(0)
+  /// To‘xtatilgan (chetlatilgan) urinish: javob yozilmaydi, o‘qituvchi ruxsat bergach davom etadi.
+  lockedAt          DateTime?
+  lockReason        AttemptLockReason?
+  lockCount         Int                @default(0)
+  unlockedAt        DateTime?
+  unlockedById      String?            @db.Uuid
+  score             Decimal?           @db.Decimal(8, 2)
+  maxScore          Decimal?           @db.Decimal(8, 2)
   /// { KNOWLEDGE: { earned, max }, ... }
   categoryScores    Json?
   gradedAt          DateTime?
   gradingVersion    Int?
   cancelledAt       DateTime?
-  cancelledById     String?       @db.Uuid
+  cancelledById     String?            @db.Uuid
   cancelReason      String?
   /// Bekor qilingan urinish urinishlar limitiga kiradimi.
-  countsTowardLimit Boolean       @default(true)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  countsTowardLimit Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   session     AssessmentSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   assignment  SessionAssignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   student     User                @relation("AttemptStudent", fields: [studentId], references: [id], onDelete: Restrict)
   cancelledBy User?               @relation("AttemptCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
+  unlockedBy  User?               @relation("AttemptUnlocker", fields: [unlockedById], references: [id], onDelete: SetNull)
   answers     Answer[]
   gradeItems  GradeRevisionItem[]
 
@@ -734,6 +767,8 @@ model PortfolioItem {
   result         String?
   evidenceFileId String?             @db.Uuid
   evidenceUrl    String?
+  /// Turga xos tuzilgan maydonlar (milliy sertifikat, CEFR, IELTS, SAT, olimpiada) — @ijod/shared da tekshiriladi.
+  details        Json?
   visibility     PortfolioVisibility @default(STAFF)
   status         PortfolioStatus     @default(DRAFT)
   reviewerId     String?             @db.Uuid
@@ -783,8 +818,9 @@ model FileAsset {
   createdAt    DateTime   @default(now())
   deletedAt    DateTime?
 
-  owner          User            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  owner          User            @relation("FileOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   portfolioItems PortfolioItem[]
+  avatarOf       User?           @relation("UserAvatar")
 }
 
 // ============================================================ Bildirishnoma, eksport, import, audit

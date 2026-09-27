@@ -73,7 +73,7 @@ export function PreviewStep({ test }: { test: TestDetail }) {
         >
           {test.instructions && <Alert tone="info">{test.instructions}</Alert>}
           {questions.map((question) => (
-            <section key={question.testQuestionId} className="rounded-xl border border-slate-200 bg-white p-4">
+            <section key={question.testQuestionId} className="rounded-xl border border-slate-200 bg-surface p-4">
               <div className="flex justify-between text-xs text-slate-500">
                 <span className="font-semibold text-slate-700">
                   {question.number}-savol / {questions.length}
@@ -117,7 +117,7 @@ export function PreviewStep({ test }: { test: TestDetail }) {
       </div>
 
       <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="rounded-xl border border-slate-200 bg-surface p-4">
           <p className="text-sm font-semibold text-slate-800">Namunaviy baholash</p>
           <p className="mt-2 text-3xl font-bold tabular">{formatPercent(pairPercent(grade.total))}</p>
           <p className="text-sm text-slate-500 tabular">

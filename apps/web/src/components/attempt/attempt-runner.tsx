@@ -328,7 +328,7 @@ export function AttemptRunner({
 
   return (
     <div className="min-h-dvh bg-slate-50 pb-24">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-slate-200 bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-slate-900">{initial.session.title}</p>
@@ -373,7 +373,7 @@ export function AttemptRunner({
         )}
 
         <section
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs sm:p-6"
+          className="rounded-xl border border-slate-200 bg-surface p-5 shadow-xs sm:p-6"
           aria-labelledby="question-title"
         >
           <div className="flex items-center justify-between gap-2 text-sm text-slate-500">
@@ -431,7 +431,7 @@ export function AttemptRunner({
         </section>
 
         {allowBack ? (
-          <nav aria-label="Savollar" className="rounded-xl border border-slate-200 bg-white p-4">
+          <nav aria-label="Savollar" className="rounded-xl border border-slate-200 bg-surface p-4">
             <p className="mb-3 text-xs font-medium text-slate-500">
               Savollar: <span className="inline-block size-2.5 rounded-sm bg-brand-500 align-middle" /> javob berilgan,{' '}
               <span className="inline-block size-2.5 rounded-sm border border-slate-300 align-middle" /> javobsiz
@@ -450,7 +450,7 @@ export function AttemptRunner({
                       'h-9 rounded-md text-sm font-medium tabular transition-colors',
                       done
                         ? 'bg-brand-600 text-white'
-                        : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
+                        : 'border border-slate-300 bg-surface text-slate-700 hover:bg-slate-50',
                       index === current && 'ring-2 ring-amber-400 ring-offset-1',
                     )}
                   >
@@ -472,7 +472,7 @@ export function AttemptRunner({
         </p>
       </main>
 
-      <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur">
+      <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center gap-2 px-4 py-3">
           {allowBack && (
             <Button

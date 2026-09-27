@@ -22,7 +22,7 @@ export function Stat({
     success: 'text-emerald-700',
   }[tone];
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+    <div className="rounded-xl border border-slate-200 bg-surface p-4 shadow-xs">
       <div className="flex items-center justify-between gap-2 text-sm text-slate-500">
         <span>{label}</span>
         {icon}

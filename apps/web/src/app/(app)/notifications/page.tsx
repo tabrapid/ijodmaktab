@@ -15,6 +15,7 @@ import {
   Download,
   FolderUp,
   RefreshCw,
+  ShieldAlert,
   Timer,
   Undo2,
   type LucideIcon,
@@ -56,6 +57,7 @@ const ICONS: Record<NotificationType, LucideIcon> = {
   ATTEMPT_CANCELLED: CircleX,
   QUESTION_SCHOOL_APPROVED: BadgeCheck,
   QUESTION_SCHOOL_REJECTED: Undo2,
+  ATTEMPT_LOCKED: ShieldAlert,
 };
 
 const iconFor = (type: string): LucideIcon => (Object.hasOwn(ICONS, type) ? ICONS[type as NotificationType] : Bell);

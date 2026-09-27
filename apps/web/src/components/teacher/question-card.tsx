@@ -13,7 +13,7 @@ export function QuestionCard({ question, actions }: { question: QuestionItem; ac
   const latest = question.latest;
   if (!latest) return null;
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+    <article className="rounded-xl border border-slate-200 bg-surface p-4 shadow-xs">
       <div className="flex flex-wrap items-center gap-1.5">
         <CategoryBadge category={latest.category} />
         <DifficultyBadge difficulty={latest.difficulty} />

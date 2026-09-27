@@ -4,6 +4,7 @@
  */
 import { z } from 'zod';
 import {
+  ATTEMPT_LOCK_REASONS,
   ACHIEVEMENT_LEVELS,
   ATTEMPT_POLICIES,
   CATEGORIES,
@@ -21,6 +22,7 @@ import {
   SHARE_PERMISSIONS,
   USER_STATUSES,
 } from './enums.js';
+import { parsePortfolioDetails } from './portfolio.js';
 import { hasAtMostTwoDecimals } from './scoring.js';
 import { MAX_QUESTION_POINTS } from './validation.js';
 
@@ -407,12 +409,22 @@ export const testListQuerySchema = z.object({
   gradeLevel: z.coerce.number().int().min(1).max(11).optional(),
   status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional(),
   tag: z.string().trim().max(40).optional(),
-  scope: z.enum(['mine', 'shared', 'all']).default('mine'),
+  /**
+   * mine — o‘zimniki; shared — menga ulashilgan; school — maktab test banki;
+   * available — sessiya uchun tanlash mumkin bo‘lganlar (o‘zimniki + ulashilgan + maktab banki);
+   * all — rahbariyat uchun hammasi.
+   */
+  scope: z.enum(['mine', 'shared', 'school', 'available', 'all']).default('mine'),
   sort: z.enum(['updatedAt', 'title', 'questionCount', 'totalPoints']).default('updatedAt'),
   order: z.enum(['asc', 'desc']).default('desc'),
   ...paging,
 });
 export type TestListQuery = z.input<typeof testListQuerySchema>;
+
+/** Test nusxasi (masalan, sessiya uchun qo‘shimcha savollar bilan); nom berilmasa “(nusxa)” qo‘shiladi. */
+export const copyTestSchema = z.object({
+  title: optionalText(200),
+});
 
 export const shareTestSchema = z.object({
   userId: id(),
@@ -443,6 +455,8 @@ export const sessionSettingsShape = {
   shuffleQuestions: z.boolean().default(false),
   shuffleOptions: z.boolean().default(false),
   allowBackNavigation: z.boolean().default(true),
+  /** To‘liq ekran talabi: chiqilsa urinish o‘qituvchi ruxsatigacha to‘xtatiladi. */
+  requireFullscreen: z.boolean().default(true),
   scoreVisibility: z.enum(SCORE_VISIBILITIES).default('AFTER_ALL_DONE'),
   reviewVisibility: z.enum(REVIEW_VISIBILITIES).default('AFTER_CLOSE'),
   passPercent: percentValue().nullish(),
@@ -616,6 +630,23 @@ export const submitAttemptSchema = z.object({
     .default([]),
 });
 
+/** O‘quvchi qurilmasi to‘liq ekrandan chiqish yoki sahifadan ketishni xabar qiladi. */
+export const attemptLockSchema = z.object({
+  clientId: clientId(),
+  reason: z.enum(ATTEMPT_LOCK_REASONS),
+});
+
+/** O‘qituvchi to‘xtatilgan urinishga ruxsat beradi (ixtiyoriy qo‘shimcha daqiqa bilan). */
+export const attemptUnlockSchema = z.object({
+  extraMinutes: z.number().int().min(0).max(60).default(0),
+  note: optionalText(300),
+});
+
+/** Testni maktab test bankiga qo‘shish yoki olib tashlash. */
+export const testSchoolShareSchema = z.object({
+  shared: z.boolean(),
+});
+
 export const heartbeatSchema = z.object({
   clientId: clientId(),
   /** Oyna fokusni yo‘qotgan holatlar soni (faqat qayd uchun). */
@@ -638,24 +669,39 @@ export const schoolDecisionSchema = z.object({
   reason: optionalText(500),
 });
 
-export const portfolioItemSchema = z.object({
-  type: z.enum(PORTFOLIO_ITEM_TYPES, { error: 'Turini tanlang' }),
-  title: requiredText(300),
-  subjectId: id().nullish(),
-  direction: optionalText(200),
-  description: optionalText(5000),
-  organization: optionalText(300),
-  date: isoDate().nullish(),
-  level: z.enum(ACHIEVEMENT_LEVELS).nullish(),
-  result: optionalText(200),
-  evidenceUrl: z
-    .url({ protocol: /^https?$/, error: 'Havola http(s):// bilan boshlanishi kerak' })
-    .max(1000)
-    .nullish()
-    .or(z.literal('').transform(() => null)),
-  evidenceFileId: id().nullish(),
-  visibility: z.enum(PORTFOLIO_VISIBILITIES).default('STAFF'),
-});
+export const portfolioItemSchema = z
+  .object({
+    type: z.enum(PORTFOLIO_ITEM_TYPES, { error: 'Turini tanlang' }),
+    title: requiredText(300),
+    subjectId: id().nullish(),
+    direction: optionalText(200),
+    description: optionalText(5000),
+    organization: optionalText(300),
+    date: isoDate().nullish(),
+    level: z.enum(ACHIEVEMENT_LEVELS).nullish(),
+    result: optionalText(200),
+    evidenceUrl: z
+      .url({ protocol: /^https?$/, error: 'Havola http(s):// bilan boshlanishi kerak' })
+      .max(1000)
+      .nullish()
+      .or(z.literal('').transform(() => null)),
+    evidenceFileId: id().nullish(),
+    /** Turga xos maydonlar (milliy sertifikat, CEFR, IELTS, SAT, olimpiada) — portfolio.ts sxemalari. */
+    details: z.unknown().nullish(),
+    visibility: z.enum(PORTFOLIO_VISIBILITIES).default('STAFF'),
+  })
+  .superRefine((data, ctx) => {
+    const parsed = parsePortfolioDetails(data.type, data.details);
+    if (!parsed.success) {
+      for (const issue of parsed.issues) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['details', ...issue.path.map((key) => String(key))],
+          message: issue.message,
+        });
+      }
+    }
+  });
 export type PortfolioItemInput = z.input<typeof portfolioItemSchema>;
 
 export const portfolioReviewSchema = z
@@ -685,6 +731,48 @@ export const portfolioListQuerySchema = z.object({
 
 export const portfolioExportSchema = z.object({
   itemIds: z.array(id()).min(1, 'Kamida bitta yozuvni tanlang'),
+});
+
+/** Rahbariyat uchun o‘quvchilar portfoliosi katalogi (har bir o‘quvchi — bitta qator). */
+export const portfolioStudentsQuerySchema = z.object({
+  q: z.string().trim().max(100).optional(),
+  classId: id().optional(),
+  gradeLevel: z.coerce.number().int().min(1).max(11).optional(),
+  /** Faqat tekshiruvni kutayotgan yozuvi bor o‘quvchilar. */
+  pending: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
+  /** Shu turdagi tasdiqlangan yozuvi bor o‘quvchilar (masalan, IELTS). */
+  type: z.enum(PORTFOLIO_ITEM_TYPES).optional(),
+  sort: z.enum(['name', 'class', 'approved', 'pending', 'lastActivity']).default('name'),
+  order: z.enum(['asc', 'desc']).default('asc'),
+  ...paging,
+});
+export type PortfolioStudentsQuery = z.input<typeof portfolioStudentsQuerySchema>;
+
+/** Tekshiruv navbati: ownerId berilsa, faqat shu egasining yozuvlari. */
+export const portfolioReviewQueueQuerySchema = z.object({
+  ownerId: id().optional(),
+});
+
+/** Bir o‘quvchining bir nechta yozuvini birdaniga tasdiqlash yoki qaytarish. */
+export const portfolioBatchReviewSchema = z
+  .object({
+    itemIds: z.array(id()).min(1, 'Kamida bitta yozuvni tanlang').max(100),
+    decision: z.enum(['APPROVED', 'RETURNED']),
+    reason: optionalText(1000),
+  })
+  .refine((data) => data.decision !== 'RETURNED' || Boolean(data.reason), {
+    path: ['reason'],
+    message: 'Qaytarish sababi majburiy',
+  });
+export type PortfolioBatchReviewInput = z.input<typeof portfolioBatchReviewSchema>;
+
+/** Sertifikat va dalil fayllarini ZIP arxiv qilib yuklab olish. */
+export const portfolioEvidenceExportQuerySchema = z.object({
+  /** approved — faqat tasdiqlangan yozuvlar; all — ko‘rish mumkin bo‘lgan barcha yozuvlar. */
+  scope: z.enum(['approved', 'all']).default('approved'),
 });
 
 // ---------------------------------------------------------------- Audit

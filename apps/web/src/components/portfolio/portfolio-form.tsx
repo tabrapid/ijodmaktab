@@ -459,7 +459,7 @@ export function PortfolioForm({
         </fieldset>
       </div>
 
-      <div className="sticky bottom-0 -mx-5 -mb-4 mt-5 border-t border-slate-100 bg-white px-5 py-3">
+      <div className="sticky bottom-0 -mx-5 -mb-4 mt-5 border-t border-slate-100 bg-surface px-5 py-3">
         {confirm ? (
           <div className="space-y-3">
             <Alert

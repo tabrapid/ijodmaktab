@@ -35,7 +35,7 @@ export function EvidenceLinks({
   if (!file && !external)
     return emptyText ? <p className={cn('text-sm text-slate-400', className)}>{emptyText}</p> : null;
   const linkClass = cn(
-    'inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1',
+    'inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border border-slate-200 bg-surface px-2 py-1',
     'text-xs font-medium text-brand-700 hover:border-brand-200 hover:bg-brand-50',
   );
   return (

@@ -60,7 +60,7 @@ function CountTile({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'rounded-xl border bg-white p-3 text-left shadow-xs transition-colors',
+        'rounded-xl border bg-surface p-3 text-left shadow-xs transition-colors',
         active ? 'border-brand-400 ring-2 ring-brand-100' : 'border-slate-200 hover:border-slate-300',
       )}
     >

@@ -1,6 +1,7 @@
 export * from './enums.js';
 export * from './format.js';
 export * from './metrics.js';
+export * from './portfolio.js';
 export * from './schemas.js';
 export * from './scoring.js';
 export * from './session.js';

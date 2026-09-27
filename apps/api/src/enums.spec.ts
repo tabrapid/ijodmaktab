@@ -23,6 +23,8 @@ const pairs: [string, readonly string[], Record<string, string>][] = [
   ['PortfolioVisibility', shared.PORTFOLIO_VISIBILITIES, prisma.PortfolioVisibility],
   ['ExportKind', shared.EXPORT_KINDS, prisma.ExportKind],
   ['ExportStatus', shared.EXPORT_STATUSES, prisma.ExportStatus],
+  ['TestVisibility', shared.TEST_VISIBILITIES, prisma.TestVisibility],
+  ['AttemptLockReason', shared.ATTEMPT_LOCK_REASONS, prisma.AttemptLockReason],
 ];
 
 describe('enumlar mosligi', () => {

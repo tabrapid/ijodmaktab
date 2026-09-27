@@ -342,7 +342,7 @@ function Wizard() {
                     aria-current={active ? 'step' : undefined}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                      active ? 'bg-brand-600 text-white' : 'text-slate-700 hover:bg-white',
+                      active ? 'bg-brand-600 text-white' : 'text-slate-700 hover:bg-surface',
                     )}
                   >
                     <span

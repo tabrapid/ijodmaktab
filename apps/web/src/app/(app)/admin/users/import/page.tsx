@@ -38,7 +38,7 @@ function Stepper({ current }: { current: Step['kind'] }) {
                 ? 'border-brand-300 bg-brand-50 text-brand-800'
                 : done
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                  : 'border-slate-200 bg-white text-slate-500',
+                  : 'border-slate-200 bg-surface text-slate-500',
             )}
           >
             <span

@@ -196,7 +196,7 @@ function PrintDocument({ data }: { data: PrintablePortfolio }) {
   return (
     <article
       className={cn(
-        'mx-auto max-w-[210mm] rounded-xl border border-slate-200 bg-white p-5 text-slate-900 shadow-xs sm:p-10',
+        'mx-auto max-w-[210mm] rounded-xl border border-slate-200 bg-surface p-5 text-slate-900 shadow-xs sm:p-10',
         'print:max-w-none print:rounded-none print:border-0 print:p-0 print:text-black print:shadow-none',
       )}
     >

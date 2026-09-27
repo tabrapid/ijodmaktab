@@ -103,7 +103,7 @@ export function GradingStep({ test, readOnly }: { test: TestDetail; readOnly: bo
           if (!plan && !fact) return null;
           const mismatch = Boolean(plan && fact && Math.round(plan.points * 100) !== Math.round(fact.points * 100));
           return (
-            <div key={category} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+            <div key={category} className="rounded-lg border border-slate-200 bg-surface p-3 text-sm">
               <p className="font-medium">{CATEGORY_LABELS[category]}</p>
               <p className="mt-1 tabular text-slate-600">
                 Testda: {fact ? `${fact.count} ta · ${formatPoints(fact.points)} ball` : '—'}

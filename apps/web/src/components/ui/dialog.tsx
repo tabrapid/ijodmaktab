@@ -46,7 +46,7 @@ export function Dialog({
       onClick={(event) => {
         if (event.target === ref.current) onClose();
       }}
-      className={cn('m-auto w-[calc(100%-2rem)] rounded-xl bg-white p-0 shadow-xl', widths[size])}
+      className={cn('m-auto w-[calc(100%-2rem)] rounded-xl bg-surface p-0 shadow-xl', widths[size])}
     >
       {open && (
         <div className="flex max-h-[90vh] flex-col">

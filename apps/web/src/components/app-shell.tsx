@@ -233,7 +233,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-dvh lg:pl-64">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-200 bg-white lg:block print:hidden">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-200 bg-surface lg:block print:hidden">
         <Sidebar me={me} />
       </aside>
 
@@ -245,7 +245,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-label="Menyuni yopish"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute inset-y-0 left-0 w-72 max-w-[85%] bg-white shadow-xl">
+          <div className="absolute inset-y-0 left-0 w-72 max-w-[85%] bg-surface shadow-xl">
             <button
               type="button"
               onClick={() => setOpen(false)}
@@ -259,7 +259,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6 print:hidden">
+      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200 bg-surface/90 px-4 backdrop-blur sm:px-6 print:hidden">
         <button
           type="button"
           onClick={() => setOpen(true)}

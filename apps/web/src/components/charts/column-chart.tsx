@@ -198,7 +198,7 @@ export function ColumnChart({
           </svg>
           {activeDatum && (
             <div
-              className="pointer-events-none absolute top-1 right-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-md"
+              className="pointer-events-none absolute top-1 right-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs shadow-md"
               role="status"
             >
               <p className="text-sm font-semibold text-slate-900 tabular">{activeDatum.display}</p>
