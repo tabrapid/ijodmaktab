@@ -27,6 +27,9 @@ const prisma = new PrismaClient({
 const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD || 'Demo2026!';
 const DEMO_ACCESS_CODE = 'KV2026';
 
+const difficultyOf = (category: Category) =>
+  category === 'KNOWLEDGE' ? 'EASY' : category === 'APPLICATION' ? 'MEDIUM' : 'HARD';
+
 const toLogin = (first: string, last: string) =>
   `${first}.${last}`
     .toLowerCase()
@@ -278,6 +281,8 @@ async function main() {
         topic: 'Kvadrat tenglamalar',
         tags: ['algebra', '1-bob'],
         searchText: normalizeForSearch(`${item.stem} Kvadrat tenglamalar`),
+        category: item.category,
+        difficulty: difficultyOf(item.category),
         versions: {
           create: {
             versionNo: 1,
@@ -287,7 +292,7 @@ async function main() {
             answerKey: { correctOptionId: 'a' },
             explanation: item.explanation ?? null,
             category: item.category,
-            difficulty: item.category === 'KNOWLEDGE' ? 'EASY' : item.category === 'APPLICATION' ? 'MEDIUM' : 'HARD',
+            difficulty: difficultyOf(item.category),
             points: item.points,
             lockedAt: new Date(),
             createdById: karimova.id,

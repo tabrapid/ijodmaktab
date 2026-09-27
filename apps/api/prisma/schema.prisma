@@ -212,29 +212,29 @@ model User {
   updatedAt          DateTime   @updatedAt
   archivedAt         DateTime?
 
-  roles                  RoleAssignment[]    @relation("RoleOwner")
-  grantedRoles           RoleAssignment[]    @relation("RoleGrantor")
+  roles                  RoleAssignment[]     @relation("RoleOwner")
+  grantedRoles           RoleAssignment[]     @relation("RoleGrantor")
   authSessions           AuthSession[]
   enrollments            Enrollment[]
   teachingAssignments    TeachingAssignment[]
-  homeroomClasses        Class[]             @relation("Homeroom")
+  homeroomClasses        Class[]              @relation("Homeroom")
   questions              Question[]
   questionVersions       QuestionVersion[]
-  ownedTests             TestTemplate[]      @relation("TestOwner")
-  authoredTests          TestTemplate[]      @relation("TestAuthor")
-  testShares             TestShare[]         @relation("ShareTarget")
-  createdShares          TestShare[]         @relation("ShareCreator")
+  ownedTests             TestTemplate[]       @relation("TestOwner")
+  authoredTests          TestTemplate[]       @relation("TestAuthor")
+  testShares             TestShare[]          @relation("ShareTarget")
+  createdShares          TestShare[]          @relation("ShareCreator")
   frozenVersions         TestVersion[]
-  createdSessions        AssessmentSession[] @relation("SessionCreator")
-  conductedSessions      AssessmentSession[] @relation("SessionConductor")
-  sessionAssignments     SessionAssignment[] @relation("AssignmentStudent")
-  assignedAssignments    SessionAssignment[] @relation("AssignmentCreator")
-  removedAssignments     SessionAssignment[] @relation("AssignmentRemover")
-  attempts               Attempt[]           @relation("AttemptStudent")
-  cancelledAttempts      Attempt[]           @relation("AttemptCanceller")
+  createdSessions        AssessmentSession[]  @relation("SessionCreator")
+  conductedSessions      AssessmentSession[]  @relation("SessionConductor")
+  sessionAssignments     SessionAssignment[]  @relation("AssignmentStudent")
+  assignedAssignments    SessionAssignment[]  @relation("AssignmentCreator")
+  removedAssignments     SessionAssignment[]  @relation("AssignmentRemover")
+  attempts               Attempt[]            @relation("AttemptStudent")
+  cancelledAttempts      Attempt[]            @relation("AttemptCanceller")
   gradeRevisions         GradeRevision[]
-  portfolioItems         PortfolioItem[]     @relation("PortfolioOwner")
-  reviewedPortfolioItems PortfolioItem[]     @relation("PortfolioReviewer")
+  portfolioItems         PortfolioItem[]      @relation("PortfolioOwner")
+  reviewedPortfolioItems PortfolioItem[]      @relation("PortfolioReviewer")
   portfolioReviews       PortfolioReview[]
   files                  FileAsset[]
   notifications          Notification[]
@@ -379,19 +379,27 @@ model TeachingAssignment {
 // ============================================================ Savollar banki
 
 model Question {
-  id              String             @id @default(uuid(7)) @db.Uuid
-  ownerId         String             @db.Uuid
-  subjectId       String             @db.Uuid
-  gradeLevel      Int?
-  topic           String?
-  tags            String[]
-  visibility      QuestionVisibility @default(PRIVATE)
-  latestVersionNo Int                @default(1)
+  id                 String             @id @default(uuid(7)) @db.Uuid
+  ownerId            String             @db.Uuid
+  subjectId          String             @db.Uuid
+  gradeLevel         Int?
+  topic              String?
+  tags               String[]
+  visibility         QuestionVisibility @default(PRIVATE)
+  /// So‘nggi versiyadan nusxa — qidiruv va filtrlash uchun.
+  type               QuestionType       @default(SINGLE_CHOICE)
+  category           Category           @default(KNOWLEDGE)
+  difficulty         Difficulty         @default(MEDIUM)
+  latestVersionNo    Int                @default(1)
+  /// Maktab bankiga chiqarish so‘rovi va metodik tasdiq.
+  schoolRequestedAt  DateTime?
+  schoolApprovedAt   DateTime?
+  schoolApprovedById String?            @db.Uuid
   /// Qidiruv uchun: savolning so‘nggi matni va mavzusi (normallashtirilgan).
-  searchText      String             @default("")
-  archivedAt      DateTime?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  searchText         String             @default("")
+  archivedAt         DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   owner    User              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   subject  Subject           @relation(fields: [subjectId], references: [id], onDelete: Restrict)
@@ -399,6 +407,7 @@ model Question {
 
   @@index([ownerId, archivedAt])
   @@index([subjectId, gradeLevel])
+  @@index([visibility])
 }
 
 /// Savol versiyasi. Muzlatilgan test versiyasida ishlatilgach (`lockedAt`) o‘zgarmaydi —
@@ -454,12 +463,12 @@ model TestTemplate {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
-  owner          User          @relation("TestOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  originalAuthor User          @relation("TestAuthor", fields: [originalAuthorId], references: [id], onDelete: Restrict)
-  copiedFrom     TestTemplate? @relation("TestCopies", fields: [copiedFromId], references: [id], onDelete: SetNull)
+  owner          User           @relation("TestOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  originalAuthor User           @relation("TestAuthor", fields: [originalAuthorId], references: [id], onDelete: Restrict)
+  copiedFrom     TestTemplate?  @relation("TestCopies", fields: [copiedFromId], references: [id], onDelete: SetNull)
   copies         TestTemplate[] @relation("TestCopies")
-  subject        Subject       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
-  academicYear   AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  subject        Subject        @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  academicYear   AcademicYear?  @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
   versions       TestVersion[]
   shares         TestShare[]
 
@@ -610,46 +619,46 @@ model SessionAssignment {
 
 /// Bitta o‘quvchining aynan shu sessiyadagi javoblari, holati va bahosi.
 model Attempt {
-  id                 String        @id @default(uuid(7)) @db.Uuid
-  sessionId          String        @db.Uuid
-  assignmentId       String        @db.Uuid
-  studentId          String        @db.Uuid
-  attemptNo          Int
-  status             AttemptStatus @default(IN_PROGRESS)
-  startedAt          DateTime      @default(now())
+  id                String        @id @default(uuid(7)) @db.Uuid
+  sessionId         String        @db.Uuid
+  assignmentId      String        @db.Uuid
+  studentId         String        @db.Uuid
+  attemptNo         Int
+  status            AttemptStatus @default(IN_PROGRESS)
+  startedAt         DateTime      @default(now())
   /// Server hisoblagan yakun vaqti. Brauzer soati bunga ta’sir qilmaydi.
-  deadlineAt         DateTime
-  submittedAt        DateTime?
-  submitSource       SubmitSource?
+  deadlineAt        DateTime
+  submittedAt       DateTime?
+  submitSource      SubmitSource?
   /// Urinish boshlanishida saqlangan savollar tartibi (TestQuestion.id ro‘yxati).
-  questionOrder      String[]
+  questionOrder     String[]
   /// { [testQuestionId]: [optionId, ...] }
-  optionOrder        Json          @default("{}")
+  optionOrder       Json          @default("{}")
   /// Ortga qaytish taqiqlanganda o‘quvchi yetib kelgan eng uzoq savol.
-  progressIndex      Int           @default(0)
+  progressIndex     Int           @default(0)
   /// Javob yozishga ruxsat berilgan qurilma (bir vaqtda ikki qurilmadan yozishni cheklash).
-  activeClientId     String?
-  deviceChangeCount  Int           @default(0)
-  lastSeenAt         DateTime?
-  focusLossCount     Int           @default(0)
-  score              Decimal?      @db.Decimal(8, 2)
-  maxScore           Decimal?      @db.Decimal(8, 2)
+  activeClientId    String?
+  deviceChangeCount Int           @default(0)
+  lastSeenAt        DateTime?
+  focusLossCount    Int           @default(0)
+  score             Decimal?      @db.Decimal(8, 2)
+  maxScore          Decimal?      @db.Decimal(8, 2)
   /// { KNOWLEDGE: { earned, max }, ... }
-  categoryScores     Json?
-  gradedAt           DateTime?
-  gradingVersion     Int?
-  cancelledAt        DateTime?
-  cancelledById      String?       @db.Uuid
-  cancelReason       String?
+  categoryScores    Json?
+  gradedAt          DateTime?
+  gradingVersion    Int?
+  cancelledAt       DateTime?
+  cancelledById     String?       @db.Uuid
+  cancelReason      String?
   /// Bekor qilingan urinish urinishlar limitiga kiradimi.
-  countsTowardLimit  Boolean       @default(true)
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  countsTowardLimit Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
-  session     AssessmentSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  assignment  SessionAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  student     User               @relation("AttemptStudent", fields: [studentId], references: [id], onDelete: Restrict)
-  cancelledBy User?              @relation("AttemptCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
+  session     AssessmentSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  assignment  SessionAssignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student     User                @relation("AttemptStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  cancelledBy User?               @relation("AttemptCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
   answers     Answer[]
   gradeItems  GradeRevisionItem[]
 
@@ -659,16 +668,16 @@ model Attempt {
 }
 
 model Answer {
-  id             String    @id @default(uuid(7)) @db.Uuid
-  attemptId      String    @db.Uuid
-  testQuestionId String    @db.Uuid
+  id             String   @id @default(uuid(7)) @db.Uuid
+  attemptId      String   @db.Uuid
+  testQuestionId String   @db.Uuid
   /// SINGLE_CHOICE: tanlangan variant (bo‘sh — javobsiz).
   optionId       String?
   /// Mijozdagi o‘zgarish raqami: eski so‘rov yangisini bosib ketmaydi.
   revision       Int
-  savedAt        DateTime  @default(now())
+  savedAt        DateTime @default(now())
   isCorrect      Boolean?
-  pointsAwarded  Decimal?  @db.Decimal(6, 2)
+  pointsAwarded  Decimal? @db.Decimal(6, 2)
 
   attempt      Attempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   testQuestion TestQuestion @relation(fields: [testQuestionId], references: [id], onDelete: Restrict)

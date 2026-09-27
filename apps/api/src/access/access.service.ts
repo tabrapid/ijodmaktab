@@ -4,6 +4,9 @@ import { hasRole } from '../common/auth-user.js';
 import { badRequest } from '../common/errors.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
+/** Ruxsat tekshiruvi uchun yetarli ma’lumot: foydalanuvchi va uning rollari. */
+export type Viewer = Pick<AuthUser, 'id' | 'roles'>;
+
 export interface SessionOwnership {
   id: string;
   createdById: string;
@@ -56,7 +59,7 @@ export class AccessService {
   }
 
   /** Butun maktab o‘quvchilarini ko‘ra oladiganlar. */
-  seesAllStudents(viewer: AuthUser) {
+  seesAllStudents(viewer: Viewer) {
     return hasRole(viewer, 'DEPUTY', 'ADMIN', 'SUPER_ADMIN');
   }
 
@@ -64,7 +67,7 @@ export class AccessService {
    * O‘quvchini ko‘rish: o‘zi; rahbariyat va administrator; o‘qituvchi — faqat biriktirilgan
    * sinflardagi o‘quvchilar.
    */
-  async canViewStudent(viewer: AuthUser, studentId: string): Promise<boolean> {
+  async canViewStudent(viewer: Viewer, studentId: string): Promise<boolean> {
     if (viewer.id === studentId) return true;
     if (this.seesAllStudents(viewer)) return true;
     if (!hasRole(viewer, 'TEACHER')) return false;
@@ -76,14 +79,14 @@ export class AccessService {
     return count > 0;
   }
 
-  async canViewClass(viewer: AuthUser, classId: string): Promise<boolean> {
+  async canViewClass(viewer: Viewer, classId: string): Promise<boolean> {
     if (this.seesAllStudents(viewer)) return true;
     if (!hasRole(viewer, 'TEACHER')) return false;
     return (await this.teacherClassIds(viewer.id)).includes(classId);
   }
 
   /** O‘qituvchi shu fan bo‘yicha shu sinfga test o‘tkaza oladimi (rahbariyat — istalgan sinfga). */
-  async canTeach(viewer: AuthUser, subjectId: string, classId: string): Promise<boolean> {
+  async canTeach(viewer: Viewer, subjectId: string, classId: string): Promise<boolean> {
     if (hasRole(viewer, 'DEPUTY', 'SUPER_ADMIN')) return true;
     if (!hasRole(viewer, 'TEACHER')) return false;
     const count = await this.prisma.teachingAssignment.count({
@@ -93,7 +96,7 @@ export class AccessService {
   }
 
   /** Sessiyani boshqarish: yaratuvchi, o‘tkazuvchi yoki rahbariyat. */
-  canManageSession(viewer: AuthUser, session: SessionOwnership): boolean {
+  canManageSession(viewer: Viewer, session: SessionOwnership): boolean {
     return (
       session.createdById === viewer.id ||
       session.conductorId === viewer.id ||
@@ -105,7 +108,7 @@ export class AccessService {
    * Sessiya natijalarini ko‘rish: boshqaruvchilar va shu sessiyadagi sinflarning rahbarlari.
    * Administrator odatiy holatda o‘quv natijalarini ko‘rmaydi.
    */
-  async canViewSessionResults(viewer: AuthUser, session: SessionOwnership): Promise<boolean> {
+  async canViewSessionResults(viewer: Viewer, session: SessionOwnership): Promise<boolean> {
     if (this.canManageSession(viewer, session)) return true;
     if (!hasRole(viewer, 'TEACHER')) return false;
     const homeroom = await this.homeroomClassIds(viewer.id);

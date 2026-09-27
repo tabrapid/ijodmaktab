@@ -312,5 +312,6 @@ export const NOTIFICATION_TYPES = [
   'PORTFOLIO_SUBMITTED',
   'EXPORT_READY',
   'GRADES_REVISED',
+  'ATTEMPT_CANCELLED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
