@@ -1,0 +1,54 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+
+  /* Asosiy rang (tugmalar, havolalar, faol holat). */
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  /* Grafiklar (dataviz qoidalari bo‘yicha tekshirilgan qiymatlar). */
+  --color-viz-series: #2a78d6;
+  --color-viz-series-hover: #1f63b8;
+  --color-viz-grid: #e1e0d9;
+  --color-viz-axis: #c3c2b7;
+  --color-viz-muted: #898781;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+
+  /* Klaviatura bilan boshqarishda fokus doimo ko‘rinadi. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+
+  dialog::backdrop {
+    background: rgb(15 23 42 / 0.45);
+  }
+
+  @media print {
+    body {
+      @apply bg-white;
+    }
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
