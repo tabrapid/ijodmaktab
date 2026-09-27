@@ -8,6 +8,7 @@
     "node": ">=22.12"
   },
   "scripts": {
+    "env:setup": "node scripts/setup-env.mjs",
     "build": "pnpm --filter @ijod/shared build && pnpm --filter @ijod/api --filter @ijod/web build",
     "dev": "pnpm --filter @ijod/shared build && pnpm --parallel --filter @ijod/shared --filter @ijod/api --filter @ijod/web dev",
     "db:migrate": "pnpm --filter @ijod/api db:migrate",

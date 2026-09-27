@@ -53,11 +53,7 @@ cd ijodmaktab
 pnpm install                               # Prisma klienti ham avtomatik yaratiladi
 
 docker compose up -d                       # PostgreSQL 16 + test uchun ijod_test bazasi
-
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-# ↑ chiqqan qiymatni apps/api/.env dagi APP_ENCRYPTION_KEY="..." ga qo‘ying
+pnpm env:setup                             # .env fayllari va shifrlash kaliti (APP_ENCRYPTION_KEY)
 
 pnpm --filter @ijod/shared build
 pnpm db:deploy                             # jadvallar (migratsiyalar)
@@ -85,7 +81,7 @@ So‘ng yuqoridagi qadamlarni `docker compose up -d` siz davom ettiring.
 | Belgi | Yechim |
 |---|---|
 | `port 5432 is already allocated` | Kompyuterda boshqa PostgreSQL ishlayapti: uni to‘xtating yoki `docker-compose.yml` da `'5433:5432'` qiling va `apps/api/.env` dagi manzilni `localhost:5433` ga o‘zgartiring |
-| `APP_ENCRYPTION_KEY 32 baytlik base64 qiymat bo‘lishi kerak` | Kalitni yuqoridagi `node -e ...` buyrug‘i bilan yarating |
+| `APP_ENCRYPTION_KEY 32 baytlik base64 qiymat bo‘lishi kerak`, veb jurnalida `ECONNREFUSED ...:4000` | `pnpm env:setup` ni bajaring va `pnpm dev` ni qayta ishga tushiring (`.env` o‘zgarishi avtomatik o‘qilmaydi) |
 | `Cannot find module .../generated/prisma/client.js` | `pnpm --filter @ijod/api db:generate` |
 | 3000 yoki 4000 port band | Band qilgan dasturni yoping. Aks holda: veb porti — `apps/web/package.json` (`--port`) va `apps/api/.env` dagi `WEB_ORIGIN`; API porti — `apps/api/.env` dagi `PORT` va `apps/web/.env` dagi `API_URL` |
 | Kirishda “So‘rov ruxsat etilmagan manbadan yuborilgan” xatosi | Brauzerdagi manzil `apps/api/.env` dagi `WEB_ORIGIN` bilan bir xil bo‘lsin (`http://localhost:3000`, `127.0.0.1` emas) |

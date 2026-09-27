@@ -11,7 +11,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().default(4000),
   WEB_ORIGIN: z.string().default('http://localhost:3000'),
   APP_ENCRYPTION_KEY: z.string().refine((value) => Buffer.from(value, 'base64').length === 32, {
-    message: 'APP_ENCRYPTION_KEY 32 baytlik base64 qiymat bo‘lishi kerak',
+    message: 'APP_ENCRYPTION_KEY 32 baytlik base64 qiymat bo‘lishi kerak (mahalliy muhitda yaratish: pnpm env:setup)',
   }),
   COOKIE_SECURE: booleanFromEnv,
   SESSION_TTL_HOURS: z.coerce.number().positive().default(12),
