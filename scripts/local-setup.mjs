@@ -168,7 +168,7 @@ async function main() {
     fail('Avval bog‘liqliklarni o‘rnating: pnpm install');
 
   console.log('1/4 · .env fayllari');
-  step('node', ['scripts/setup-env.mjs']);
+  step('node', ['scripts/setup-env.mjs', '--no-hint']);
 
   console.log('\n2/4 · PostgreSQL (Docker)');
   checkDocker();

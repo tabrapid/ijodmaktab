@@ -39,4 +39,8 @@ if (line && Buffer.from(line[1], 'base64').length === 32) {
   console.log('+ APP_ENCRYPTION_KEY yaratildi va apps/api/.env ga yozildi');
 }
 
-console.log('\nTayyor. Keyingi qadamlar: pnpm --filter @ijod/shared build → pnpm db:deploy → pnpm db:seed → pnpm dev');
+if (!process.argv.includes('--no-hint')) {
+  console.log(
+    '\nTayyor. Keyingi qadamlar: pnpm --filter @ijod/shared build → pnpm db:deploy → pnpm db:seed → pnpm dev',
+  );
+}
