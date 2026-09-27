@@ -19,7 +19,7 @@ export function Spinner({ className, label }: { className?: string; label?: stri
 
 export function PageLoader({ label = 'Yuklanmoqda…' }: { label?: string }) {
   return (
-    <div className="flex min-h-40 items-center justify-center py-10 text-brand-600">
+    <div className="flex min-h-40 items-center justify-center py-10 text-brand-700">
       <Spinner label={label} />
     </div>
   );
@@ -44,8 +44,10 @@ export function EmptyState({
 }) {
   return (
     <div className={cn('flex flex-col items-center justify-center gap-2 px-6 py-10 text-center', className)}>
-      <Icon className="size-10 text-slate-300" aria-hidden />
-      <p className="font-medium text-slate-800">{title}</p>
+      <span className="mb-1 flex size-14 items-center justify-center rounded-full bg-slate-100 ring-8 ring-slate-50">
+        <Icon className="size-6 text-slate-400" aria-hidden />
+      </span>
+      <p className="font-semibold text-slate-800">{title}</p>
       {description && <p className="max-w-md text-sm text-slate-500">{description}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
@@ -78,11 +80,11 @@ export function Alert({
   return (
     <div
       role={tone === 'danger' ? 'alert' : 'status'}
-      className={cn('flex gap-3 rounded-lg border p-3 text-sm', box, className)}
+      className={cn('flex gap-3 rounded-xl border p-3.5 text-sm', box, className)}
     >
       <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
       <div className="min-w-0 flex-1">
-        {title && <p className="font-medium">{title}</p>}
+        {title && <p className="font-semibold">{title}</p>}
         {children && <div className={cn(title && 'mt-0.5', 'opacity-90')}>{children}</div>}
       </div>
       {action}

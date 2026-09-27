@@ -29,7 +29,12 @@ export const NETWORK_ERROR_MESSAGE = 'Internet aloqasi yo‘q yoki server javob 
 
 type Body = unknown;
 
-async function request<T>(method: string, path: string, body?: Body): Promise<T> {
+export interface RequestOptions {
+  /** Sahifa yopilayotganda ham so‘rov yetib borsin (masalan, testni to‘xtatish xabari). */
+  keepalive?: boolean;
+}
+
+async function request<T>(method: string, path: string, body?: Body, options: RequestOptions = {}): Promise<T> {
   let response: Response;
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
   try {
@@ -39,6 +44,7 @@ async function request<T>(method: string, path: string, body?: Body): Promise<T>
       cache: 'no-store',
       headers: body !== undefined && !isForm ? { 'content-type': 'application/json' } : undefined,
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
+      ...(options.keepalive ? { keepalive: true } : {}),
     });
   } catch {
     throw new ApiError(0, 'NETWORK_ERROR', NETWORK_ERROR_MESSAGE);
@@ -59,7 +65,7 @@ async function request<T>(method: string, path: string, body?: Body): Promise<T>
 
 export const api = {
   get: <T>(path: string) => request<T>('GET', path),
-  post: <T>(path: string, body: Body = {}) => request<T>('POST', path, body),
+  post: <T>(path: string, body: Body = {}, options?: RequestOptions) => request<T>('POST', path, body, options),
   put: <T>(path: string, body: Body) => request<T>('PUT', path, body),
   patch: <T>(path: string, body: Body) => request<T>('PATCH', path, body),
   delete: <T>(path: string) => request<T>('DELETE', path),

@@ -3,9 +3,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AttemptResult } from '@/components/attempt/attempt-result';
 import { AttemptRunner } from '@/components/attempt/attempt-runner';
+import { exitFullscreen } from '@/components/attempt/fullscreen';
 import { ButtonLink } from '@/components/ui/button';
 import { ErrorState, PageLoader } from '@/components/ui/feedback';
 import { api } from '@/lib/api';
@@ -23,6 +24,11 @@ export default function AttemptPage() {
     staleTime: Infinity,
     retry: 1,
   });
+  // Yakunlangan urinish natijasi oddiy oynada ko‘rsatiladi (to‘liq ekran nazorati tugadi).
+  const finished = Boolean(query.data && query.data.status !== 'IN_PROGRESS');
+  useEffect(() => {
+    if (finished) exitFullscreen();
+  }, [finished]);
 
   if (query.isPending) return <PageLoader label="Test yuklanmoqda…" />;
   if (query.isError) {

@@ -4,10 +4,12 @@ import {
   addNewTestQuestionSchema,
   blueprintSchema,
   copyQuestionsFromTestSchema,
+  copyTestSchema,
   reorderTestQuestionsSchema,
   shareTestSchema,
   testListQuerySchema,
   testPassportSchema,
+  testSchoolShareSchema,
   updateTestQuestionSchema,
 } from '@ijod/shared';
 import type { z } from 'zod';
@@ -19,7 +21,7 @@ import { TestsService } from './tests.service.js';
 
 type Out<T extends z.ZodType> = z.output<T>;
 
-/** Test shablonlari kutubxonasi va test yaratish ustasining 1–6-bosqichlari. */
+/** Test shablonlari kutubxonasi, maktab test banki va test yaratish ustasining 1–6-bosqichlari. */
 @Controller('tests')
 @Roles('TEACHER', 'DEPUTY', 'SUPER_ADMIN')
 export class TestsController {
@@ -118,9 +120,24 @@ export class TestsController {
     return this.tests.validate(user, id);
   }
 
+  /** Nusxa (ixtiyoriy yangi nom bilan) — yangi qoralama test so‘rovchiga tegishli bo‘ladi. */
   @Post(':id/copy')
-  copy(@CurrentUser() user: AuthUser, @Param('id', Uuid) id: string) {
-    return this.tests.copy(user, id);
+  copy(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Uuid) id: string,
+    @Body(zod(copyTestSchema)) body: Out<typeof copyTestSchema>,
+  ) {
+    return this.tests.copy(user, id, body);
+  }
+
+  /** Maktab test banki: egasi chiqaradi/oladi, rahbariyat istalgan testni bankdan oladi. */
+  @Put(':id/school')
+  school(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Uuid) id: string,
+    @Body(zod(testSchoolShareSchema)) body: Out<typeof testSchoolShareSchema>,
+  ) {
+    return this.tests.setSchoolVisibility(user, id, body);
   }
 
   @Post(':id/shares')

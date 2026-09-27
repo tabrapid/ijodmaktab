@@ -1,12 +1,32 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Archive, ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, Share2, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  Archive,
+  ArrowLeft,
+  CalendarPlus,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Landmark,
+  Share2,
+  Trash2,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
-import { SHARE_PERMISSIONS, SHARE_PERMISSION_LABELS, formatDateTime, type SharePermission } from '@ijod/shared';
+import { Suspense, useState } from 'react';
+import {
+  SHARE_PERMISSIONS,
+  SHARE_PERMISSION_LABELS,
+  formatDateTime,
+  hasBlockingIssues,
+  type SharePermission,
+} from '@ijod/shared';
 import { TestStatusBadge } from '@/components/status';
+import { CopyTestDialog } from '@/components/teacher/copy-test-dialog';
+import { newSessionHref, subjectBlockReason, useTaughtSubjects } from '@/components/teacher/test-helpers';
 import { BlueprintStep } from '@/components/teacher/wizard/blueprint-step';
 import { GradingStep } from '@/components/teacher/wizard/grading-step';
 import { PassportStep } from '@/components/teacher/wizard/passport-step';
@@ -17,13 +37,12 @@ import {
   PublishStep,
   ResultPolicyStep,
   TimingStep,
-  defaultSessionDraft,
-  type SessionDraft,
+  useSessionDraft,
 } from '@/components/teacher/wizard/session-steps';
 import { testKey, useTest } from '@/components/teacher/wizard/use-test';
 import { ValidationStep } from '@/components/teacher/wizard/validation-step';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardBody, PageHeader } from '@/components/ui/card';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
 import { Alert, ErrorState, PageLoader } from '@/components/ui/feedback';
@@ -45,37 +64,6 @@ const STEPS = [
   { title: 'Natija siyosati', hint: 'Qachon e’lon qilinadi' },
   { title: 'Tasdiqlash va e’lon', hint: 'Sessiya va kod' },
 ];
-
-const draftKey = (id: string) => `ijod:session-draft:${id}`;
-
-function useSessionDraft(id: string) {
-  const [draft, setDraft] = useState<SessionDraft>(() => {
-    if (typeof window === 'undefined') return defaultSessionDraft();
-    try {
-      const stored = localStorage.getItem(draftKey(id));
-      return stored
-        ? { ...defaultSessionDraft(), ...(JSON.parse(stored) as Partial<SessionDraft>) }
-        : defaultSessionDraft();
-    } catch {
-      return defaultSessionDraft();
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(draftKey(id), JSON.stringify(draft));
-    } catch {
-      // Brauzer xotirasi yopiq bo‘lsa — sozlamalar faqat shu sahifada saqlanadi.
-    }
-  }, [draft, id]);
-  const reset = () => {
-    try {
-      localStorage.removeItem(draftKey(id));
-    } catch {
-      // ahamiyatsiz
-    }
-  };
-  return { draft, update: (patch: Partial<SessionDraft>) => setDraft((current) => ({ ...current, ...patch })), reset };
-}
 
 function ShareDialog({ test, open, onClose }: { test: TestDetail; open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -160,6 +148,121 @@ function ShareDialog({ test, open, onClose }: { test: TestDetail; open: boolean;
   );
 }
 
+/** Maktab test bankiga chiqarish / bankdagi versiyani yangilash / bankdan olish. */
+function SchoolBankDialog({
+  test,
+  mode,
+  onClose,
+  onFix,
+}: {
+  test: TestDetail;
+  mode: 'publish' | 'unpublish' | null;
+  onClose: () => void;
+  onFix: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const change = useMutation({
+    mutationFn: (shared: boolean) => api.put<TestDetail>(`/tests/${test.id}/school`, { shared }),
+    onSuccess: (updated, shared) => {
+      queryClient.setQueryData(testKey(test.id), updated);
+      void queryClient.invalidateQueries({ queryKey: ['tests'] });
+      toast.success(
+        shared ? `Test maktab bankiga chiqarildi (v${updated.publishedVersionNo}).` : 'Test maktab bankidan olindi.',
+      );
+      onClose();
+    },
+  });
+  const close = () => {
+    change.reset();
+    onClose();
+  };
+  const republish = test.visibility === 'SCHOOL';
+  const blocking = test.isDraft && hasBlockingIssues(test.issues);
+  const empty = (test.version?.questions.length ?? 0) === 0;
+  const nextVersion = test.isDraft ? test.version?.versionNo : test.publishedVersionNo;
+
+  return (
+    <Dialog
+      open={mode !== null}
+      onClose={close}
+      title={
+        mode === 'unpublish'
+          ? 'Testni maktab bankidan olasizmi?'
+          : republish
+            ? 'Bankdagi versiyani yangilaysizmi?'
+            : 'Testni maktab bankiga chiqarasizmi?'
+      }
+      size="md"
+      footer={
+        <>
+          <Button variant="outline" onClick={close}>
+            Bekor qilish
+          </Button>
+          {mode === 'unpublish' ? (
+            <Button variant="danger" loading={change.isPending} onClick={() => change.mutate(false)}>
+              Bankdan olish
+            </Button>
+          ) : (
+            <Button
+              icon={<Landmark className="size-4" />}
+              loading={change.isPending}
+              disabled={blocking || empty}
+              onClick={() => change.mutate(true)}
+            >
+              {republish ? 'Bankni yangilash' : 'Bankka chiqarish'}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div className="space-y-3 text-sm text-slate-600">
+        {change.isError && <Alert tone="danger">{errorMessage(change.error)}</Alert>}
+        {mode === 'unpublish' ? (
+          <>
+            <p>
+              Boshqa o‘qituvchilar testni endi ko‘rmaydi va u bilan yangi sessiya yarata olmaydi. Allaqachon yaratilgan
+              sessiyalar, natijalar va olingan nusxalar o‘zgarmaydi.
+            </p>
+            {test.permission !== 'OWNER' && (
+              <p>Muallifning testi o‘chirilmaydi — faqat maktab bankidan olinadi (bu amal jurnalga yoziladi).</p>
+            )}
+          </>
+        ) : (
+          <>
+            <p>
+              Testning joriy holati tekshiriladi va muzlatiladi{nextVersion ? ` (v${nextVersion})` : ''}. U barcha
+              o‘qituvchilar va rahbariyatga ko‘rinadi: ular testni ko‘radi, nusxa oladi va o‘z sinflarida o‘tkazadi —
+              lekin sizning testingizni o‘zgartira olmaydi.
+            </p>
+            <p>
+              Keyingi tahrirlaringiz yangi qoralama sifatida saqlanadi. Bankdagilar ularni testni qayta
+              chiqarganingizdan (yoki shu test bilan yangi sessiya yaratganingizdan) keyin ko‘radi.
+            </p>
+            {empty ? (
+              <Alert tone="warning">Testda hali savol yo‘q — avval savollar qo‘shing.</Alert>
+            ) : (
+              blocking && (
+                <Alert
+                  tone="danger"
+                  title="Testda qat’iy xatolar bor"
+                  action={
+                    <button type="button" className="text-sm font-medium underline" onClick={onFix}>
+                      Tekshiruvga o‘tish
+                    </button>
+                  }
+                >
+                  Avval ularni tuzating — shundan keyin bankka chiqarish mumkin.
+                </Alert>
+              )
+            )}
+          </>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+
 function Wizard() {
   const { id } = useParams<{ id: string }>();
   const params = useSearchParams();
@@ -169,17 +272,11 @@ function Wizard() {
   const { draft, update, reset } = useSessionDraft(id);
   const [sharing, setSharing] = useState(false);
   const [archiving, setArchiving] = useState(false);
-  const step = Math.min(10, Math.max(1, Number(params.get('step')) || 1));
+  const [copying, setCopying] = useState(false);
+  const [bank, setBank] = useState<'publish' | 'unpublish' | null>(null);
+  const taught = useTaughtSubjects();
   const goTo = (target: number) => router.replace(`/teacher/tests/${id}?step=${target}`, { scroll: false });
 
-  const copy = useMutation({
-    mutationFn: () => api.post<TestDetail>(`/tests/${id}/copy`),
-    onSuccess: (created) => {
-      toast.success('Nusxa yaratildi.');
-      router.push(`/teacher/tests/${created.id}`);
-    },
-    onError: (error) => toast.error(errorMessage(error)),
-  });
   const archive = useMutation({
     mutationFn: () => api.delete(`/tests/${id}`),
     onSuccess: () => {
@@ -195,7 +292,12 @@ function Wizard() {
   const readOnly = !test.canEdit;
   const errors = test.issues.filter((issue) => issue.level === 'error').length;
   const warnings = test.issues.length - errors;
-  const maxStep = test.canConduct ? 10 : 6;
+  // Sessiya bosqichlari (7–10) — faqat tahrirlovchi uchun; boshqalar yangi sessiya sahifasidan foydalanadi.
+  const maxStep = test.canEdit && test.canConduct ? 10 : 6;
+  const step = Math.min(maxStep, Math.max(1, Number(params.get('step')) || 1));
+  const inBank = test.visibility === 'SCHOOL';
+  // O‘qituvchi test faniga dars bermasa, uni o‘z sinflariga o‘tkaza olmaydi.
+  const subjectReason = subjectBlockReason(test, taught);
 
   const content = (() => {
     switch (step) {
@@ -275,9 +377,18 @@ function Wizard() {
               {test.subject.name} · {test.gradeLevel}-sinf · {test.version?.questions.length ?? 0} ta savol
             </span>
             <TestStatusBadge status={test.status} />
+            {inBank && (
+              <Badge tone="brand">
+                <Landmark className="size-3" aria-hidden /> Maktab banki
+              </Badge>
+            )}
             {test.version && (
               <Badge tone={test.isDraft ? 'amber' : 'green'}>
-                {test.isDraft ? `Qoralama v${test.version.versionNo}` : `Muzlatilgan v${test.version.versionNo}`}
+                {test.isDraft
+                  ? `Qoralama v${test.version.versionNo}`
+                  : readOnly
+                    ? `Tayyor v${test.version.versionNo}`
+                    : `Muzlatilgan v${test.version.versionNo}`}
               </Badge>
             )}
             {test.permission !== 'OWNER' && <Badge tone="violet">Muallif: {test.owner.fullName}</Badge>}
@@ -285,19 +396,34 @@ function Wizard() {
         }
         actions={
           <>
+            {test.canConduct && !subjectReason && (
+              <ButtonLink href={newSessionHref(test.id)} size="sm" icon={<CalendarPlus className="size-4" />}>
+                Sessiya yaratish
+              </ButtonLink>
+            )}
+            {test.canChangeVisibility &&
+              (test.permission === 'OWNER' && test.status !== 'ARCHIVED' && (!inBank || test.isDraft) ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<Landmark className="size-4" />}
+                  onClick={() => setBank('publish')}
+                >
+                  {inBank ? 'Bankni yangilash' : 'Maktab bankiga chiqarish'}
+                </Button>
+              ) : null)}
+            {test.canChangeVisibility && inBank && (
+              <Button variant="ghost" size="sm" onClick={() => setBank('unpublish')}>
+                Bankdan olish
+              </Button>
+            )}
             {test.permission === 'OWNER' && (
               <Button variant="outline" size="sm" icon={<Share2 className="size-4" />} onClick={() => setSharing(true)}>
                 Ulashish
               </Button>
             )}
             {test.canCopy && (
-              <Button
-                variant="outline"
-                size="sm"
-                icon={<Copy className="size-4" />}
-                onClick={() => copy.mutate()}
-                loading={copy.isPending}
-              >
+              <Button variant="outline" size="sm" icon={<Copy className="size-4" />} onClick={() => setCopying(true)}>
                 Nusxa olish
               </Button>
             )}
@@ -315,9 +441,45 @@ function Wizard() {
         }
       />
 
-      {readOnly && (
+      {readOnly &&
+        (test.status === 'ARCHIVED' && test.permission === 'OWNER' ? (
+          <Alert tone="warning" className="mb-4">
+            Test arxivlangan: uni tahrirlab yoki sessiyada ishlatib bo‘lmaydi. O‘tkazilgan sessiyalar saqlangan.
+          </Alert>
+        ) : test.publishedVersionNo === null ? (
+          <Alert tone="warning" className="mb-4" title="Tayyor versiya hali yo‘q">
+            Muallif bu testni hali tayyorlamagan (muzlatilgan versiya yo‘q). Test maktab bankiga chiqarilgach yoki
+            muallif uni sessiyada ishlatgach shu yerda ko‘rinadi.
+          </Alert>
+        ) : test.permission === 'VIEW' ? (
+          <Alert tone="info" className="mb-4">
+            Siz testning tayyor (muzlatilgan) v{test.publishedVersionNo} versiyasini faqat ko‘rishingiz mumkin. Sessiya
+            yaratish yoki o‘zgartirish uchun muallifdan nusxa olish huquqini so‘rang.
+          </Alert>
+        ) : subjectReason ? (
+          <Alert tone="warning" className="mb-4">
+            Siz testning tayyor (muzlatilgan) v{test.publishedVersionNo} versiyasini ko‘ryapsiz. {subjectReason}
+            {test.canCopy &&
+              ' Kerak bo‘lsa, nusxa oling va nusxaning fanini o‘zingiz dars beradigan fanga o‘zgartiring.'}
+          </Alert>
+        ) : (
+          <Alert tone="info" className="mb-4">
+            Siz testning tayyor (muzlatilgan) v{test.publishedVersionNo} versiyasini ko‘ryapsiz — muallifning
+            tugallanmagan o‘zgarishlari ko‘rinmaydi. O‘z sinfingizda o‘tkazish uchun “Sessiya yaratish”ni bosing;
+            o‘zgartirish kerak bo‘lsa, nusxa oling.
+          </Alert>
+        ))}
+      {!readOnly && subjectReason && test.status !== 'ARCHIVED' && (
+        <Alert tone="warning" className="mb-4">
+          {subjectReason} Testni tahrirlashingiz mumkin, lekin sessiyani shu fandan dars beradigan o‘qituvchi yoki
+          rahbariyat yaratadi.
+        </Alert>
+      )}
+      {!readOnly && inBank && test.isDraft && (
         <Alert tone="info" className="mb-4">
-          Bu testni faqat ko‘rishingiz mumkin. O‘zgartirish uchun nusxa oling.
+          Bu test maktab bankida: boshqalar tayyor v{test.publishedVersionNo} versiyani ko‘radi. Qoralamadagi
+          o‘zgarishlar bankka “Bankni yangilash” tugmasi bosilganda yoki shu test bilan yangi sessiya yaratilganda
+          (qoralama muzlatilib) tushadi.
         </Alert>
       )}
       {!test.isDraft && test.frozenVersions.length > 0 && !readOnly && (
@@ -419,6 +581,16 @@ function Wizard() {
       </div>
 
       <ShareDialog test={test} open={sharing} onClose={() => setSharing(false)} />
+      <CopyTestDialog test={test} open={copying} onClose={() => setCopying(false)} />
+      <SchoolBankDialog
+        test={test}
+        mode={bank}
+        onClose={() => setBank(null)}
+        onFix={() => {
+          setBank(null);
+          goTo(5);
+        }}
+      />
       <ConfirmDialog
         open={archiving}
         onClose={() => setArchiving(false)}

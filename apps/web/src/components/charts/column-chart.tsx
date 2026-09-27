@@ -130,25 +130,13 @@ export function ColumnChart({
           >
             {ticks.map((tick) => (
               <g key={tick}>
-                <line
-                  x1={LEFT}
-                  x2={width - 8}
-                  y1={y(tick)}
-                  y2={y(tick)}
-                  stroke="var(--color-viz-grid)"
-                  strokeWidth={1}
-                />
-                <text
-                  x={LEFT - 6}
-                  y={y(tick) + 4}
-                  textAnchor="end"
-                  className="fill-[var(--color-viz-muted)] text-[11px] tabular"
-                >
+                <line x1={LEFT} x2={width - 8} y1={y(tick)} y2={y(tick)} className="stroke-viz-grid" strokeWidth={1} />
+                <text x={LEFT - 6} y={y(tick) + 4} textAnchor="end" className="fill-viz-muted text-[11px] tabular">
                   {tickFormat(tick)}
                 </text>
               </g>
             ))}
-            <line x1={LEFT} x2={width - 8} y1={y(0)} y2={y(0)} stroke="var(--color-viz-axis)" strokeWidth={1} />
+            <line x1={LEFT} x2={width - 8} y1={y(0)} y2={y(0)} className="stroke-viz-axis" strokeWidth={1} />
             {data.map((item, index) => {
               const value = item.value ?? 0;
               const cx = LEFT + slot * index + slot / 2;
@@ -176,9 +164,7 @@ export function ColumnChart({
                 >
                   {/* Kattaroq ko‘rinmas nishon — sichqoncha aniq tegishi shart emas */}
                   <rect x={cx - slot / 2} y={TOP} width={slot} height={PLOT_HEIGHT} fill="transparent" />
-                  {path && (
-                    <path d={path} fill={isActive ? 'var(--color-viz-series-hover)' : 'var(--color-viz-series)'} />
-                  )}
+                  {path && <path d={path} className={isActive ? 'fill-viz-series-hover' : 'fill-viz-series'} />}
                   {index === maxIndex && value > 0 && (
                     <text
                       x={cx}
@@ -198,7 +184,7 @@ export function ColumnChart({
           </svg>
           {activeDatum && (
             <div
-              className="pointer-events-none absolute top-1 right-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs shadow-md"
+              className="pointer-events-none absolute top-1 right-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs shadow-pop dark:shadow-none"
               role="status"
             >
               <p className="text-sm font-semibold text-slate-900 tabular">{activeDatum.display}</p>

@@ -1,12 +1,14 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, LogOut, Monitor, ShieldCheck, ShieldOff, Smartphone } from 'lucide-react';
+import { Camera, KeyRound, LogOut, Monitor, ShieldCheck, ShieldOff, Smartphone, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import QRCode from 'qrcode';
 import { useId, useState, type FormEvent } from 'react';
 import { formatDateTime, formatHumanDateTime, formatInternalId } from '@ijod/shared';
 import { InfoList } from '@/components/admin/info-list';
+import { Avatar } from '@/components/avatar';
+import { AvatarUploadDialog, useRemoveOwnAvatar } from '@/components/avatar-upload-dialog';
 import { RoleBadges } from '@/components/status';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
@@ -75,6 +77,84 @@ function CodeInput({
       value={value}
       onChange={(event) => onChange(event.target.value.replace(/\D/g, '').slice(0, 6))}
     />
+  );
+}
+
+// ---------------------------------------------------------------- Profil rasmi
+
+function AvatarCard({ me }: { me: Me }) {
+  const [open, setOpen] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const remove = useRemoveOwnAvatar(() => setConfirmRemove(false));
+  // Xodimlarning sinfdoshlari yo‘q — izoh roliga mos yoziladi.
+  const student = hasRole(me, 'STUDENT') && !hasRole(me, 'TEACHER', 'DEPUTY', 'ADMIN', 'SUPER_ADMIN');
+  return (
+    <Card>
+      <CardBody className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="group relative shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500"
+          aria-label="Profil rasmini o‘zgartirish"
+        >
+          <Avatar
+            name={me.fullName}
+            src={me.avatarUrl}
+            size="xl"
+            className="transition-opacity group-hover:opacity-90"
+          />
+          <span
+            className="absolute right-0 bottom-0 flex size-8 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm ring-2 ring-surface"
+            aria-hidden
+          >
+            <Camera className="size-4" />
+          </span>
+        </button>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div>
+            <p className="text-lg font-semibold break-words text-slate-900">{me.fullName}</p>
+            <div className="mt-1 flex justify-center sm:justify-start">
+              <RoleBadges roles={me.roles} />
+            </div>
+          </div>
+          <p className="text-sm text-slate-500">
+            {me.avatarUrl
+              ? 'Profil rasmingiz sarlavhada va ro‘yxatlarda ko‘rinadi.'
+              : `Profil rasmini qo‘shing — ${
+                  student ? 'o‘qituvchilar va sinfdoshlaringiz' : 'hamkasblaringiz va o‘quvchilar'
+                } sizni ro‘yxatlarda tezroq taniydi.`}
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2 sm:flex-col sm:items-stretch">
+          <Button variant="outline" onClick={() => setOpen(true)} icon={<Camera className="size-4" aria-hidden />}>
+            {me.avatarUrl ? 'Rasmni o‘zgartirish' : 'Rasm qo‘shish'}
+          </Button>
+          {me.avatarUrl && (
+            <Button
+              variant="ghost"
+              className="text-red-700 hover:bg-red-50 hover:text-red-800"
+              onClick={() => setConfirmRemove(true)}
+              icon={<Trash2 className="size-4" aria-hidden />}
+            >
+              Olib tashlash
+            </Button>
+          )}
+        </div>
+      </CardBody>
+      <AvatarUploadDialog open={open} onClose={() => setOpen(false)} />
+      <ConfirmDialog
+        open={confirmRemove}
+        onClose={() => setConfirmRemove(false)}
+        onConfirm={() => remove.mutate()}
+        title="Profil rasmini olib tashlash"
+        confirmLabel="Olib tashlash"
+        tone="danger"
+        loading={remove.isPending}
+      >
+        Rasm o‘chiriladi va o‘rniga ismingizning bosh harflari ko‘rsatiladi. Keyin istalgan vaqtda yangi rasm qo‘shish
+        mumkin.
+      </ConfirmDialog>
+    </Card>
   );
 }
 
@@ -475,8 +555,9 @@ export default function ProfilePage() {
     <div className="space-y-6">
       <PageHeader
         title="Mening hisobim"
-        description="Shaxsiy ma’lumotlar, parol, faol sessiyalar va ikki bosqichli kirish."
+        description="Profil rasmi, shaxsiy ma’lumotlar, parol, faol sessiyalar va ikki bosqichli kirish."
       />
+      <AvatarCard me={me} />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <SessionsCard />

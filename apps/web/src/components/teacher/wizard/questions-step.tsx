@@ -119,19 +119,24 @@ function BankPicker({ test, open, onClose }: { test: TestDetail; open: boolean; 
 
 function CopyFromTest({ test, open, onClose }: { test: TestDetail; open: boolean; onClose: () => void }) {
   const [sourceId, setSourceId] = useState('');
+  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const copy = useTestMutation(test.id, testApi.fromTest(test.id), 'Savollar nusxalandi.');
+  // O‘zimniki, ulashilgan va maktab bankidagi testlar (boshqalarniki — tayyor versiyasi bilan).
   const tests = useQuery({
-    queryKey: ['tests', 'copy-source'],
-    queryFn: () => api.get<Page<TestListItem>>(`/tests${qs({ scope: 'mine', pageSize: 100 })}`),
+    queryKey: ['tests', 'copy-source', search.trim()],
+    queryFn: () => api.get<Page<TestListItem>>(`/tests${qs({ scope: 'available', q: search.trim(), pageSize: 100 })}`),
     enabled: open,
+    placeholderData: (previous) => previous,
   });
   const source = useQuery({
     queryKey: ['test', sourceId],
     queryFn: () => api.get<TestDetail>(`/tests/${sourceId}`),
     enabled: open && Boolean(sourceId),
   });
-  const candidates = (tests.data?.items ?? []).filter((item) => item.id !== test.id);
+  const candidates = (tests.data?.items ?? []).filter(
+    (item) => item.id !== test.id && item.permission !== 'VIEW' && item.questionCount > 0,
+  );
 
   return (
     <Dialog
@@ -161,22 +166,33 @@ function CopyFromTest({ test, open, onClose }: { test: TestDetail; open: boolean
         </>
       }
     >
-      <Field label="Manba test">
-        <Select
-          value={sourceId}
-          onChange={(event) => {
-            setSourceId(event.target.value);
-            setSelected([]);
-          }}
-        >
-          <option value="">— tanlang —</option>
-          {candidates.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.title} ({item.subject.name}, {item.questionCount} ta savol)
-            </option>
-          ))}
-        </Select>
-      </Field>
+      <div className="grid gap-3 sm:grid-cols-[1fr_2fr]">
+        <Field label="Qidiruv">
+          <Input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Nom, mavzu yoki muallif"
+          />
+        </Field>
+        <Field label="Manba test" hint="Sizning, siz bilan ulashilgan va maktab bankidagi testlar.">
+          <Select
+            value={sourceId}
+            onChange={(event) => {
+              setSourceId(event.target.value);
+              setSelected([]);
+            }}
+          >
+            <option value="">{tests.isPending ? 'Yuklanmoqda…' : '— tanlang —'}</option>
+            {candidates.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title} ({item.subject.name}, {item.questionCount} ta savol
+                {item.permission === 'OWNER' ? '' : `, ${item.owner.fullName}`})
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
       {sourceId && (
         <div className="mt-4">
           {source.isPending ? (

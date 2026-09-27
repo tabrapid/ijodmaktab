@@ -173,10 +173,10 @@ export function SessionList({
           <EmptyState
             icon={CalendarClock}
             title="Sessiyalar topilmadi"
-            description="Sessiya testlar kutubxonasidan yaratiladi: testni oching va “Sessiya” bosqichlarini to‘ldiring."
+            description="Yangi sessiya uchun o‘z testingizni yoki maktab test bankidagi tayyor testni tanlang, sinf va vaqtni belgilang."
             action={
-              <ButtonLink href="/teacher/tests" icon={<Plus className="size-4" />}>
-                Testni tanlash
+              <ButtonLink href="/teacher/sessions/new" icon={<Plus className="size-4" />}>
+                Yangi sessiya
               </ButtonLink>
             }
           />

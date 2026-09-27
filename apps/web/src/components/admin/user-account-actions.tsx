@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Archive, KeyRound, LockOpen, LogOut, Power, PowerOff, Trash2 } from 'lucide-react';
+import { Archive, ImageOff, KeyRound, LockOpen, LogOut, Power, PowerOff, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -19,7 +19,7 @@ import { ApiError, api, errorMessage } from '@/lib/api';
 import type { UserDetail } from '@/lib/types';
 import { FormDialog, applyServerErrors } from './form-dialog';
 import { adminKeys, useInvalidate } from './queries';
-import { TemporaryPasswordDialog } from './temporary-password-dialog';
+import { TemporaryPasswordDialog, accountRoleLabel } from './temporary-password-dialog';
 
 const STATUS_ACTIONS: Record<
   UserStatus,
@@ -188,13 +188,13 @@ export function SecurityCard({ user, disabled }: { user: UserDetail; disabled: b
   const toast = useToast();
   const updated = useUserUpdated(user.id);
   const [confirm, setConfirm] = useState<SecurityAction | null>(null);
-  const [password, setPassword] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState<{ login: string; temporaryPassword: string } | null>(null);
 
   const reset = useMutation({
-    mutationFn: () => api.post<{ temporaryPassword: string }>(`/users/${user.id}/reset-password`),
-    onSuccess: async ({ temporaryPassword }) => {
+    mutationFn: () => api.post<{ login: string; temporaryPassword: string }>(`/users/${user.id}/reset-password`),
+    onSuccess: async (result) => {
       setConfirm(null);
-      setPassword(temporaryPassword);
+      setCredentials(result);
       await updated();
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -289,14 +289,15 @@ export function SecurityCard({ user, disabled }: { user: UserDetail; disabled: b
       >
         {active?.body}
       </ConfirmDialog>
-      {password && (
+      {credentials && (
         <TemporaryPasswordDialog
           open
-          onClose={() => setPassword(null)}
+          onClose={() => setCredentials(null)}
           reason="reset"
           fullName={user.fullName}
-          login={user.login ?? ''}
-          password={password}
+          roleLabel={accountRoleLabel(user.roles, user.enrollments.find((item) => item.endsOn === null)?.class.name)}
+          login={credentials.login}
+          password={credentials.temporaryPassword}
         />
       )}
     </Card>
@@ -389,5 +390,47 @@ export function DeleteUserCard({
         </div>
       </ConfirmDialog>
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------- Profil rasmi (moderatsiya)
+
+/** Nomaqbul profil rasmini olib tashlash (foydalanuvchi keyin yangisini yuklashi mumkin). */
+export function RemoveAvatarButton({ user }: { user: UserDetail }) {
+  const toast = useToast();
+  const updated = useUserUpdated(user.id);
+  const [open, setOpen] = useState(false);
+  const remove = useMutation({
+    mutationFn: () => api.delete<UserDetail>(`/users/${user.id}/avatar`),
+    onSuccess: async (result) => {
+      setOpen(false);
+      toast.success('Profil rasmi olib tashlandi.');
+      await updated(result);
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+        icon={<ImageOff className="size-4" aria-hidden />}
+      >
+        Rasmni olib tashlash
+      </Button>
+      <ConfirmDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        onConfirm={() => remove.mutate()}
+        title="Profil rasmini olib tashlash"
+        confirmLabel="Olib tashlash"
+        tone="danger"
+        loading={remove.isPending}
+      >
+        <span className="font-medium text-slate-900">{user.fullName}</span> profil rasmi o‘chiriladi va o‘rniga bosh
+        harflar ko‘rsatiladi. Nomaqbul rasmlar uchun. Amal audit jurnalida qayd etiladi.
+      </ConfirmDialog>
+    </>
   );
 }

@@ -1,29 +1,34 @@
 import { timingSafeEqual } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  ATTEMPT_LOCK_REASON_LABELS,
   FINAL_ATTEMPT_STATUSES,
   categoryEntries,
   computeAttemptDeadline,
   entryDeadline,
+  fullName,
   isEntryOpen,
   pairPercent,
   reachesThreshold,
+  type AttemptLockReason,
   type AttemptStatus,
   type Category,
   type CategoryScores,
   type GradingOverride,
+  type attemptLockSchema,
   type saveAnswerSchema,
   type submitAttemptSchema,
 } from '@ijod/shared';
 import type { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
-import type { AuthUser } from '../common/auth-user.js';
+import { hasRole, type AuthUser } from '../common/auth-user.js';
 import { AppError, badRequest, conflict, notFound, tooManyRequests } from '../common/errors.js';
 import { fromJson } from '../common/json.js';
 import { num } from '../common/numbers.js';
 import { AppConfig } from '../config/app-config.js';
 import { Prisma, type AssessmentSession, type Attempt } from '../generated/prisma/client.js';
 import { GradingService } from '../grading/grading.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
 import { correctOptionOf, optionsOf, type QuestionOption } from '../questions/question-content.js';
 import { reviewReleased, scoresReleased, shuffled, stateOf } from '../sessions/session-rules.js';
@@ -46,6 +51,37 @@ const timeUp = () =>
 
 const finished = () => new AppError(HttpStatus.CONFLICT, 'ATTEMPT_FINISHED', 'Bu urinish allaqachon yakunlangan.');
 
+const attemptLocked = () =>
+  new AppError(
+    HttpStatus.CONFLICT,
+    'ATTEMPT_LOCKED',
+    'Test vaqtincha to‘xtatilgan. O‘qituvchi ruxsat berishini kuting.',
+  );
+
+/** To‘xtatilganlik holati faqat davom etayotgan urinish uchun ko‘rsatiladi. */
+function lockOf(attempt: Pick<Attempt, 'status' | 'lockedAt' | 'lockReason' | 'lockCount'>) {
+  return {
+    lock:
+      attempt.status === 'IN_PROGRESS' && attempt.lockedAt
+        ? { lockedAt: attempt.lockedAt, reason: (attempt.lockReason ?? 'FULLSCREEN_EXIT') as AttemptLockReason }
+        : null,
+    lockCount: attempt.lockCount,
+  };
+}
+
+/** Qulflangan urinish qatori (xom so‘rov natijasi). */
+interface LockedRow {
+  id: string;
+  status: string;
+  deadlineAt: Date;
+  activeClientId: string | null;
+  questionOrder: string[];
+  progressIndex: number;
+  sessionId: string;
+  lockedAt: Date | null;
+  lockCount: number;
+}
+
 const invalidCode = () => badRequest('INVALID_CODE', 'Kod noto‘g‘ri, muddati o‘tgan yoki bu test sizga tayinlanmagan.');
 
 function sameCode(a: string, b: string) {
@@ -67,6 +103,7 @@ export class AttemptsService {
     private readonly grading: GradingService,
     private readonly audit: AuditService,
     private readonly config: AppConfig,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ------------------------------------------------------------ Kod tekshiruvi (tezlik cheklovi bilan)
@@ -226,6 +263,7 @@ export class AttemptsService {
       questionCount: session.testVersion._count.questions,
       totalPoints: num(session.testVersion.totalPoints) ?? 0,
       allowBackNavigation: session.allowBackNavigation,
+      requireFullscreen: session.requireFullscreen,
       maxAttempts: session.maxAttempts,
       attemptsUsed: used,
       attemptPolicy: session.attemptPolicy,
@@ -371,8 +409,10 @@ export class AttemptsService {
         subject,
         instructions: version.instructions,
         allowBackNavigation: session.allowBackNavigation,
+        requireFullscreen: session.requireFullscreen,
         totalPoints: num(version.totalPoints) ?? 0,
       },
+      ...lockOf(attempt),
     };
 
     if (attempt.status !== 'IN_PROGRESS') {
@@ -537,25 +577,24 @@ export class AttemptsService {
 
   // ------------------------------------------------------------ Javob saqlash
 
-  /** Urinish qatorini qulflab, javob yozish mumkinligini tekshiradi. */
-  private async lockForWrite(tx: Tx, viewer: AuthUser, attemptId: string, clientId: string) {
-    const rows = await tx.$queryRaw<
-      {
-        id: string;
-        status: string;
-        deadlineAt: Date;
-        activeClientId: string | null;
-        questionOrder: string[];
-        progressIndex: number;
-        sessionId: string;
-      }[]
-    >`
-      SELECT id, status, "deadlineAt", "activeClientId", "questionOrder", "progressIndex", "sessionId"
+  /** O‘quvchining o‘z urinish qatorini tranzaksiya oxirigacha qulflaydi. */
+  private async lockOwnRow(tx: Tx, viewer: AuthUser, attemptId: string) {
+    const rows = await tx.$queryRaw<LockedRow[]>`
+      SELECT id, status, "deadlineAt", "activeClientId", "questionOrder", "progressIndex", "sessionId",
+        "lockedAt", "lockCount"
       FROM "Attempt" WHERE id = ${attemptId}::uuid AND "studentId" = ${viewer.id}::uuid FOR UPDATE`;
     const attempt = rows[0];
     if (!attempt) throw notFound('Urinish');
+    return attempt;
+  }
+
+  /** Urinish qatorini qulflab, javob yozish mumkinligini tekshiradi. */
+  private async lockForWrite(tx: Tx, viewer: AuthUser, attemptId: string, clientId: string) {
+    const attempt = await this.lockOwnRow(tx, viewer, attemptId);
     if (attempt.status !== 'IN_PROGRESS') throw finished();
     if (attempt.activeClientId && attempt.activeClientId !== clientId) throw deviceConflict();
+    // Muddati o‘tgan bo‘lsa “vaqt tugadi” ustun turadi — urinish odatdagidek yakunlanadi.
+    if (attempt.lockedAt && !this.isOverdue(attempt)) throw attemptLocked();
     return attempt;
   }
 
@@ -645,9 +684,19 @@ export class AttemptsService {
 
   async heartbeat(viewer: AuthUser, attemptId: string, input: { clientId: string; focusLossCount?: number }) {
     const attempt = await this.ownAttempt(viewer, attemptId);
-    if (await this.finalizeIfOverdue(attempt)) return { status: 'EXPIRED' as AttemptStatus, serverNow: new Date() };
-    if (attempt.status !== 'IN_PROGRESS') return { status: attempt.status as AttemptStatus, serverNow: new Date() };
+    if (await this.finalizeIfOverdue(attempt)) {
+      return { status: 'EXPIRED' as AttemptStatus, serverNow: new Date(), lock: null, lockCount: attempt.lockCount };
+    }
+    if (attempt.status !== 'IN_PROGRESS') {
+      return {
+        status: attempt.status as AttemptStatus,
+        serverNow: new Date(),
+        lock: null,
+        lockCount: attempt.lockCount,
+      };
+    }
     const conflictDevice = Boolean(attempt.activeClientId && attempt.activeClientId !== input.clientId);
+    // To‘xtatilgan urinishda ham signal yangilanadi: o‘qituvchi “aloqa uzilgan” deb o‘ylamasin.
     if (!conflictDevice) {
       await this.prisma.attempt.update({
         where: { id: attemptId },
@@ -662,7 +711,98 @@ export class AttemptsService {
       serverNow: new Date(),
       deadlineAt: attempt.deadlineAt,
       deviceConflict: conflictDevice,
+      ...lockOf(attempt),
     };
+  }
+
+  // ------------------------------------------------------------ To‘liq ekran nazorati
+
+  /**
+   * O‘quvchi qurilmasi to‘liq ekrandan chiqish yoki sahifadan ketishni xabar qiladi: urinish
+   * o‘qituvchi ruxsat berguncha to‘xtatiladi (holati IN_PROGRESS qoladi, vaqt to‘xtamaydi).
+   * Takroriy, eskirgan yoki boshqa oynadan kelgan xabar hech narsani o‘zgartirmaydi.
+   */
+  async lock(viewer: AuthUser, attemptId: string, input: Out<typeof attemptLockSchema>) {
+    let overdue = false;
+    await this.prisma.$transaction(async (tx) => {
+      const attempt = await this.lockOwnRow(tx, viewer, attemptId);
+      if (attempt.status !== 'IN_PROGRESS') return;
+      if (this.isOverdue(attempt)) {
+        overdue = true;
+        return;
+      }
+      // Faqat javob yozayotgan oyna to‘xtata oladi (fondagi eski oyna emas).
+      if (attempt.activeClientId && attempt.activeClientId !== input.clientId) return;
+      if (attempt.lockedAt) return;
+      // Qurilma ruxsatdan oldingi holatni ko‘rgan — bu kechikib kelgan eski xabar.
+      if (input.epoch !== undefined && input.epoch !== attempt.lockCount) return;
+      const session = await tx.assessmentSession.findUniqueOrThrow({
+        where: { id: attempt.sessionId },
+        select: { id: true, title: true, requireFullscreen: true, createdById: true, conductorId: true },
+      });
+      if (!session.requireFullscreen) return;
+
+      const now = new Date();
+      await tx.attempt.update({
+        where: { id: attemptId },
+        data: {
+          lockedAt: now,
+          lockReason: input.reason,
+          lockCount: { increment: 1 },
+          focusLossCount: { increment: 1 },
+          lastSeenAt: now,
+        },
+      });
+      await this.audit.log(
+        'attempt.locked',
+        { type: 'Attempt', id: attemptId },
+        { reason: input.reason, sessionId: session.id, lockNo: attempt.lockCount + 1 },
+        { tx },
+      );
+      await this.notifyLocked(tx, viewer, session, input.reason);
+    });
+    if (overdue) await this.grading.finalize(attemptId, 'TIMEOUT');
+
+    const fresh = await this.prisma.attempt.findUniqueOrThrow({ where: { id: attemptId } });
+    return {
+      status: fresh.status as AttemptStatus,
+      serverNow: new Date(),
+      deadlineAt: fresh.deadlineAt,
+      deviceConflict: Boolean(fresh.activeClientId && fresh.activeClientId !== input.clientId),
+      ...lockOf(fresh),
+    };
+  }
+
+  /** Sessiya yaratuvchisi va o‘tkazuvchisiga: har biriga o‘z kabinetidagi jonli kuzatuv havolasi. */
+  private async notifyLocked(
+    tx: Tx,
+    student: AuthUser,
+    session: { id: string; title: string; createdById: string; conductorId: string },
+    reason: AttemptLockReason,
+  ) {
+    const recipients = await tx.user.findMany({
+      where: { id: { in: [session.createdById, session.conductorId] } },
+      select: { id: true, roles: { select: { role: true } } },
+    });
+    const byLink = new Map<string, string[]>();
+    for (const recipient of recipients) {
+      const roles = { roles: recipient.roles.map((item) => item.role) };
+      const area = hasRole(roles, 'TEACHER') || !hasRole(roles, 'DEPUTY', 'SUPER_ADMIN') ? 'teacher' : 'management';
+      const link = `/${area}/sessions/${session.id}?tab=live`;
+      byLink.set(link, [...(byLink.get(link) ?? []), recipient.id]);
+    }
+    for (const [link, userIds] of byLink) {
+      await this.notifications.notify(
+        userIds,
+        {
+          type: 'ATTEMPT_LOCKED',
+          title: `${fullName(student)} testdan chetlatildi`,
+          body: `${ATTEMPT_LOCK_REASON_LABELS[reason]}. Test: “${session.title}”.`,
+          link,
+        },
+        tx,
+      );
+    }
   }
 
   /** Boshqa qurilmada davom etish: faqat bitta qurilma javob yoza oladi, almashish qayd etiladi. */
@@ -698,6 +838,8 @@ export class AttemptsService {
       if (locked.activeClientId && locked.activeClientId !== input.clientId) throw deviceConflict();
 
       late = this.isOverdue(locked);
+      // To‘xtatilgan urinishni o‘quvchi topshira olmaydi; vaqt tugagach esa odatdagidek yakunlanadi.
+      if (!late && locked.lockedAt) throw attemptLocked();
       if (!late) {
         for (const answer of input.answers) {
           if (!locked.questionOrder.includes(answer.testQuestionId)) continue;

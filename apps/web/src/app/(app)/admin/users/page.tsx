@@ -18,9 +18,10 @@ import {
 import { CreateUserDialog, type CreateUserResult } from '@/components/admin/create-user-dialog';
 import { adminKeys, useClassList } from '@/components/admin/queries';
 import { SearchInput } from '@/components/admin/search-input';
-import { TemporaryPasswordDialog } from '@/components/admin/temporary-password-dialog';
+import { TemporaryPasswordDialog, accountRoleLabel } from '@/components/admin/temporary-password-dialog';
 import { intParam, pickParam, useUrlParams } from '@/components/admin/url-state';
 import { RequireRole } from '@/components/app-shell';
+import { Avatar } from '@/components/avatar';
 import { RoleBadges, UserStatusBadge } from '@/components/status';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
@@ -94,6 +95,8 @@ function UsersList() {
   const roleOptions: readonly Role[] = hasRole(me, 'SUPER_ADMIN')
     ? ROLES
     : ROLES.filter((item) => item !== 'SUPER_ADMIN');
+  // Direktor o‘rinbosari faqat o‘qituvchi va o‘quvchi hisoblarini boshqaradi (qolganlari — faqat ko‘rish).
+  const deputyOnly = !hasRole(me, 'ADMIN', 'SUPER_ADMIN');
 
   const clearFilters = () => update({ q: null, role: null, status: null, classId: null, flag: null });
   const closeCreate = () => {
@@ -108,8 +111,12 @@ function UsersList() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Foydalanuvchilar"
-        description="O‘quvchi va xodimlar hisoblari: rollar, holat, sinf va kirish ma’lumotlari."
+        title={deputyOnly ? 'O‘qituvchi va o‘quvchi hisoblari' : 'Foydalanuvchilar'}
+        description={
+          deputyOnly
+            ? 'Yangi hisob yarating, login va vaqtinchalik parolni foydalanuvchiga bering, parolni tiklang va o‘quvchini sinfga biriktiring. Rahbariyat va administrator hisoblari faqat ko‘rish uchun.'
+            : 'O‘quvchi va xodimlar hisoblari: rollar, holat, sinf va kirish ma’lumotlari.'
+        }
         actions={
           <>
             <ButtonLink href="/admin/users/import" variant="outline" icon={<Upload className="size-4" aria-hidden />}>
@@ -268,12 +275,15 @@ function UsersList() {
                   <TR key={user.id} className="cursor-pointer" onClick={(event) => openRow(event, user.id)}>
                     <TD className="font-mono text-xs text-slate-600 tabular">{formatInternalId(user.internalId)}</TD>
                     <TD className="min-w-48">
-                      <Link
-                        href={`/admin/users/${user.id}`}
-                        className="font-medium text-slate-900 hover:text-brand-700 hover:underline"
-                      >
-                        {user.fullName}
-                      </Link>
+                      <span className="flex items-center gap-2.5">
+                        <Avatar name={user.fullName} src={user.avatarUrl} size="sm" />
+                        <Link
+                          href={`/admin/users/${user.id}`}
+                          className="font-medium text-slate-900 hover:text-brand-700 hover:underline"
+                        >
+                          {user.fullName}
+                        </Link>
+                      </span>
                     </TD>
                     <TD>
                       <RoleBadges roles={user.roles} />
@@ -281,7 +291,9 @@ function UsersList() {
                     <TD className="whitespace-nowrap">
                       {user.currentClass?.name ?? <span className="text-slate-400">—</span>}
                     </TD>
-                    <TD className="font-mono text-xs whitespace-nowrap text-slate-700">{user.login ?? '—'}</TD>
+                    <TD className="font-mono text-xs whitespace-nowrap text-slate-700">
+                      {user.login ?? <span className="text-slate-400">—</span>}
+                    </TD>
                     <TD>
                       <UserStatusCell user={user} />
                     </TD>
@@ -322,6 +334,10 @@ function UsersList() {
           onClose={() => setCreated(null)}
           reason="created"
           fullName={created.user.fullName}
+          roleLabel={accountRoleLabel(
+            created.user.roles,
+            created.user.enrollments.find((item) => item.endsOn === null)?.class.name,
+          )}
           login={created.user.login ?? ''}
           password={created.temporaryPassword}
           profileHref={`/admin/users/${created.user.id}`}
@@ -333,7 +349,7 @@ function UsersList() {
 
 export default function UsersPage() {
   return (
-    <RequireRole roles={['ADMIN', 'SUPER_ADMIN']}>
+    <RequireRole roles={['DEPUTY', 'ADMIN', 'SUPER_ADMIN']}>
       <Suspense fallback={<PageLoader />}>
         <UsersList />
       </Suspense>

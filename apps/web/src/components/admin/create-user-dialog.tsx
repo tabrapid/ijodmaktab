@@ -4,15 +4,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { createUserSchema, type Role } from '@ijod/shared';
+import { createUserSchema, grantableRolesFor, type Role } from '@ijod/shared';
 import type { z } from 'zod';
 import { Alert } from '@/components/ui/feedback';
 import { Field, Input, Select } from '@/components/ui/form';
 import { api } from '@/lib/api';
-import { hasRole, useMe } from '@/lib/auth';
+import { useMe } from '@/lib/auth';
 import type { UserDetail } from '@/lib/types';
 import { FormDialog, applyServerErrors, choiceError } from './form-dialog';
-import { ADMIN_GRANTABLE_ROLES } from './labels';
 import { adminKeys, useClassList, useInvalidate } from './queries';
 import { RoleCheckboxes } from './role-checkboxes';
 
@@ -139,9 +138,8 @@ export function CreateUserDialog({
   const formId = useId();
   const { data: me } = useMe();
   const invalidate = useInvalidate();
-  const roleOptions: readonly Role[] = hasRole(me, 'SUPER_ADMIN')
-    ? [...ADMIN_GRANTABLE_ROLES, 'ADMIN', 'SUPER_ADMIN']
-    : ADMIN_GRANTABLE_ROLES;
+  // Direktor o‘rinbosari: o‘qituvchi va o‘quvchi; administrator: + rahbariyat; super admin: barchasi.
+  const roleOptions: readonly Role[] = grantableRolesFor(me?.roles ?? []);
   const mutation = useMutation({
     mutationFn: (values: CreateUserValues) => api.post<CreateUserResult>('/users', values),
     onSuccess: async (result) => {

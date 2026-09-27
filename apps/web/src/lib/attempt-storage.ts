@@ -1,8 +1,10 @@
 'use client';
 
+import { ATTEMPT_LOCK_REASONS, type AttemptLockReason } from '@ijod/shared';
+
 /**
- * Brauzer xotirasi: kirish kodi (bir martalik), qurilma identifikatori va hali serverga
- * yetib bormagan javoblar (internet uzilganda yo‘qolmasligi uchun).
+ * Brauzer xotirasi: kirish kodi (bir martalik), qurilma identifikatori, hali serverga
+ * yetib bormagan javoblar (internet uzilganda yo‘qolmasligi uchun) va to‘xtatish belgisi.
  */
 
 const safe = <T>(fn: () => T, fallback: T): T => {
@@ -65,4 +67,36 @@ export function savePending(attemptId: string, pending: Record<string, PendingAn
     if (Object.keys(pending).length === 0) localStorage.removeItem(pendingKey(attemptId));
     else localStorage.setItem(pendingKey(attemptId), JSON.stringify(pending));
   }, undefined);
+}
+
+/**
+ * To‘liq ekran nazorati: qurilma testni to‘xtatganini serverga yetkazguncha eslab qoladi.
+ * Sahifa yangilansa ham to‘xtatish bekor bo‘lmaydi (xabar qayta yuboriladi).
+ */
+export interface LockFlag {
+  reason: AttemptLockReason;
+  /** To‘xtatish sodir bo‘lgandagi lockCount (server shu qiymatdan oshsa — xabar qabul qilingan). */
+  epoch: number;
+  /** To‘xtatgan oyna: server faqat javob yozayotgan oynadan kelgan xabarni qabul qiladi. */
+  clientId: string;
+}
+
+const lockKey = (attemptId: string) => `ijod:lock:${attemptId}`;
+
+export function loadLockFlag(attemptId: string): LockFlag | null {
+  return safe(() => {
+    const value = JSON.parse(localStorage.getItem(lockKey(attemptId)) ?? 'null') as Partial<LockFlag> | null;
+    if (!value || !ATTEMPT_LOCK_REASONS.includes(value.reason as AttemptLockReason)) return null;
+    if (typeof value.epoch !== 'number' || !Number.isInteger(value.epoch) || value.epoch < 0) return null;
+    if (typeof value.clientId !== 'string' || !value.clientId) return null;
+    return { reason: value.reason as AttemptLockReason, epoch: value.epoch, clientId: value.clientId };
+  }, null);
+}
+
+export function saveLockFlag(attemptId: string, flag: LockFlag) {
+  safe(() => localStorage.setItem(lockKey(attemptId), JSON.stringify(flag)), undefined);
+}
+
+export function clearLockFlag(attemptId: string) {
+  safe(() => localStorage.removeItem(lockKey(attemptId)), undefined);
 }

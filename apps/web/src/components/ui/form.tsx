@@ -4,7 +4,7 @@ import { cloneElement, isValidElement, useId, type ComponentProps, type ReactEle
 import { cn } from '@/lib/cn';
 
 const control =
-  'block w-full rounded-lg border border-slate-300 bg-surface px-3 text-sm text-slate-900 shadow-xs placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-slate-100 disabled:text-slate-500 aria-[invalid=true]:border-red-500';
+  'block w-full rounded-lg border border-slate-300 bg-surface px-3 text-sm text-slate-900 shadow-xs transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-brand-500 focus:ring-3 focus:ring-brand-500/25 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 aria-[invalid=true]:border-red-500 aria-[invalid=true]:focus:ring-red-500/25 dark:shadow-none dark:focus:border-brand-400 dark:focus:ring-brand-400/30';
 
 export function Input({ className, ...props }: ComponentProps<'input'>) {
   return <input className={cn(control, 'h-10', className)} {...props} />;
@@ -34,7 +34,7 @@ export function Checkbox({
       <input
         id={props.id ?? id}
         type="checkbox"
-        className="mt-0.5 size-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+        className="mt-0.5 size-4 shrink-0 cursor-pointer accent-brand-600 disabled:cursor-not-allowed dark:accent-brand-500"
         {...props}
       />
       <span>
@@ -80,7 +80,7 @@ export function Field({
       <label htmlFor={controlId} className="block text-sm font-medium text-slate-700">
         {label}
         {required && (
-          <span className="text-red-600" aria-hidden>
+          <span className="text-red-700" aria-hidden>
             {' '}
             *
           </span>
@@ -93,7 +93,7 @@ export function Field({
         </p>
       )}
       {error && (
-        <p id={errorId} className="text-xs font-medium text-red-600">
+        <p id={errorId} className="text-xs font-medium text-red-700">
           {error}
         </p>
       )}

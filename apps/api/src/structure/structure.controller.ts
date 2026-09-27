@@ -31,6 +31,8 @@ const assignmentQuery = z.object({
 });
 
 const MANAGERS = ['ADMIN', 'SUPER_ADMIN'] as const;
+/** Sinfga a’zolik (biriktirish, ko‘chirish, tugatish): direktor o‘rinbosari ham. */
+const ENROLLERS = ['DEPUTY', 'ADMIN', 'SUPER_ADMIN'] as const;
 const STAFF = ['TEACHER', 'DEPUTY', 'ADMIN', 'SUPER_ADMIN'] as const;
 
 @Controller()
@@ -133,21 +135,21 @@ export class StructureController {
   }
 
   @Post('classes/:id/students')
-  @Roles(...MANAGERS)
+  @Roles(...ENROLLERS)
   @HttpCode(200)
   enroll(@Param('id', Uuid) id: string, @Body(zod(enrollStudentsSchema)) body: Out<typeof enrollStudentsSchema>) {
     return this.structure.enrollStudents(id, body);
   }
 
   @Post('students/:id/transfer')
-  @Roles(...MANAGERS)
+  @Roles(...ENROLLERS)
   @HttpCode(200)
   transfer(@Param('id', Uuid) id: string, @Body(zod(transferStudentSchema)) body: Out<typeof transferStudentSchema>) {
     return this.structure.transferStudent(id, body);
   }
 
   @Post('enrollments/:id/end')
-  @Roles(...MANAGERS)
+  @Roles(...ENROLLERS)
   @HttpCode(200)
   endEnrollment(@Param('id', Uuid) id: string, @Body(zod(endEnrollmentSchema)) body: Out<typeof endEnrollmentSchema>) {
     return this.structure.endEnrollment(id, body);

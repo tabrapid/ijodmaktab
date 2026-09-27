@@ -22,7 +22,7 @@ import {
   SHARE_PERMISSIONS,
   USER_STATUSES,
 } from './enums.js';
-import { parsePortfolioDetails } from './portfolio.js';
+import { PORTFOLIO_CATEGORIES, parsePortfolioDetails } from './portfolio.js';
 import { hasAtMostTwoDecimals } from './scoring.js';
 import { MAX_QUESTION_POINTS } from './validation.js';
 
@@ -634,6 +634,8 @@ export const submitAttemptSchema = z.object({
 export const attemptLockSchema = z.object({
   clientId: clientId(),
   reason: z.enum(ATTEMPT_LOCK_REASONS),
+  /** Qurilma oxirgi ko‘rgan lockCount: kechikib kelgan eski xabar yangi ruxsatni bekor qilmaydi. */
+  epoch: z.number().int().min(0).optional(),
 });
 
 /** O‘qituvchi to‘xtatilgan urinishga ruxsat beradi (ixtiyoriy qo‘shimcha daqiqa bilan). */
@@ -718,6 +720,8 @@ export type PortfolioReviewInput = z.input<typeof portfolioReviewSchema>;
 export const portfolioListQuerySchema = z.object({
   ownerId: id().optional(),
   type: z.enum(PORTFOLIO_ITEM_TYPES).optional(),
+  /** Bo‘lim: sertifikatlar, olimpiadalar, ijodiy ishlar yoki boshqa yutuqlar. */
+  category: z.enum(PORTFOLIO_CATEGORIES).optional(),
   level: z.enum(ACHIEVEMENT_LEVELS).optional(),
   status: z.enum(PORTFOLIO_STATUSES).optional(),
   subjectId: id().optional(),

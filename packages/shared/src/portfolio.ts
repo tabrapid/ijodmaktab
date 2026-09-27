@@ -4,7 +4,12 @@
  */
 import { z } from 'zod';
 import type { PortfolioItemType, StructuredPortfolioType } from './enums.js';
-import { STRUCTURED_PORTFOLIO_TYPES } from './enums.js';
+import {
+  CERTIFICATE_PORTFOLIO_TYPES,
+  CREATIVE_PORTFOLIO_TYPES,
+  PORTFOLIO_ITEM_TYPES,
+  STRUCTURED_PORTFOLIO_TYPES,
+} from './enums.js';
 
 // ---------------------------------------------------------------- Qiymatlar ro‘yxatlari
 
@@ -307,4 +312,299 @@ export function portfolioChanges(
     }
   }
   return changes;
+}
+
+// ---------------------------------------------------------------- Muhim maydonlar va saqlanadigan ko‘rinish
+
+/**
+ * O‘zgarsa tasdiqlangan yozuv qoralamaga qaytadigan (qayta tasdiqlash kerak bo‘lgan) maydonlar.
+ * Tavsif, yo‘nalish va ko‘rinish doirasi tasdiqqa ta’sir qilmaydi. Server va veb-ilova bir xil ro‘yxatdan foydalanadi.
+ */
+export const PORTFOLIO_KEY_FIELDS = [
+  'type',
+  'title',
+  'subjectId',
+  'organization',
+  'date',
+  'level',
+  'result',
+  'details',
+  'evidenceFileId',
+  'evidenceUrl',
+] as const satisfies readonly PortfolioTrackedField[];
+export type PortfolioKeyField = (typeof PORTFOLIO_KEY_FIELDS)[number];
+
+type TrackedRecord = Partial<Record<PortfolioTrackedField, unknown>>;
+
+const pickFields = (record: TrackedRecord, fields: readonly PortfolioTrackedField[]): TrackedRecord =>
+  Object.fromEntries(fields.map((field) => [field, record[field]]));
+
+/** Faqat muhim maydonlar bo‘yicha o‘zgarishlar: bo‘sh bo‘lmasa, tasdiqlangan yozuv qoralamaga qaytadi. */
+export function portfolioKeyChanges(before: TrackedRecord, after: TrackedRecord): PortfolioFieldChange[] {
+  return portfolioChanges(pickFields(before, PORTFOLIO_KEY_FIELDS), pickFields(after, PORTFOLIO_KEY_FIELDS));
+}
+
+/**
+ * Oxirgi tasdiqlangan holat (snapshot) bilan joriy yozuv farqi — faqat snapshotda saqlangan maydonlar
+ * bo‘yicha, shuning uchun eski (to‘liq bo‘lmagan) snapshotlar yolg‘on “o‘zgargan” qatorlar bermaydi.
+ */
+export function portfolioChangesSince(
+  snapshot: Record<string, unknown> | null | undefined,
+  current: TrackedRecord,
+): PortfolioFieldChange[] {
+  if (!snapshot || typeof snapshot !== 'object') return [];
+  const fields = PORTFOLIO_TRACKED_FIELDS.filter((field) => Object.hasOwn(snapshot, field));
+  return portfolioChanges(pickFields(snapshot, fields), pickFields(current, fields));
+}
+
+/**
+ * Serverda saqlanadigan ko‘rinish: tuzilgan turlarda details tekshirilib normallashtiriladi va natija
+ * (result) undan avtomatik yasaladi; boshqa turlarda details saqlanmaydi. `valid: false` — details noto‘g‘ri.
+ */
+export function portfolioStoredFields(
+  type: PortfolioItemType,
+  details: unknown,
+  result: string | null | undefined,
+): { details: PortfolioDetails | null; result: string | null; valid: boolean } {
+  if (!isStructuredPortfolioType(type)) return { details: null, result: result?.trim() || null, valid: true };
+  const parsed = parsePortfolioDetails(type, details);
+  if (!parsed.success || !parsed.data) return { details: null, result: null, valid: false };
+  return { details: parsed.data, result: portfolioDetailsSummary(type, parsed.data), valid: true };
+}
+
+// ---------------------------------------------------------------- Bo‘limlar (kategoriyalar)
+
+export const PORTFOLIO_CATEGORIES = ['CERTIFICATES', 'OLYMPIADS', 'CREATIVE', 'OTHER'] as const;
+export type PortfolioCategory = (typeof PORTFOLIO_CATEGORIES)[number];
+
+export const PORTFOLIO_CATEGORY_LABELS: Record<PortfolioCategory, string> = {
+  CERTIFICATES: 'Sertifikatlar',
+  OLYMPIADS: 'Olimpiadalar',
+  CREATIVE: 'Ijodiy ishlar',
+  OTHER: 'Boshqa yutuqlar',
+};
+
+const OLYMPIAD_CATEGORY_TYPES: readonly PortfolioItemType[] = ['OLYMPIAD', 'CONTEST'];
+
+/** Portfolio bo‘limlari: sertifikatlar, olimpiada va tanlovlar, ijodiy ishlar, qolganlari. */
+export const PORTFOLIO_CATEGORY_TYPES: Record<PortfolioCategory, readonly PortfolioItemType[]> = {
+  CERTIFICATES: CERTIFICATE_PORTFOLIO_TYPES,
+  OLYMPIADS: OLYMPIAD_CATEGORY_TYPES,
+  CREATIVE: CREATIVE_PORTFOLIO_TYPES,
+  OTHER: PORTFOLIO_ITEM_TYPES.filter(
+    (type) =>
+      !CERTIFICATE_PORTFOLIO_TYPES.includes(type) &&
+      !OLYMPIAD_CATEGORY_TYPES.includes(type) &&
+      !CREATIVE_PORTFOLIO_TYPES.includes(type),
+  ),
+};
+
+export const portfolioCategoryOf = (type: PortfolioItemType): PortfolioCategory =>
+  PORTFOLIO_CATEGORIES.find((category) => PORTFOLIO_CATEGORY_TYPES[category].includes(type)) ?? 'OTHER';
+
+// ---------------------------------------------------------------- Details maydonlari: nomlar va qiymatlar
+
+export const PORTFOLIO_DETAIL_FIELD_LABELS: { [T in StructuredPortfolioType]: Record<string, string> } = {
+  NATIONAL_CERTIFICATE: {
+    subject: 'Fan',
+    grade: 'Daraja',
+    score: 'Ball',
+    certificateNumber: 'Sertifikat raqami',
+    validUntil: 'Amal qilish muddati',
+  },
+  CEFR: {
+    language: 'Til',
+    level: 'Daraja',
+    score: 'Ball',
+    provider: 'Imtihon / tashkilot',
+    certificateNumber: 'Sertifikat raqami',
+  },
+  IELTS: {
+    testType: 'Imtihon turi',
+    overall: 'Umumiy ball (Overall)',
+    listening: 'Listening',
+    reading: 'Reading',
+    writing: 'Writing',
+    speaking: 'Speaking',
+    trfNumber: 'TRF raqami',
+  },
+  SAT: {
+    total: 'Umumiy ball',
+    readingWriting: 'Reading and Writing',
+    math: 'Math',
+  },
+  OLYMPIAD: {
+    subject: 'Fan',
+    place: 'O‘rin',
+  },
+};
+
+/** Details qiymatining ko‘rinishi: “Academic”, “1-o‘rin”, “01.05.2027”, 7.5 → “7.5”. */
+export function portfolioDetailValue(field: string, value: unknown): string {
+  if (value === undefined || value === null || value === '') return '—';
+  if (field === 'testType' && typeof value === 'string' && value in IELTS_TEST_TYPE_LABELS) {
+    return IELTS_TEST_TYPE_LABELS[value as IeltsTestType];
+  }
+  if (field === 'place' && typeof value === 'string' && value in OLYMPIAD_PLACE_LABELS) {
+    return OLYMPIAD_PLACE_LABELS[value as OlympiadPlace];
+  }
+  if (field === 'validUntil' && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-');
+    return `${day}.${month}.${year}`;
+  }
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+}
+
+export interface PortfolioDetailLine {
+  field: string;
+  label: string;
+  value: string;
+}
+
+/** Details ni nomlangan qatorlar ko‘rinishida qaytaradi (bo‘sh qiymatlar tashlab ketiladi). */
+export function portfolioDetailsLines(type: PortfolioItemType, details: unknown): PortfolioDetailLine[] {
+  if (!isStructuredPortfolioType(type) || !details || typeof details !== 'object') return [];
+  const record = details as Record<string, unknown>;
+  const labels = PORTFOLIO_DETAIL_FIELD_LABELS[type];
+  const fields = [...Object.keys(labels), ...Object.keys(record).filter((key) => !(key in labels))];
+  return fields
+    .filter((field) => record[field] !== undefined && record[field] !== null && record[field] !== '')
+    .map((field) => ({ field, label: labels[field] ?? field, value: portfolioDetailValue(field, record[field]) }));
+}
+
+export interface PortfolioDetailChange {
+  field: string;
+  label: string;
+  before: string;
+  after: string;
+}
+
+/**
+ * Ikki details obyektini maydonma-maydon solishtiradi (tasdiqlovchiga “eski → yangi” jadvali uchun).
+ * Tur o‘zgargan bo‘lsa, nomlar avval yangi, keyin eski tur bo‘yicha olinadi.
+ */
+export function portfolioDetailChanges(
+  beforeType: PortfolioItemType | null | undefined,
+  before: unknown,
+  afterType: PortfolioItemType | null | undefined,
+  after: unknown,
+): PortfolioDetailChange[] {
+  const asRecord = (value: unknown) =>
+    value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const previous = asRecord(before);
+  const current = asRecord(after);
+  const labelsOf = (type: PortfolioItemType | null | undefined) =>
+    type && isStructuredPortfolioType(type) ? PORTFOLIO_DETAIL_FIELD_LABELS[type] : {};
+  const labels = { ...labelsOf(beforeType), ...labelsOf(afterType) };
+  const fields = [...new Set([...Object.keys(labels), ...Object.keys(previous), ...Object.keys(current)])];
+  const changes: PortfolioDetailChange[] = [];
+  for (const field of fields) {
+    const was = portfolioDetailValue(field, previous[field]);
+    const now = portfolioDetailValue(field, current[field]);
+    if (was !== now) changes.push({ field, label: labels[field] ?? field, before: was, after: now });
+  }
+  return changes;
+}
+
+// ---------------------------------------------------------------- Qisqa nishonlar (katalog uchun)
+
+/** IELTS umumiy balli: to‘rt bo‘lim o‘rtachasi eng yaqin 0,5 ga yaxlitlanadi (.25 → .5, .75 → keyingi butun). */
+export function ieltsOverallFromBands(
+  listening: number | undefined,
+  reading: number | undefined,
+  writing: number | undefined,
+  speaking: number | undefined,
+): number | null {
+  const bands = [listening, reading, writing, speaking];
+  if (bands.some((value) => value === undefined || !Number.isFinite(value))) return null;
+  const average = (bands as number[]).reduce((sum, value) => sum + value, 0) / 4;
+  return Math.round(average * 2) / 2;
+}
+
+/** Qisqa nishon: “IELTS 7.5”, “SAT 1450”, “CEFR B2”, “Milliy: Matematika A+”, “Olimpiada: Fizika 1-o‘rin”. */
+export function portfolioHighlight(type: PortfolioItemType, details: unknown): string | null {
+  const parsed = parsePortfolioDetails(type, details);
+  if (!parsed.success || !parsed.data) return null;
+  switch (type) {
+    case 'IELTS':
+      return `IELTS ${(parsed.data as IeltsDetails).overall}`;
+    case 'SAT':
+      return `SAT ${(parsed.data as SatDetails).total}`;
+    case 'CEFR': {
+      const value = parsed.data as CefrDetails;
+      return value.language === 'Ingliz tili' ? `CEFR ${value.level}` : `CEFR ${value.level} (${value.language})`;
+    }
+    case 'NATIONAL_CERTIFICATE': {
+      const value = parsed.data as NationalCertificateDetails;
+      return `Milliy: ${value.subject} ${value.grade}`;
+    }
+    case 'OLYMPIAD': {
+      const value = parsed.data as OlympiadDetails;
+      return `Olimpiada: ${value.subject}${value.place ? ` ${OLYMPIAD_PLACE_LABELS[value.place]}` : ''}`;
+    }
+    default:
+      return null;
+  }
+}
+
+const HIGHLIGHT_ORDER: readonly StructuredPortfolioType[] = [
+  'IELTS',
+  'SAT',
+  'CEFR',
+  'NATIONAL_CERTIFICATE',
+  'OLYMPIAD',
+];
+
+/** Bir tur ichida eng yaxshisini tanlash uchun: guruh kaliti va ball (katta — yaxshi). */
+function highlightRank(type: StructuredPortfolioType, details: PortfolioDetails): { group: string; score: number } {
+  switch (type) {
+    case 'IELTS':
+      return { group: 'IELTS', score: (details as IeltsDetails).overall };
+    case 'SAT':
+      return { group: 'SAT', score: (details as SatDetails).total };
+    case 'CEFR': {
+      const value = details as CefrDetails;
+      return { group: `CEFR:${value.language}`, score: CEFR_LEVELS.indexOf(value.level) };
+    }
+    case 'NATIONAL_CERTIFICATE': {
+      const value = details as NationalCertificateDetails;
+      return {
+        group: `NC:${value.subject.toLowerCase()}`,
+        score: NATIONAL_CERTIFICATE_GRADES.length - NATIONAL_CERTIFICATE_GRADES.indexOf(value.grade),
+      };
+    }
+    case 'OLYMPIAD': {
+      const value = details as OlympiadDetails;
+      const place = value.place ? OLYMPIAD_PLACES.indexOf(value.place) : OLYMPIAD_PLACES.length;
+      return { group: `OL:${value.subject.toLowerCase()}`, score: OLYMPIAD_PLACES.length - place };
+    }
+  }
+}
+
+/**
+ * Tasdiqlangan tuzilgan yozuvlardan ko‘pi bilan `limit` ta qisqa nishon: IELTS → SAT → CEFR → milliy sertifikat →
+ * olimpiada tartibida, har bir imtihon (fan, til) bo‘yicha eng yaxshi natija.
+ */
+export function pickPortfolioHighlights(
+  items: readonly { type: PortfolioItemType; details: unknown }[],
+  limit = 4,
+): string[] {
+  const best = new Map<string, { order: number; score: number; text: string }>();
+  for (const item of items) {
+    if (!isStructuredPortfolioType(item.type)) continue;
+    const parsed = parsePortfolioDetails(item.type, item.details);
+    if (!parsed.success || !parsed.data) continue;
+    const text = portfolioHighlight(item.type, parsed.data);
+    if (!text) continue;
+    const { group, score } = highlightRank(item.type, parsed.data);
+    const current = best.get(group);
+    if (!current || score > current.score) {
+      best.set(group, { order: HIGHLIGHT_ORDER.indexOf(item.type), score, text });
+    }
+  }
+  return [...best.values()]
+    .sort((a, b) => a.order - b.order || b.score - a.score || a.text.localeCompare(b.text))
+    .map((entry) => entry.text)
+    .filter((text, index, all) => all.indexOf(text) === index)
+    .slice(0, limit);
 }

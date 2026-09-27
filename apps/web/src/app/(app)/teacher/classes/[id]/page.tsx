@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { formatDateTime, formatInternalId, normalizeForSearch } from '@ijod/shared';
+import { Avatar } from '@/components/avatar';
 import { sessionTimeRange } from '@/components/sessions/session-list';
 import { SessionStateBadge, UserStatusBadge } from '@/components/status';
 import { Badge } from '@/components/ui/badge';
@@ -93,12 +94,15 @@ export default function TeacherClassPage() {
                   <TR key={student.id}>
                     <TD className="text-slate-500 tabular">{formatInternalId(student.internalId)}</TD>
                     <TD>
-                      <Link
-                        href={`/teacher/students/${student.id}`}
-                        className="font-medium text-slate-900 hover:underline"
-                      >
-                        {student.fullName}
-                      </Link>
+                      <span className="flex items-center gap-2.5">
+                        <Avatar name={student.fullName} src={student.avatarUrl} size="sm" />
+                        <Link
+                          href={`/teacher/students/${student.id}`}
+                          className="font-medium text-slate-900 hover:underline"
+                        >
+                          {student.fullName}
+                        </Link>
+                      </span>
                     </TD>
                     <TD>
                       <UserStatusBadge status={student.status} />

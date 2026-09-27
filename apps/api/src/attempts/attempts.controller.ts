@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import {
   advanceSchema,
+  attemptLockSchema,
   enterCodeSchema,
   heartbeatSchema,
   saveAnswerSchema,
@@ -87,6 +88,17 @@ export class AttemptsController {
     @Body(zod(heartbeatSchema)) body: Out<typeof heartbeatSchema>,
   ) {
     return this.attempts.heartbeat(user, id, body);
+  }
+
+  /** To‘liq ekrandan chiqish yoki sahifadan ketish: urinish o‘qituvchi ruxsatigacha to‘xtatiladi. */
+  @Post('attempts/:id/lock')
+  @HttpCode(200)
+  lock(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Uuid) id: string,
+    @Body(zod(attemptLockSchema)) body: Out<typeof attemptLockSchema>,
+  ) {
+    return this.attempts.lock(user, id, body);
   }
 
   @Post('attempts/:id/takeover')

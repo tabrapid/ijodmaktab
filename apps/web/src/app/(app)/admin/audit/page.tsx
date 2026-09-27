@@ -55,10 +55,13 @@ function FilterChip({ label, onRemove }: { label: ReactNode; onRemove: () => voi
 function AuditRow({
   item,
   canOpenUsers,
+  classPath,
   onFilter,
 }: {
   item: AuditItem;
   canOpenUsers: boolean;
+  /** Sinf sahifasi: administratorga — boshqaruv, rahbariyatga — o‘qituvchi bo‘limidagi sahifa. */
+  classPath: string;
   onFilter: (changes: Record<string, string | null>) => void;
 }) {
   const label = auditActionLabel(item.action);
@@ -67,7 +70,7 @@ function AuditRow({
       ? item.entityType === 'User'
         ? `/admin/users/${item.entityId}`
         : item.entityType === 'Class'
-          ? `/admin/classes/${item.entityId}`
+          ? `${classPath}/${item.entityId}`
           : null
       : null;
   return (
@@ -169,7 +172,9 @@ function AuditLog() {
   const { data: me } = useMe();
   const { params, update } = useUrlParams();
   const superAdmin = hasRole(me, 'SUPER_ADMIN');
-  const canOpenUsers = hasRole(me, 'ADMIN', 'SUPER_ADMIN');
+  // Direktor o‘rinbosari ham foydalanuvchi sahifalarini ochadi (o‘qituvchi va o‘quvchi hisoblarini boshqaradi).
+  const canOpenUsers = hasRole(me, 'DEPUTY', 'ADMIN', 'SUPER_ADMIN');
+  const classPath = hasRole(me, 'ADMIN', 'SUPER_ADMIN') ? '/admin/classes' : '/teacher/classes';
 
   const page = intParam(params.get('page'), 1);
   const action = params.get('action') ?? '';
@@ -350,6 +355,7 @@ function AuditLog() {
                     key={item.id}
                     item={item}
                     canOpenUsers={canOpenUsers}
+                    classPath={classPath}
                     onFilter={(changes) => update(changes)}
                   />
                 ))}

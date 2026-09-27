@@ -1,13 +1,32 @@
 'use client';
 
 import { keepPreviousData, useMutation, useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { Eye, FolderHeart, Pencil, Plus, Printer, SearchX, Send, Trash2 } from 'lucide-react';
+import {
+  Award,
+  Eye,
+  FileBadge,
+  FolderHeart,
+  Globe,
+  GraduationCap,
+  Languages,
+  Medal,
+  Pencil,
+  Plus,
+  Printer,
+  SearchX,
+  Send,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import {
   ACHIEVEMENT_LEVELS,
   ACHIEVEMENT_LEVEL_LABELS,
+  PORTFOLIO_CATEGORIES,
+  PORTFOLIO_CATEGORY_LABELS,
+  PORTFOLIO_CATEGORY_TYPES,
   PORTFOLIO_ITEM_TYPES,
   PORTFOLIO_ITEM_TYPE_LABELS,
   PORTFOLIO_STATUSES,
@@ -15,9 +34,12 @@ import {
   TEACHER_ONLY_PORTFOLIO_TYPES,
   formatDate,
   formatHumanDateTime,
+  type PortfolioCategory,
+  type PortfolioItemType,
   type PortfolioStatus,
 } from '@ijod/shared';
 import { RequireRole } from '@/components/app-shell';
+import { DetailsView } from '@/components/portfolio/details-view';
 import {
   AuthorshipNote,
   EvidenceLinks,
@@ -36,6 +58,7 @@ import { Card, CardBody, PageHeader } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { EmptyState, ErrorState, PageLoader, Spinner } from '@/components/ui/feedback';
 import { Checkbox, Field, Input, Select } from '@/components/ui/form';
+import { Tabs } from '@/components/ui/tabs';
 import { Pagination } from '@/components/ui/pagination';
 import { useToast } from '@/components/ui/toast';
 import { api, errorMessage, qs } from '@/lib/api';
@@ -45,7 +68,33 @@ import type { Page, PortfolioItemView } from '@/lib/types';
 
 const PAGE_SIZE = 20;
 
-const FILTER_DEFAULTS = { status: '', type: '', level: '', q: '', sort: 'date:desc', page: '1', new: '' };
+const FILTER_DEFAULTS = {
+  category: '',
+  status: '',
+  type: '',
+  level: '',
+  q: '',
+  sort: 'date:desc',
+  page: '1',
+  new: '',
+};
+
+/** Ko‘p uchraydigan yutuqlar uchun tezkor qo‘shish tugmalari (forma shu turga moslangan holda ochiladi). */
+const QUICK_ADD: { type: PortfolioItemType | null; label: string; icon: LucideIcon }[] = [
+  { type: 'NATIONAL_CERTIFICATE', label: 'Milliy sertifikat', icon: FileBadge },
+  { type: 'IELTS', label: 'IELTS', icon: Globe },
+  { type: 'CEFR', label: 'CEFR', icon: Languages },
+  { type: 'SAT', label: 'SAT', icon: GraduationCap },
+  { type: 'OLYMPIAD', label: 'Olimpiada', icon: Medal },
+  { type: null, label: 'Boshqa yutuq', icon: Award },
+];
+
+const CATEGORY_HINTS: Record<PortfolioCategory, string> = {
+  CERTIFICATES: 'Milliy sertifikat, CEFR, IELTS, SAT va boshqa sertifikatlar',
+  OLYMPIADS: 'Fan olimpiadalari va tanlovlar',
+  CREATIVE: 'She’r, hikoya, esse, maqola, tarjima va nashrlar',
+  OTHER: 'Loyihalar va boshqa yutuqlar',
+};
 
 const SORT_OPTIONS = [
   { value: 'date:desc', label: 'Sana: avval yangilari' },
@@ -64,10 +113,12 @@ const STATUS_HINTS: Record<PortfolioStatus, string> = {
 
 type StatusCounts = Record<PortfolioStatus, number>;
 
-/** Har holat bo‘yicha aniq son (sahifalangan ro‘yxatning `total` qiymati). */
-async function fetchCounts(): Promise<StatusCounts> {
+/** Har holat bo‘yicha aniq son (sahifalangan ro‘yxatning `total` qiymati), tanlangan bo‘lim ichida. */
+async function fetchCounts(category: PortfolioCategory | undefined): Promise<StatusCounts> {
   const pages = await Promise.all(
-    PORTFOLIO_STATUSES.map((status) => api.get<Page<PortfolioItemView>>(`/portfolio${qs({ status, pageSize: 1 })}`)),
+    PORTFOLIO_STATUSES.map((status) =>
+      api.get<Page<PortfolioItemView>>(`/portfolio${qs({ status, category, pageSize: 1 })}`),
+    ),
   );
   return Object.fromEntries(
     PORTFOLIO_STATUSES.map((status, index) => [status, pages[index]?.total ?? 0]),
@@ -166,6 +217,7 @@ function ItemCard({
             <Badge tone="gray">{item.typeLabel}</Badge>
             {item.level && <LevelBadge level={item.level} />}
           </div>
+          <DetailsView type={item.type} details={item.details} compact />
           <PortfolioMeta item={item} withTypeAndLevel={false} />
           {isCreativeType(item.type) && <AuthorshipNote author={item.owner.fullName} />}
           {item.status === 'RETURNED' && <ReturnReasonAlert reason={item.returnReason} />}
@@ -217,27 +269,31 @@ function MyPortfolio() {
   const { data: me } = useMe();
   const [filters, setFilters] = useUrlState(FILTER_DEFAULTS);
   const [search, setSearch] = useSearchDraft(filters.q, (value) => setFilters({ q: value, page: '1' }));
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<{ type?: PortfolioItemType } | null>(null);
   const [editing, setEditing] = useState<PortfolioItemView | null>(null);
   const [deleting, setDeleting] = useState<PortfolioItemView | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const { submit, remove } = usePortfolioActions();
   const staff = hasRole(me, 'TEACHER', 'DEPUTY', 'ADMIN', 'SUPER_ADMIN');
 
+  const category = pickEnum(filters.category, PORTFOLIO_CATEGORIES);
   const status = pickEnum(filters.status, PORTFOLIO_STATUSES);
   const type = pickEnum(filters.type, PORTFOLIO_ITEM_TYPES);
   const level = pickEnum(filters.level, ACHIEVEMENT_LEVELS);
   const sortValue = SORT_OPTIONS.find((option) => option.value === filters.sort)?.value ?? 'date:desc';
   const [sort, order] = sortValue.split(':');
   const page = pageNumber(filters.page);
-  const params = { status, type, level, q: filters.q || undefined, sort, order, page, pageSize: PAGE_SIZE };
+  const params = { category, status, type, level, q: filters.q || undefined, sort, order, page, pageSize: PAGE_SIZE };
 
   const list = useQuery({
     queryKey: portfolioKeys.mineList(params),
     queryFn: () => api.get<Page<PortfolioItemView>>(`/portfolio${qs(params)}`),
     placeholderData: keepPreviousData,
   });
-  const counts = useQuery({ queryKey: portfolioKeys.mineCounts, queryFn: fetchCounts });
+  const counts = useQuery({
+    queryKey: [...portfolioKeys.mineCounts, category ?? 'ALL'],
+    queryFn: () => fetchCounts(category),
+  });
 
   // Oxirgi sahifadagi yozuvlar o‘chirilsa, mavjud oxirgi sahifaga o‘tiladi.
   const lastPage = list.data ? Math.max(1, Math.ceil(list.data.total / PAGE_SIZE)) : 1;
@@ -262,7 +318,10 @@ function MyPortfolio() {
   const pageIds = items.map((item) => item.id);
   const allOnPage = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
   const hasFilters = Boolean(status || type || level || filters.q);
-  const createOpen = creating || filters.new === '1';
+  // `?new=1` — yangi yozuv; `?new=IELTS` — forma shu turga moslangan holda ochiladi.
+  const presetFromUrl = pickEnum(filters.new, PORTFOLIO_ITEM_TYPES);
+  const createOpen = creating !== null || filters.new === '1' || presetFromUrl !== undefined;
+  const createType = creating ? creating.type : presetFromUrl;
 
   const toggle = (id: string) =>
     setSelected((current) => {
@@ -283,7 +342,7 @@ function MyPortfolio() {
     });
 
   const closeCreate = () => {
-    setCreating(false);
+    setCreating(null);
     if (filters.new) setFilters({ new: '' });
   };
 
@@ -305,7 +364,11 @@ function MyPortfolio() {
     if (me && selected.size > 0) router.push(printHref(me.id, [...selected]));
   };
 
-  const typeOptions = PORTFOLIO_ITEM_TYPES.filter((value) => staff || !TEACHER_ONLY_PORTFOLIO_TYPES.includes(value));
+  const typeOptions = PORTFOLIO_ITEM_TYPES.filter(
+    (value) =>
+      (staff || !TEACHER_ONLY_PORTFOLIO_TYPES.includes(value)) &&
+      (!category || PORTFOLIO_CATEGORY_TYPES[category].includes(value)),
+  );
 
   return (
     <div className="space-y-6">
@@ -313,11 +376,45 @@ function MyPortfolio() {
         title="Portfoliom"
         description="Yutuqlar, sertifikatlar va ijodiy ishlaringiz. Portfolio ommaga ochiq emas; faqat tasdiqlangan yozuvlar tasdiqlangan yutuq hisoblanadi."
         actions={
-          <Button icon={<Plus className="size-4" aria-hidden />} onClick={() => setCreating(true)}>
+          <Button icon={<Plus className="size-4" aria-hidden />} onClick={() => setCreating({})}>
             Yangi yozuv
           </Button>
         }
       />
+
+      <Card>
+        <CardBody className="space-y-3">
+          <p className="text-sm font-medium text-slate-700">Tezkor qo‘shish</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {QUICK_ADD.map((entry) => (
+              <button
+                key={entry.label}
+                type="button"
+                onClick={() => setCreating({ type: entry.type ?? undefined })}
+                className={cn(
+                  'flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2.5 text-left text-sm font-medium text-slate-800',
+                  'transition-colors hover:border-brand-300 hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-brand-500',
+                )}
+              >
+                <entry.icon className="size-4 shrink-0 text-brand-600" aria-hidden />
+                <span className="min-w-0">{entry.label}</span>
+              </button>
+            ))}
+          </div>
+        </CardBody>
+      </Card>
+
+      <div>
+        <Tabs<'ALL' | PortfolioCategory>
+          value={category ?? 'ALL'}
+          onChange={(value) => setFilters({ category: value === 'ALL' ? '' : value, type: '', page: '1' })}
+          tabs={[
+            { id: 'ALL', label: 'Barchasi' },
+            ...PORTFOLIO_CATEGORIES.map((value) => ({ id: value, label: PORTFOLIO_CATEGORY_LABELS[value] })),
+          ]}
+        />
+        {category && <p className="mt-2 text-sm text-slate-500">{CATEGORY_HINTS[category]}</p>}
+      </div>
 
       <StatusSummary
         counts={counts}
@@ -440,10 +537,10 @@ function MyPortfolio() {
           ) : (
             <EmptyState
               icon={FolderHeart}
-              title="Portfolio hali bo‘sh"
-              description="Tanlov, olimpiada, sertifikat yoki ijodiy ishingizni qo‘shing. Tekshiruvga yuborganingizdan so‘ng tasdiqlovchi ko‘rib chiqadi."
+              title={category ? `“${PORTFOLIO_CATEGORY_LABELS[category]}” bo‘limi hali bo‘sh` : 'Portfolio hali bo‘sh'}
+              description="Milliy sertifikat, IELTS, CEFR, SAT, olimpiada yoki ijodiy ishingizni qo‘shing. Tekshiruvga yuborganingizdan so‘ng tasdiqlovchi ko‘rib chiqadi."
               action={
-                <Button icon={<Plus className="size-4" aria-hidden />} onClick={() => setCreating(true)}>
+                <Button icon={<Plus className="size-4" aria-hidden />} onClick={() => setCreating({})}>
                   Yangi yozuv
                 </Button>
               }
@@ -483,7 +580,7 @@ function MyPortfolio() {
         </div>
       )}
 
-      <PortfolioFormDialog open={createOpen} onClose={closeCreate} />
+      <PortfolioFormDialog open={createOpen} presetType={createType} onClose={closeCreate} />
       <PortfolioFormDialog open={editing !== null} item={editing} onClose={() => setEditing(null)} />
       <ConfirmDialog
         open={deleting !== null}

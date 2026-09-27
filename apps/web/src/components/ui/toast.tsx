@@ -57,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={item.id}
               className={cn(
-                'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border p-3 text-sm shadow-lg',
+                'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border p-3.5 text-sm shadow-pop dark:shadow-none',
                 tones[item.tone],
               )}
             >
@@ -66,7 +66,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => remove(item.id)}
-                className="text-slate-400 hover:text-slate-700"
+                className="-m-0.5 rounded-md p-0.5 text-slate-400 transition-colors hover:text-slate-700"
                 aria-label="Yopish"
               >
                 <X className="size-4" />

@@ -86,7 +86,8 @@ export function PortfolioMeta({
     { label: 'Turi', value: withTypeAndLevel ? item.typeLabel : null },
     { label: 'Bosqich', value: withTypeAndLevel ? levelLabel(item.level) : null },
     { label: 'Sana', value: item.date ? formatDate(item.date) : null },
-    { label: 'Natija', value: item.result },
+    // Tuzilgan turlarda natija sertifikat ma’lumotlari bilan alohida ko‘rsatiladi (DetailsView).
+    { label: 'Natija', value: item.details ? null : item.result },
     { label: 'Fan', value: item.subject?.name },
     { label: 'Yo‘nalish', value: item.direction },
     { label: 'Tashkilot', value: item.organization },

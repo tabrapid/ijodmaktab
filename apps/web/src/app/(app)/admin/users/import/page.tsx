@@ -89,7 +89,7 @@ function ImportWizard() {
 
 export default function UserImportPage() {
   return (
-    <RequireRole roles={['ADMIN', 'SUPER_ADMIN']}>
+    <RequireRole roles={['DEPUTY', 'ADMIN', 'SUPER_ADMIN']}>
       <ImportWizard />
     </RequireRole>
   );

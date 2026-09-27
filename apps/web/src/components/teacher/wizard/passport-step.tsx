@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Lock } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { testPassportSchema } from '@ijod/shared';
@@ -35,6 +36,8 @@ export function PassportStep({ test, onSaved }: { test: TestDetail; onSaved: () 
   const errors = form.formState.errors;
   const subjectOptions = subjects.data ?? [];
   const hasCurrentSubject = subjectOptions.some((subject) => subject.id === test.subject.id);
+  // Tayyor versiya shu fan va sinf bilan ishlatiladi (bank, nusxa huquqi, rahbariyat) — ular qulflanadi.
+  const locked = test.publishedVersionNo !== null;
 
   const onSubmit = form.handleSubmit(async ({ tagsText, ...values }) => {
     await save.mutateAsync({
@@ -53,25 +56,38 @@ export function PassportStep({ test, onSaved }: { test: TestDetail; onSaved: () 
         <Input {...form.register('title')} placeholder="Masalan: Algebra, 1-bob: kvadrat tenglamalar" />
       </Field>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Fan" required error={errors.subjectId?.message}>
-          <Select {...form.register('subjectId')}>
-            {!hasCurrentSubject && <option value={test.subject.id}>{test.subject.name}</option>}
-            {subjectOptions.map((subject) => (
-              <option key={subject.id} value={subject.id}>
-                {subject.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Sinf darajasi" required error={errors.gradeLevel?.message}>
-          <Select {...form.register('gradeLevel', { valueAsNumber: true })}>
-            {GRADE_LEVELS.map((grade) => (
-              <option key={grade} value={grade}>
-                {grade}-sinf
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {locked ? (
+          <>
+            <Field label="Fan">
+              <Input value={test.subject.name} readOnly disabled />
+            </Field>
+            <Field label="Sinf darajasi">
+              <Input value={`${test.gradeLevel}-sinf`} readOnly disabled />
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label="Fan" required error={errors.subjectId?.message}>
+              <Select {...form.register('subjectId')}>
+                {!hasCurrentSubject && <option value={test.subject.id}>{test.subject.name}</option>}
+                {subjectOptions.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Sinf darajasi" required error={errors.gradeLevel?.message}>
+              <Select {...form.register('gradeLevel', { valueAsNumber: true })}>
+                {GRADE_LEVELS.map((grade) => (
+                  <option key={grade} value={grade}>
+                    {grade}-sinf
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </>
+        )}
         <Field label="Til" error={errors.language?.message}>
           <Select {...form.register('language')}>
             <option value="uz">O‘zbek</option>
@@ -80,6 +96,14 @@ export function PassportStep({ test, onSaved }: { test: TestDetail; onSaved: () 
           </Select>
         </Field>
       </div>
+      {locked && (
+        <p className="flex items-start gap-2 text-sm text-slate-600">
+          <Lock className="mt-0.5 size-4 shrink-0 text-slate-500" aria-hidden />
+          Testning tayyor (muzlatilgan) versiyasi bor: sessiyalar, maktab banki va ulashilgan nusxalar uni shu fan va
+          sinf bilan ishlatadi, shuning uchun fan va sinf darajasi o‘zgarmaydi. Boshqa fan yoki sinf uchun testdan nusxa
+          oling va nusxada o‘zgartiring.
+        </p>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Bob / mavzu" error={errors.topic?.message}>
           <Input {...form.register('topic')} placeholder="Kvadrat tenglamalar" />

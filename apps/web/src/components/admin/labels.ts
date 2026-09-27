@@ -17,13 +17,13 @@ export const ROLE_PLURAL_LABELS: Record<Role, string> = {
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   STUDENT: 'Testlarni topshiradi va portfolio yuritadi.',
   TEACHER: 'Test yaratadi va o‘tkazadi, biriktirilgan sinflar bilan ishlaydi.',
-  DEPUTY: 'Butun maktab ko‘rsatkichlari, portfolio tasdiqlash, cheklangan audit.',
+  DEPUTY: 'Butun maktab ko‘rsatkichlari, portfolio tasdiqlash, o‘qituvchi va o‘quvchi hisoblari, cheklangan audit.',
   ADMIN: 'Hisoblar va maktab tuzilmasini boshqaradi (o‘quv natijalarisiz).',
   SUPER_ADMIN: 'Tizim boshqaruvi. Boshqa rollar bilan birlashtirilmaydi.',
 };
 
-/** Administrator beradigan rollar; ADMIN va SUPER_ADMIN rollarini faqat super admin beradi. */
-export const ADMIN_GRANTABLE_ROLES: readonly Role[] = ['STUDENT', 'TEACHER', 'DEPUTY'];
+/** Administrator beradigan rollar (umumiy paketdan; bu yerdan eski importlar uchun qayta eksport). */
+export { ADMIN_GRANTABLE_ROLES } from '@ijod/shared';
 
 // ---------------------------------------------------------------- Sinfga a’zolik
 
@@ -84,6 +84,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'user.sessions_revoked': 'Sessiyalar bekor qilindi',
   'user.delete': 'Foydalanuvchi o‘chirildi',
   'user.import': 'Excel orqali import qilindi',
+  'user.avatar_updated': 'Profil rasmi yangilandi',
+  'user.avatar_removed': 'Profil rasmi olib tashlandi',
   'school.update': 'Maktab ma’lumotlari o‘zgartirildi',
   'academic_year.create': 'O‘quv yili yaratildi',
   'academic_year.update': 'O‘quv yili o‘zgartirildi',
@@ -111,6 +113,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'test.unshared': 'Test ulashish bekor qilindi',
   'test.archived': 'Test arxivlandi',
   'test.version_frozen': 'Test versiyasi muzlatildi',
+  'test.school_shared': 'Test maktab test bankiga chiqarildi',
+  'test.school_unshared': 'Test maktab test bankidan olindi',
   'session.create': 'Sessiya yaratildi',
   'session.started': 'Sessiya boshlandi',
   'session.closed': 'Sessiya yopildi',
@@ -127,6 +131,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'attempt.invalid_code': 'Noto‘g‘ri kirish kodi kiritildi',
   'attempt.device_takeover': 'Urinish boshqa qurilmada davom ettirildi',
   'attempt.late_answer_rejected': 'Muddatdan keyin kelgan javob qabul qilinmadi',
+  'attempt.locked': 'Test to‘xtatildi (to‘liq ekran nazorati)',
+  'attempt.unlocked': 'Testga qayta ruxsat berildi',
   'grades.revised': 'Qayta baholandi',
   'results.view': 'Natijalar ko‘rildi',
   'export.requested': 'Eksport so‘raldi',
@@ -139,6 +145,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'portfolio.approved': 'Portfolio yozuvi tasdiqlandi',
   'portfolio.returned': 'Portfolio yozuvi tuzatishga qaytarildi',
   'portfolio.printed': 'Portfolio chop etish uchun ochildi',
+  'portfolio.evidence_exported': 'Portfolio sertifikatlari arxivi (ZIP) yuklab olindi',
+  'portfolio.directory_exported': 'Portfoliolar ro‘yxati Excelga yuklab olindi',
   'file.uploaded': 'Fayl yuklandi',
   'file.quarantined': 'Fayl karantinga olindi',
 };

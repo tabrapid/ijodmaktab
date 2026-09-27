@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { fullName, type Role } from '@ijod/shared';
 import { AuditService } from '../audit/audit.service.js';
-import type { AuthUser } from '../common/auth-user.js';
+import { avatarUrlOf, type AuthUser } from '../common/auth-user.js';
 import { AppError, badRequest, forbidden, unauthorized } from '../common/errors.js';
 import { AppConfig } from '../config/app-config.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -39,6 +39,8 @@ export interface MeResponse {
   mustChangePassword: boolean;
   mfa: { enabled: boolean; verified: boolean; required: boolean };
   homeroomClassIds: string[];
+  /** Profil rasmi manzili (`/api/files/<id>`) yoki null. */
+  avatarUrl: string | null;
 }
 
 @Injectable()
@@ -140,6 +142,7 @@ export class AuthService {
       mustChangePassword: user.mustChangePassword,
       mfaEnabled: Boolean(user.totpEnabledAt),
       mfaVerified: false,
+      avatarFileId: user.avatarFileId,
     };
     return { token, me: await this.me(authUser) };
   }
@@ -173,6 +176,7 @@ export class AuthService {
         required: AuthService.mfaRequired(user),
       },
       homeroomClassIds: homeroom.map((item) => item.id),
+      avatarUrl: avatarUrlOf(user.avatarFileId),
     };
   }
 

@@ -38,6 +38,7 @@ export default function ChangePasswordPage() {
 
   return (
     <AuthCard
+      variant={me.realm === 'SYSTEM' ? 'system' : 'school'}
       title={me.mustChangePassword ? 'Yangi parol o‘rnating' : 'Parolni almashtirish'}
       description={
         me.mustChangePassword

@@ -10,7 +10,7 @@ export default function LoginPage() {
     <AuthCard
       title="Tizimga kirish"
       description="Maktab bergan login va parolni kiriting"
-      footer="Parolni unutgan bo‘lsangiz yoki hisob bloklangan bo‘lsa, maktab administratoriga murojaat qiling."
+      footer="Parolni unutgan bo‘lsangiz yoki hisob bloklangan bo‘lsa, direktor o‘rinbosari yoki maktab administratoriga murojaat qiling."
     >
       <Suspense>
         <LoginForm realm="SCHOOL" />

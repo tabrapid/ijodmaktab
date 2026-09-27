@@ -76,6 +76,7 @@ function MfaContent() {
 
   return (
     <AuthCard
+      variant={me.realm === 'SYSTEM' ? 'system' : 'school'}
       title={needsSetup ? 'Ikki bosqichli kirishni sozlang' : 'Tasdiqlash kodi'}
       description={
         needsSetup
@@ -96,7 +97,7 @@ function MfaContent() {
                   alt="Ikki bosqichli kirish uchun QR kod"
                   width={220}
                   height={220}
-                  className="rounded-lg border border-slate-200"
+                  className="rounded-xl border border-slate-200 bg-white"
                 />
                 <p className="text-center text-xs text-slate-500">
                   QR kod skanerlanmasa, kalitni qo‘lda kiriting:

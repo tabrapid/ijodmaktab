@@ -51,12 +51,16 @@ export class FilesService {
     }
   }
 
-  /** Hech bir portfolio yozuviga biriktirilmagan eski fayllarni ombordan o‘chiradi (yozuv “o‘chirilgan” deb belgilanadi). */
+  /**
+   * Hech bir portfolio yozuviga biriktirilmagan eski fayllarni ombordan o‘chiradi (yozuv “o‘chirilgan” deb belgilanadi).
+   * Joriy profil rasmlari yetim hisoblanmaydi.
+   */
   async cleanupOrphans(now = new Date()) {
     const orphans = await this.prisma.fileAsset.findMany({
       where: {
         deletedAt: null,
         portfolioItems: { none: {} },
+        avatarOf: null,
         OR: [
           { status: 'CLEAN', createdAt: { lt: new Date(now.getTime() - ORPHAN_TTL_MS) } },
           { status: 'QUARANTINED', createdAt: { lt: new Date(now.getTime() - QUARANTINE_TTL_MS) } },
@@ -135,8 +139,10 @@ export class FilesService {
    * Faylga kirish: egasi yoki fayl biriktirilgan portfolio yozuvini ko‘ra oladigan xodim
    * (portfolio ko‘rinish qoidalari bilan bir xil: tekshiruvchi — har doim; boshqa xodim —
    * “maktab xodimlari” ko‘rinishidagi yozuvda, o‘quvchi yozuvi bo‘lsa uni o‘qitadigan xodim).
+   * Kimningdir joriy profil rasmi bo‘lgan faylni esa tizimga kirgan har bir foydalanuvchi ko‘radi.
    */
-  private async canRead(viewer: AuthUser, fileId: string, ownerId: string) {
+  private async canRead(viewer: AuthUser, fileId: string, ownerId: string, isAvatar: boolean) {
+    if (isAvatar) return true;
     if (ownerId === viewer.id) return true;
     if (hasRole(viewer, 'SUPER_ADMIN', 'DEPUTY')) return true;
     if (!isStaff(viewer)) return false;
@@ -164,18 +170,28 @@ export class FilesService {
   }
 
   async download(viewer: AuthUser, id: string, res: Response) {
-    const asset = await this.prisma.fileAsset.findUnique({ where: { id } });
-    if (!asset || asset.deletedAt || asset.status !== 'CLEAN' || !(await this.canRead(viewer, id, asset.ownerId))) {
+    const asset = await this.prisma.fileAsset.findUnique({
+      where: { id },
+      include: { avatarOf: { select: { id: true } } },
+    });
+    const isAvatar = Boolean(asset?.avatarOf);
+    if (
+      !asset ||
+      asset.deletedAt ||
+      asset.status !== 'CLEAN' ||
+      !(await this.canRead(viewer, id, asset.ownerId, isAvatar))
+    ) {
       throw notFound('Fayl');
     }
     const ext = asset.storageKey.split('.').pop() ?? '';
-    const inline = ALLOWED[ext]?.inline ?? false;
+    const inline = isAvatar || (ALLOWED[ext]?.inline ?? false);
     res.setHeader('Content-Type', asset.mimeType);
     res.setHeader(
       'Content-Disposition',
       `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(asset.originalName)}`,
     );
-    res.setHeader('Cache-Control', 'private, no-store');
+    // Profil rasmi almashganda manzili ham o‘zgaradi, shuning uchun uni qisqa muddat keshlash xavfsiz.
+    res.setHeader('Cache-Control', isAvatar ? 'private, max-age=3600' : 'private, no-store');
     this.storage.stream('files', asset.storageKey).pipe(res);
   }
 }

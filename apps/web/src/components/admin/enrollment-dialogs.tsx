@@ -273,7 +273,7 @@ function EnrollForm({
       </Field>
       {classes.isSuccess && options.length === 0 && (
         <Alert tone="warning">
-          Joriy o‘quv yilida faol sinf yo‘q. Avval “Maktab tuzilmasi” bo‘limida sinf yarating.
+          Joriy o‘quv yilida faol sinf yo‘q. Sinflar “Maktab tuzilmasi” bo‘limida (administrator tomonidan) yaratiladi.
         </Alert>
       )}
       <Field

@@ -15,7 +15,7 @@ import type { z } from 'zod';
 import { AccessService } from '../access/access.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
-import { hasRole } from '../common/auth-user.js';
+import { avatarUrlOf, hasRole } from '../common/auth-user.js';
 import { dateOnly } from '../common/dates.js';
 import { badRequest, conflict, notFound } from '../common/errors.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -197,6 +197,7 @@ export class StructureService {
                 middleName: true,
                 status: true,
                 lastActiveAt: true,
+                avatarFileId: true,
               },
             },
           },
@@ -222,6 +223,7 @@ export class StructureService {
         fullName: fullName(enrollment.student),
         status: enrollment.student.status,
         lastActiveAt: enrollment.student.lastActiveAt,
+        avatarUrl: avatarUrlOf(enrollment.student.avatarFileId),
       }))
       .sort((a, b) => a.fullName.localeCompare(b.fullName, 'uz'));
     return {

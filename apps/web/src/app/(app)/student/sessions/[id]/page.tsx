@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, CalendarClock, Clock, ListChecks, RotateCcw, Timer } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Clock, ListChecks, Maximize2, RotateCcw, Timer } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, type FormEvent, type ReactNode } from 'react';
@@ -12,6 +12,7 @@ import {
   formatDateTime,
   formatPoints,
 } from '@ijod/shared';
+import { enterFullscreen, exitFullscreen, fullscreenSupported, isFullscreen } from '@/components/attempt/fullscreen';
 import { SessionStateBadge } from '@/components/status';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
@@ -20,6 +21,14 @@ import { Checkbox, Field, Input } from '@/components/ui/form';
 import { api, errorMessage } from '@/lib/api';
 import { forgetAccessCode, recallAccessCode, tabClientId } from '@/lib/attempt-storage';
 import type { SessionPreview } from '@/lib/types';
+
+/**
+ * To‘liq ekran so‘rovi tugma bosilishining o‘zida yuboriladi (brauzer talabi) — shunda test
+ * sahifasida qayta so‘ralmaydi. Rad etilsa, test sahifasi o‘zi so‘raydi.
+ */
+function requestFullscreen() {
+  if (fullscreenSupported() && !isFullscreen()) enterFullscreen().catch(() => undefined);
+}
 
 function Rule({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
   return (
@@ -50,6 +59,8 @@ export default function SessionPreviewPage() {
       forgetAccessCode(id);
       router.push(`/attempt/${attemptId}`);
     },
+    // Test boshlanmadi — to‘liq ekrandan chiqib, xatoni ko‘rsatamiz.
+    onError: () => exitFullscreen(),
   });
 
   if (query.isPending) return <PageLoader />;
@@ -58,7 +69,9 @@ export default function SessionPreviewPage() {
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
-    if (code.length >= 4 && agreed) start.mutate();
+    if (code.length < 4 || !agreed) return;
+    if (session.requireFullscreen) requestFullscreen();
+    start.mutate();
   };
 
   return (
@@ -103,6 +116,9 @@ export default function SessionPreviewPage() {
             label="Natija"
             value={SCORE_VISIBILITY_LABELS[session.scoreVisibility]}
           />
+          {session.requireFullscreen && (
+            <Rule icon={<Maximize2 className="size-4" />} label="Nazorat" value="To‘liq ekran rejimi" />
+          )}
         </CardBody>
         <CardBody className="space-y-2 border-t border-slate-100 text-sm text-slate-600">
           <ul className="list-disc space-y-1 pl-5">
@@ -111,6 +127,14 @@ export default function SessionPreviewPage() {
               Javoblar avtomatik saqlanadi. Sahifa yangilansa yoki internet uzilsa, saqlangan javoblar yo‘qolmaydi.
             </li>
             <li>Test bir vaqtda faqat bitta qurilmada ochiladi.</li>
+            {session.requireFullscreen && (
+              <li className="font-medium text-amber-700">
+                Test to‘liq ekranda o‘tkaziladi. To‘liq ekrandan chiqsangiz yoki boshqa oyna/ilovaga o‘tsangiz, test
+                avtomatik to‘xtatiladi va faqat o‘qituvchi ruxsati bilan davom etadi.
+                {!fullscreenSupported() &&
+                  ' Bu qurilmada to‘liq ekran rejimi yo‘q — test sahifasidan chiqmang, boshqa ilova yoki oynaga o‘tmang.'}
+              </li>
+            )}
             {!session.allowBackNavigation && (
               <li className="font-medium text-amber-800">Oldingi savollarga qaytib bo‘lmaydi.</li>
             )}
@@ -128,7 +152,13 @@ export default function SessionPreviewPage() {
             <p className="flex-1 text-sm text-slate-700">
               Siz bu testni boshlagansiz. Davom ettirish uchun kod talab qilinmaydi.
             </p>
-            <ButtonLink href={`/attempt/${session.inProgressAttemptId}`} size="lg">
+            <ButtonLink
+              href={`/attempt/${session.inProgressAttemptId}`}
+              size="lg"
+              onClick={() => {
+                if (session.requireFullscreen) requestFullscreen();
+              }}
+            >
               Davom ettirish
             </ButtonLink>
           </CardBody>

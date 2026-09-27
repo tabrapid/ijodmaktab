@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import {
   assignmentChangeSchema,
+  attemptUnlockSchema,
   cancelAttemptSchema,
   cancelSessionSchema,
   createSessionSchema,
@@ -121,6 +122,17 @@ export class SessionsController {
     @Body(zod(cancelAttemptSchema)) body: Out<typeof cancelAttemptSchema>,
   ) {
     return this.sessions.cancelAttempt(user, id, body);
+  }
+
+  /** To‘liq ekrandan chiqib to‘xtatilgan urinishga qayta ruxsat berish. */
+  @Post('attempts/:id/unlock')
+  @HttpCode(200)
+  unlockAttempt(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Uuid) id: string,
+    @Body(zod(attemptUnlockSchema)) body: Out<typeof attemptUnlockSchema>,
+  ) {
+    return this.sessions.unlockAttempt(user, id, body);
   }
 
   @Post('sessions/:id/regrade')

@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Award } from 'lucide-react';
+import { ArrowLeft, Award, FolderOpen } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
@@ -181,7 +181,19 @@ export default function StudentProfilePage() {
         </Card>
 
         <Card>
-          <CardHeader title="Tasdiqlangan yutuqlar" description="Tasdiqlanmagan yozuvlar bu ro‘yxatga kirmaydi." />
+          <CardHeader
+            title="Tasdiqlangan yutuqlar"
+            description="Tasdiqlanmagan yozuvlar bu ro‘yxatga kirmaydi."
+            actions={
+              <Link
+                href={`/portfolio/students/${id}`}
+                className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"
+              >
+                <FolderOpen className="size-4" aria-hidden />
+                To‘liq portfolio
+              </Link>
+            }
+          />
           {portfolio.isPending ? (
             <PageLoader />
           ) : portfolio.isError ? (

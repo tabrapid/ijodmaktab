@@ -33,6 +33,12 @@ import { zod } from '../common/zod.pipe.js';
 import { IMPORT_MAX_BYTES, UserImportService } from './user-import.service.js';
 import { UsersService } from './users.service.js';
 
+/**
+ * Hisoblarni boshqaruvchilar. Direktor o‘rinbosari faqat o‘qituvchi va o‘quvchi hisoblari bilan
+ * ishlaydi — bu cheklov xizmat qatlamida (UsersService) tekshiriladi.
+ */
+const ACCOUNT_MANAGERS = ['DEPUTY', 'ADMIN', 'SUPER_ADMIN'] as const;
+
 @Controller('users')
 export class UsersController {
   constructor(
@@ -54,7 +60,7 @@ export class UsersController {
   }
 
   @Post('import')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   @HttpCode(200)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: IMPORT_MAX_BYTES, files: 1 } }))
   upload(@CurrentUser() user: AuthUser, @UploadedFile() file?: UploadedFileData) {
@@ -62,7 +68,7 @@ export class UsersController {
   }
 
   @Post('import/:batchId/preview')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   @HttpCode(200)
   preview(
     @CurrentUser() user: AuthUser,
@@ -73,7 +79,7 @@ export class UsersController {
   }
 
   @Post('import/:batchId/commit')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   @HttpCode(200)
   commit(
     @CurrentUser() user: AuthUser,
@@ -84,7 +90,7 @@ export class UsersController {
   }
 
   @Get('import/:batchId/errors.xlsx')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   async importErrors(@CurrentUser() user: AuthUser, @Param('batchId', Uuid) batchId: string, @Res() res: Response) {
     const file = await this.imports.errorsWorkbook(user, batchId);
     res.setHeader('Content-Type', XLSX_MIME);
@@ -98,13 +104,13 @@ export class UsersController {
   }
 
   @Post()
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   create(@CurrentUser() user: AuthUser, @Body(zod(createUserSchema)) body: z.output<typeof createUserSchema>) {
     return this.users.create(user, body);
   }
 
   @Patch(':id')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   update(
     @CurrentUser() user: AuthUser,
     @Param('id', Uuid) id: string,
@@ -114,7 +120,7 @@ export class UsersController {
   }
 
   @Put(':id/roles')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   setRoles(
     @CurrentUser() user: AuthUser,
     @Param('id', Uuid) id: string,
@@ -124,7 +130,7 @@ export class UsersController {
   }
 
   @Post(':id/status')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   @HttpCode(200)
   setStatus(
     @CurrentUser() user: AuthUser,
@@ -135,29 +141,36 @@ export class UsersController {
   }
 
   @Post(':id/reset-password')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   @HttpCode(200)
   resetPassword(@CurrentUser() user: AuthUser, @Param('id', Uuid) id: string) {
     return this.users.resetPassword(user, id);
   }
 
   @Post(':id/unlock')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   @HttpCode(200)
   unlock(@CurrentUser() user: AuthUser, @Param('id', Uuid) id: string) {
     return this.users.unlock(user, id);
   }
 
   @Post(':id/revoke-sessions')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   @HttpCode(200)
   revokeSessions(@CurrentUser() user: AuthUser, @Param('id', Uuid) id: string) {
     return this.users.revokeSessions(user, id);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'SUPER_ADMIN')
+  @Roles(...ACCOUNT_MANAGERS)
   remove(@CurrentUser() user: AuthUser, @Param('id', Uuid) id: string) {
     return this.users.remove(user, id);
+  }
+
+  /** Nomaqbul profil rasmini olib tashlash (o‘z rasmi — `DELETE /me/avatar`). */
+  @Delete(':id/avatar')
+  @Roles(...ACCOUNT_MANAGERS)
+  removeAvatar(@CurrentUser() user: AuthUser, @Param('id', Uuid) id: string) {
+    return this.users.removeAvatar(user, id);
   }
 }

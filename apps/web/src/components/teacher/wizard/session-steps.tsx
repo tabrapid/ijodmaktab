@@ -1,8 +1,8 @@
 'use client';
 
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, ChevronDown, ChevronRight, KeyRound } from 'lucide-react';
-import { useState } from 'react';
+import { CheckCircle2, ChevronDown, ChevronRight, KeyRound, Maximize } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   ATTEMPT_POLICIES,
   ATTEMPT_POLICY_LABELS,
@@ -20,6 +20,7 @@ import {
   type ReviewVisibility,
   type ScoreVisibility,
 } from '@ijod/shared';
+import { Avatar } from '@/components/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Alert, EmptyState, PageLoader } from '@/components/ui/feedback';
@@ -28,6 +29,7 @@ import { api, errorMessage } from '@/lib/api';
 import { hasRole, useMe } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import type { ClassDetail, ClassListItem, SessionDetail, StaffItem, TestDetail } from '@/lib/types';
+import { conductBlockReason, sessionPageHref, subjectBlockReason, useTaughtSubjects } from '../test-helpers';
 
 export interface SessionDraft {
   title: string;
@@ -44,6 +46,8 @@ export interface SessionDraft {
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
   allowBackNavigation: boolean;
+  /** To‘liq ekran nazorati: chiqilsa urinish o‘tkazuvchi ruxsatigacha to‘xtatiladi. */
+  requireFullscreen: boolean;
   scoreVisibility: ScoreVisibility;
   reviewVisibility: ReviewVisibility;
   passPercent: string;
@@ -51,23 +55,30 @@ export interface SessionDraft {
   retakeRule: string;
 }
 
-export function defaultSessionDraft(): SessionDraft {
+function defaultTiming() {
   const start = new Date(Math.ceil(Date.now() / (5 * 60_000)) * 5 * 60_000);
+  return {
+    startsAt: dateToSchoolInput(start),
+    endsAt: dateToSchoolInput(new Date(start.getTime() + 45 * 60_000)),
+    entryClosesAt: '',
+  };
+}
+
+export function defaultSessionDraft(): SessionDraft {
   return {
     title: '',
     conductorId: '',
     classIds: [],
     studentIds: [],
     extraTime: {},
-    startsAt: dateToSchoolInput(start),
-    endsAt: dateToSchoolInput(new Date(start.getTime() + 45 * 60_000)),
-    entryClosesAt: '',
+    ...defaultTiming(),
     durationMinutes: 40,
     maxAttempts: 1,
     attemptPolicy: 'FIRST',
     shuffleQuestions: false,
     shuffleOptions: false,
     allowBackNavigation: true,
+    requireFullscreen: true,
     scoreVisibility: 'AFTER_ALL_DONE',
     reviewVisibility: 'AFTER_CLOSE',
     passPercent: '',
@@ -77,6 +88,45 @@ export function defaultSessionDraft(): SessionDraft {
 }
 
 type Update = (patch: Partial<SessionDraft>) => void;
+
+const draftKey = (id: string) => `ijod:session-draft:${id}`;
+
+function loadDraft(id: string): SessionDraft {
+  if (typeof window === 'undefined') return defaultSessionDraft();
+  try {
+    const stored = localStorage.getItem(draftKey(id));
+    if (!stored) return defaultSessionDraft();
+    const draft = { ...defaultSessionDraft(), ...(JSON.parse(stored) as Partial<SessionDraft>) };
+    // Eski qoralamadagi o‘tib ketgan vaqt yangi sessiyaga ko‘chmasin.
+    if (!draft.endsAt || schoolInputToDate(draft.endsAt).getTime() <= Date.now()) Object.assign(draft, defaultTiming());
+    return draft;
+  } catch {
+    return defaultSessionDraft();
+  }
+}
+
+/**
+ * Sessiya sozlamalari (auditoriya, vaqt, natija siyosati) — test bo‘yicha brauzer xotirasida
+ * saqlanadi: sahifa yangilansa yoki keyinroq qaytilsa ham yo‘qolmaydi.
+ */
+export function useSessionDraft(id: string) {
+  const [draft, setDraft] = useState<SessionDraft>(() => loadDraft(id));
+  useEffect(() => {
+    try {
+      localStorage.setItem(draftKey(id), JSON.stringify(draft));
+    } catch {
+      // Brauzer xotirasi yopiq bo‘lsa — sozlamalar faqat shu sahifada saqlanadi.
+    }
+  }, [draft, id]);
+  const reset = () => {
+    try {
+      localStorage.removeItem(draftKey(id));
+    } catch {
+      // ahamiyatsiz
+    }
+  };
+  return { draft, update: (patch: Partial<SessionDraft>) => setDraft((current) => ({ ...current, ...patch })), reset };
+}
 
 /** O‘qituvchi shu fandan dars beradigan sinflar (rahbariyat — barcha sinflar). */
 function useAudienceClasses(test: TestDetail) {
@@ -107,7 +157,7 @@ export function AudienceStep({ test, draft, update }: { test: TestDetail; draft:
     return (
       <EmptyState
         title="Mos sinf topilmadi"
-        description={`Siz “${test.subject.name}” fanidan dars beradigan sinf yo‘q. Administrator sizni sinfga biriktirishi kerak.`}
+        description={`Siz “${test.subject.name}” fanidan dars beradigan sinf yo‘q. Test (jumladan maktab bankidagi test) faqat shu fandan o‘zingiz dars beradigan sinflarga o‘tkaziladi. Kerak bo‘lsa, administrator sizni sinfga biriktiradi.`}
       />
     );
   }
@@ -178,7 +228,12 @@ export function AudienceStep({ test, draft, update }: { test: TestDetail; draft:
                               checked={included}
                               disabled={whole}
                               onChange={() => toggleStudent(student.id)}
-                              label={student.fullName}
+                              label={
+                                <span className="inline-flex items-center gap-2">
+                                  <Avatar name={student.fullName} src={student.avatarUrl ?? null} size="xs" />
+                                  {student.fullName}
+                                </span>
+                              }
                             />
                             {included && (
                               <label className="flex items-center gap-1 text-xs text-slate-500">
@@ -215,9 +270,10 @@ export function AudienceStep({ test, draft, update }: { test: TestDetail; draft:
 // ------------------------------------------------------------ 8. Vaqt va tartib
 
 export function TimingStep({ draft, update }: { draft: SessionDraft; update: Update }) {
-  const windowMinutes = Math.round(
-    (schoolInputToDate(draft.endsAt).getTime() - schoolInputToDate(draft.startsAt).getTime()) / 60_000,
-  );
+  const [now] = useState(() => Date.now());
+  const startsAt = schoolInputToDate(draft.startsAt).getTime();
+  const endsAt = schoolInputToDate(draft.endsAt).getTime();
+  const windowMinutes = Math.round((endsAt - startsAt) / 60_000);
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -255,6 +311,13 @@ export function TimingStep({ draft, update }: { draft: SessionDraft; update: Upd
           />
         </Field>
       </div>
+      {endsAt <= now ? (
+        <Alert tone="danger">Yopilish vaqti o‘tib ketgan — boshlanish va yopilish vaqtini yangilang.</Alert>
+      ) : (
+        startsAt < now - 60_000 && (
+          <Alert tone="info">Boshlanish vaqti o‘tgan: sessiya e’lon qilinishi bilan darhol ochiladi.</Alert>
+        )
+      )}
       {windowMinutes > 0 && draft.durationMinutes > windowMinutes && (
         <Alert tone="warning">
           Davomiylik ({draft.durationMinutes} daq) sessiya oynasidan ({windowMinutes} daq) uzun. Yakun vaqti sessiya
@@ -310,6 +373,20 @@ export function TimingStep({ draft, update }: { draft: SessionDraft; update: Upd
           onChange={(event) => update({ allowBackNavigation: event.target.checked })}
           label="Oldingi savollarga qaytishga ruxsat"
           description="O‘chirilsa, o‘quvchi faqat oldinga yuradi."
+        />
+      </div>
+      <div
+        className={cn(
+          'flex gap-3 rounded-xl border p-4',
+          draft.requireFullscreen ? 'border-brand-200 bg-brand-50/60' : 'border-slate-200 bg-surface',
+        )}
+      >
+        <Maximize className="mt-0.5 size-5 shrink-0 text-brand-700" aria-hidden />
+        <Checkbox
+          checked={draft.requireFullscreen}
+          onChange={(event) => update({ requireFullscreen: event.target.checked })}
+          label={<span className="font-medium">To‘liq ekran nazorati</span>}
+          description="O‘quvchi to‘liq ekrandan chiqsa yoki boshqa oynaga o‘tsa, test to‘xtatiladi va faqat sizning ruxsatingiz bilan davom etadi."
         />
       </div>
     </div>
@@ -403,24 +480,10 @@ export function ResultPolicyStep({ draft, update }: { draft: SessionDraft; updat
 
 // ------------------------------------------------------------ 10. Tasdiqlash va e’lon
 
-export function PublishStep({
-  test,
-  draft,
-  update,
-  onPublished,
-}: {
-  test: TestDetail;
-  draft: SessionDraft;
-  update: Update;
-  onPublished: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const classes = useAudienceClasses(test);
-  const staff = useQuery({ queryKey: ['staff'], queryFn: () => api.get<StaffItem[]>('/users/staff') });
-  const [created, setCreated] = useState<SessionDetail | null>(null);
-
-  const payload = {
-    testId: test.id,
+/** Sessiya yaratish so‘rovi tanasi (qoralamadan). */
+export function sessionPayload(testId: string, draft: SessionDraft) {
+  return {
+    testId,
     title: draft.title.trim() || undefined,
     conductorId: draft.conductorId || undefined,
     audience: { classIds: draft.classIds, studentIds: draft.studentIds },
@@ -436,22 +499,64 @@ export function PublishStep({
     shuffleQuestions: draft.shuffleQuestions,
     shuffleOptions: draft.shuffleOptions,
     allowBackNavigation: draft.allowBackNavigation,
+    requireFullscreen: draft.requireFullscreen,
     scoreVisibility: draft.scoreVisibility,
     reviewVisibility: draft.reviewVisibility,
     passPercent: draft.passPercent === '' ? null : Number(draft.passPercent),
     categoryThresholdPercent: draft.categoryThresholdPercent,
     retakeRule: draft.retakeRule.trim() || null,
   };
+}
+
+/**
+ * Tasdiqlash va e’lon: test ustasining 10-bosqichi va yangi sessiya sahifasida ishlatiladi.
+ * `blockingHint` — testda qat’iy xato bo‘lsa, uni qayerda tuzatish haqidagi matn;
+ * `links` — muvaffaqiyatdan keyingi qo‘shimcha havolalar.
+ */
+export function PublishStep({
+  test,
+  draft,
+  update,
+  onPublished,
+  blockingHint = '5-bosqichdagi (Tekshiruv) xatolarni tuzating — shundan keyin e’lon qilish mumkin.',
+  links = [{ href: '/teacher/tests', label: 'Testlar ro‘yxati' }],
+}: {
+  test: TestDetail;
+  draft: SessionDraft;
+  update: Update;
+  onPublished: (session: SessionDetail) => void;
+  blockingHint?: ReactNode;
+  links?: { href: string; label: string }[];
+}) {
+  const queryClient = useQueryClient();
+  const { data: me } = useMe();
+  const classes = useAudienceClasses(test);
+  const staff = useQuery({ queryKey: ['staff'], queryFn: () => api.get<StaffItem[]>('/users/staff') });
+  const taught = useTaughtSubjects();
+  const [created, setCreated] = useState<SessionDetail | null>(null);
+
+  // Eskirgan qoralamadagi (endi mavjud bo‘lmagan yoki boshqa fanga tegishli) sinflar yuborilmaydi.
+  const classIds = classes.data
+    ? draft.classIds.filter((classId) => classes.data.some((item) => item.id === classId))
+    : draft.classIds;
+  const payload = sessionPayload(test.id, { ...draft, classIds });
   const check = createSessionSchema.safeParse(payload);
   const blocking = hasBlockingIssues(test.issues);
+  const unavailable =
+    conductBlockReason({ ...test, questionCount: test.version?.questions.length ?? 0 }) ??
+    subjectBlockReason(test, taught);
+  // Bankdagi testning qoralamasi sessiyada muzlatilsa, bankdagi versiya ham yangilanadi.
+  const updatesBank = test.visibility === 'SCHOOL' && test.canEdit && test.isDraft;
+  const expired = Boolean(payload.endsAt) && new Date(payload.endsAt).getTime() <= Date.now();
 
   const publish = useMutation({
     mutationFn: () => api.post<SessionDetail>('/sessions', payload),
     onSuccess: (session) => {
       setCreated(session);
       void queryClient.invalidateQueries({ queryKey: ['test', test.id] });
+      void queryClient.invalidateQueries({ queryKey: ['tests'] });
       void queryClient.invalidateQueries({ queryKey: ['sessions'] });
-      onPublished();
+      onPublished(session);
     },
   });
 
@@ -459,23 +564,27 @@ export function PublishStep({
     return (
       <div className="space-y-4">
         <Alert tone="success" title="Sessiya yaratildi">
-          Test versiyasi muzlatildi (v{created.test.versionNo}) va {created.assignedCount} nafar o‘quvchiga
-          bildirishnoma yuborildi. Keyingi tahrirlar o‘tkazilgan sessiyani o‘zgartirmaydi.
+          Sessiya testning muzlatilgan v{created.test.versionNo} versiyasida o‘tkaziladi, {created.assignedCount} nafar
+          o‘quvchiga bildirishnoma yuborildi. Testdagi keyingi tahrirlar bu sessiyani o‘zgartirmaydi.
         </Alert>
         <div className="rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50 p-6 text-center">
           <p className="flex items-center justify-center gap-2 text-sm font-medium text-brand-800">
             <KeyRound className="size-4" aria-hidden /> Kirish kodi
           </p>
-          <p className="mt-2 font-mono text-5xl font-bold tracking-[0.2em] text-brand-900">{created.accessCode}</p>
+          <p className="mt-2 font-mono text-4xl font-bold tracking-[0.2em] break-all text-brand-900 sm:text-5xl">
+            {created.accessCode}
+          </p>
           <p className="mt-2 text-sm text-brand-800">
             Kodni test boshlanganda o‘quvchilarga o‘zingiz ayting — u bildirishnomada yuborilmaydi.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <ButtonLink href={`/teacher/sessions/${created.id}`}>Sessiyani ochish</ButtonLink>
-          <ButtonLink href="/teacher/tests" variant="outline">
-            Testlar ro‘yxati
-          </ButtonLink>
+          <ButtonLink href={sessionPageHref(me, created.id)}>Sessiyani ochish</ButtonLink>
+          {links.map((link) => (
+            <ButtonLink key={link.href} href={link.href} variant="outline">
+              {link.label}
+            </ButtonLink>
+          ))}
         </div>
       </div>
     );
@@ -484,6 +593,12 @@ export function PublishStep({
   const selectedClasses = (classes.data ?? []).filter((item) => draft.classIds.includes(item.id));
   const audienceCount = selectedClasses.reduce((sum, item) => sum + item.studentCount, 0) + draft.studentIds.length;
   const issues = check.success ? [] : check.error.issues.map((issue) => issue.message);
+  const versionNote =
+    test.canEdit && test.isDraft
+      ? `Qoralama v${test.version?.versionNo} e’lon qilinganda tekshirilib muzlatiladi`
+      : test.conductVersionNo
+        ? `Tayyor (muzlatilgan) v${test.conductVersionNo} ishlatiladi`
+        : 'Tayyor versiya yo‘q';
 
   return (
     <div className="space-y-5">
@@ -495,14 +610,16 @@ export function PublishStep({
             placeholder={test.title}
           />
         </Field>
-        <Field label="O‘tkazuvchi">
+        <Field label="O‘tkazuvchi" hint="Jonli kuzatuv va to‘xtatilgan o‘quvchilarga ruxsat berish uning ekranida.">
           <Select value={draft.conductorId} onChange={(event) => update({ conductorId: event.target.value })}>
             <option value="">Men</option>
-            {(staff.data ?? []).map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.fullName}
-              </option>
-            ))}
+            {(staff.data ?? [])
+              .filter((person) => person.id !== me?.id)
+              .map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.fullName}
+                </option>
+              ))}
           </Select>
         </Field>
       </div>
@@ -514,11 +631,7 @@ export function PublishStep({
             {test.title} · {test.version?.questions.length ?? 0} ta savol ·{' '}
             {formatPoints(test.version?.totalPoints ?? 0)} ball
           </dd>
-          <dd className="text-xs text-slate-500">
-            {test.isDraft
-              ? `Qoralama v${test.version?.versionNo} e’lon qilinganda muzlatiladi`
-              : `Muzlatilgan v${test.version?.versionNo} ishlatiladi`}
-          </dd>
+          <dd className="text-xs text-slate-500">{versionNote}</dd>
         </div>
         <div>
           <dt className="text-slate-500">Auditoriya</dt>
@@ -536,7 +649,8 @@ export function PublishStep({
               : '—'}
           </dd>
           <dd className="text-xs text-slate-500">
-            Davomiylik {draft.durationMinutes} daqiqa · {draft.maxAttempts} ta urinish
+            Davomiylik {draft.durationMinutes} daqiqa · {draft.maxAttempts} ta urinish · to‘liq ekran nazorati{' '}
+            {draft.requireFullscreen ? 'yoqilgan' : 'o‘chirilgan'}
           </dd>
         </div>
         <div>
@@ -548,9 +662,25 @@ export function PublishStep({
         </div>
       </dl>
 
-      {blocking && (
+      {unavailable && (
+        <Alert tone="danger" title="Bu test bilan sessiya yaratib bo‘lmaydi">
+          {unavailable}
+        </Alert>
+      )}
+      {!unavailable && blocking && (
         <Alert tone="danger" title="Testda qat’iy xatolar bor">
-          5-bosqichdagi xatolarni tuzating — shundan keyin e’lon qilish mumkin.
+          {blockingHint}
+        </Alert>
+      )}
+      {!unavailable && updatesBank && (
+        <Alert tone="info" title="Test maktab bankida">
+          E’lon qilinganda qoralama v{test.version?.versionNo} muzlatiladi va maktab bankidagi versiya ham shu versiyaga
+          yangilanadi: boshqa o‘qituvchilar yangi savollarni ko‘radi va o‘z sessiyalarida ishlatadi.
+        </Alert>
+      )}
+      {expired && (
+        <Alert tone="danger" title="Yopilish vaqti o‘tib ketgan">
+          “Vaqt va tartib” bosqichida boshlanish va yopilish vaqtini yangilang.
         </Alert>
       )}
       {!check.success && (
@@ -568,7 +698,7 @@ export function PublishStep({
         <Button
           size="lg"
           icon={<CheckCircle2 className="size-5" />}
-          disabled={blocking || !check.success}
+          disabled={Boolean(unavailable) || blocking || expired || !check.success}
           loading={publish.isPending}
           onClick={() => publish.mutate()}
         >

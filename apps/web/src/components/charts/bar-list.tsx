@@ -40,8 +40,8 @@ export function BarList({
                 </span>
               </span>
             </div>
-            <div className="mt-1 h-2 w-full bg-slate-100" aria-hidden>
-              <div className="h-full rounded-r-[4px] bg-[var(--color-viz-series)]" style={{ width: `${width}%` }} />
+            <div className="mt-1 h-2 w-full bg-slate-100 dark:bg-slate-200" aria-hidden>
+              <div className="h-full rounded-r-[4px] bg-viz-series" style={{ width: `${width}%` }} />
             </div>
           </li>
         );

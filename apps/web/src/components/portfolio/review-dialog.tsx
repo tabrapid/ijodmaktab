@@ -14,6 +14,7 @@ import { Field, Textarea } from '@/components/ui/form';
 import { useToast } from '@/components/ui/toast';
 import { ApiError, api, errorMessage } from '@/lib/api';
 import type { PortfolioItemView } from '@/lib/types';
+import { DetailsView } from './details-view';
 import { EvidenceLinks, PortfolioMeta } from './parts';
 import { portfolioKeys } from './utils';
 
@@ -84,6 +85,7 @@ function ReviewForm({
           {item.owner.fullName}
           {item.owner.className ? ` · ${item.owner.className}` : ''}
         </p>
+        <DetailsView type={item.type} details={item.details} compact />
         <PortfolioMeta item={item} />
         <EvidenceLinks file={item.evidenceFile} url={item.evidenceUrl} />
       </div>

@@ -2,8 +2,8 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileUp, Paperclip, Save, Send, X } from 'lucide-react';
-import { useState, type ChangeEvent } from 'react';
+import { FileUp, Paperclip, Save, Send, Sparkles, X } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import { useController, useForm, useWatch, type DefaultValues } from 'react-hook-form';
 import type { z } from 'zod';
 import {
@@ -15,7 +15,11 @@ import {
   PORTFOLIO_VISIBILITIES,
   PORTFOLIO_VISIBILITY_LABELS,
   TEACHER_ONLY_PORTFOLIO_TYPES,
+  isStructuredPortfolioType,
+  normalizeForSearch,
+  portfolioDetailsSummary,
   portfolioItemSchema,
+  type AchievementLevel,
   type PortfolioItemInput,
   type PortfolioItemType,
 } from '@ijod/shared';
@@ -28,9 +32,19 @@ import { ApiError, api, errorMessage } from '@/lib/api';
 import { hasRole, useMe } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import type { FileRef, PortfolioItemView } from '@/lib/types';
+import { DetailsFields, initialDetails, type DetailsErrors, type DetailsValue } from './details-fields';
 import { ReturnReasonAlert } from './parts';
 import { useSubjects } from './queries';
-import { formatFileSize, isCreativeType, keyFieldsChanged, portfolioKeys, toDateInput } from './utils';
+import {
+  DEFAULT_ORGANIZATION,
+  ORGANIZATION_SUGGESTIONS,
+  formatFileSize,
+  isCreativeType,
+  keyFieldsChanged,
+  portfolioKeys,
+  suggestTitle,
+  toDateInput,
+} from './utils';
 
 type PortfolioItemOutput = z.output<typeof portfolioItemSchema>;
 
@@ -46,6 +60,7 @@ const FIELDS = [
   'result',
   'evidenceUrl',
   'evidenceFileId',
+  'details',
   'visibility',
 ] as const;
 type FieldName = (typeof FIELDS)[number];
@@ -56,31 +71,55 @@ const FILE_MAX_BYTES = 10 * 1024 * 1024;
 const FILE_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.docx';
 const FILE_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'docx'];
 
+const CERTIFICATE_GROUP: readonly PortfolioItemType[] = ['NATIONAL_CERTIFICATE', 'CEFR', 'IELTS', 'SAT', 'CERTIFICATE'];
+const OLYMPIAD_GROUP: readonly PortfolioItemType[] = ['OLYMPIAD', 'CONTEST'];
+
 const TYPE_GROUPS: { label: string; types: readonly PortfolioItemType[]; teacherOnly?: boolean }[] = [
+  { label: 'Sertifikatlar va imtihonlar', types: CERTIFICATE_GROUP },
+  { label: 'Olimpiada va tanlovlar', types: OLYMPIAD_GROUP },
   { label: 'Ijodiy ishlar', types: CREATIVE_PORTFOLIO_TYPES },
   {
-    label: 'Yutuqlar va loyihalar',
+    label: 'Loyihalar va boshqa',
     types: PORTFOLIO_ITEM_TYPES.filter(
-      (type) => !CREATIVE_PORTFOLIO_TYPES.includes(type) && !TEACHER_ONLY_PORTFOLIO_TYPES.includes(type),
+      (type) =>
+        !CERTIFICATE_GROUP.includes(type) &&
+        !OLYMPIAD_GROUP.includes(type) &&
+        !CREATIVE_PORTFOLIO_TYPES.includes(type) &&
+        !TEACHER_ONLY_PORTFOLIO_TYPES.includes(type),
     ),
   },
   { label: 'O‘qituvchi faoliyati', types: TEACHER_ONLY_PORTFOLIO_TYPES, teacherOnly: true },
 ];
 
+/** Tur tanlanganda bo‘sh bosqich shu qiymat bilan to‘ldiriladi. */
+const DEFAULT_LEVEL: Partial<Record<PortfolioItemType, AchievementLevel>> = {
+  NATIONAL_CERTIFICATE: 'NATIONAL',
+  IELTS: 'INTERNATIONAL',
+  SAT: 'INTERNATIONAL',
+};
+
 /** Bo‘sh tanlov yoki sana `null` sifatida yuboriladi (sxema bo‘sh satrni qabul qilmaydi). */
 const emptyToNull = (value: unknown) => (value === '' || value === undefined ? null : value);
 
-function defaultsFor(item?: PortfolioItemView | null): DefaultValues<PortfolioItemInput> {
+const asDetails = (value: unknown): DetailsValue =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as DetailsValue) : {};
+
+function defaultsFor(
+  item?: PortfolioItemView | null,
+  presetType?: PortfolioItemType,
+): DefaultValues<PortfolioItemInput> {
+  const type = item?.type ?? presetType;
   return {
-    type: item?.type,
+    type,
     title: item?.title ?? '',
     subjectId: item?.subject?.id ?? null,
     direction: item?.direction ?? '',
     description: item?.description ?? '',
-    organization: item?.organization ?? '',
+    organization: item?.organization ?? (presetType ? (DEFAULT_ORGANIZATION[presetType] ?? '') : ''),
     date: toDateInput(item?.date),
-    level: item?.level ?? null,
+    level: item?.level ?? (presetType ? (DEFAULT_LEVEL[presetType] ?? null) : null),
     result: item?.result ?? '',
+    details: item ? (item.details ?? null) : type && isStructuredPortfolioType(type) ? initialDetails(type) : null,
     evidenceUrl: item?.evidenceUrl ?? '',
     evidenceFileId: item?.evidenceFile?.id ?? null,
     visibility: item?.visibility ?? 'STAFF',
@@ -111,6 +150,17 @@ function successMessage(before: PortfolioItemView | null | undefined, saved: Por
   return 'O‘zgarishlar saqlandi.';
 }
 
+/** zod xatolari `details.<maydon>` yo‘li bilan keladi — ichki maydonlar bo‘yicha xabarlar. */
+function detailErrorsOf(value: unknown): DetailsErrors {
+  if (!value || typeof value !== 'object') return {};
+  const result: DetailsErrors = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    const message = (entry as { message?: unknown } | undefined)?.message;
+    if (typeof message === 'string' && key !== 'message' && key !== 'type' && key !== 'ref') result[key] = message;
+  }
+  return result;
+}
+
 interface SaveRequest {
   values: PortfolioItemOutput;
   submitAfter: boolean;
@@ -124,15 +174,18 @@ interface SaveResult {
 
 /**
  * Portfolio yozuvini yaratish va tahrirlash formasi (umumiy `portfolioItemSchema` bilan tekshiriladi).
- * Tahrirlashda butun obyekt yuboriladi (PUT). Tasdiqlangan yozuvning muhim maydoni o‘zgarsa yoki
- * tekshiruvdagi yozuv tahrirlansa, saqlashdan oldin ogohlantiriladi.
+ * Tur tanlanganda maydonlar moslashadi: milliy sertifikat, CEFR, IELTS, SAT va olimpiada uchun tuzilgan
+ * maydonlar chiqadi, natija ulardan avtomatik yasaladi. Tahrirlashda butun obyekt yuboriladi (PUT).
  */
 export function PortfolioForm({
   item,
+  presetType,
   onSaved,
   onCancel,
 }: {
   item?: PortfolioItemView | null;
+  /** Tezkor qo‘shish tugmasidan kelgan tur (faqat yangi yozuv uchun). */
+  presetType?: PortfolioItemType;
   onSaved: (item: PortfolioItemView) => void;
   onCancel: () => void;
 }) {
@@ -141,16 +194,18 @@ export function PortfolioForm({
   const toast = useToast();
   const subjects = useSubjects();
   const staff = hasRole(me, 'TEACHER', 'DEPUTY', 'ADMIN', 'SUPER_ADMIN');
+  const organizationListId = useId();
 
   const form = useForm<PortfolioItemInput, unknown, PortfolioItemOutput>({
     resolver: zodResolver(portfolioItemSchema),
-    defaultValues: defaultsFor(item),
+    defaultValues: defaultsFor(item, presetType),
   });
   const {
     register,
     formState: { errors },
   } = form;
   const subjectField = useController({ control: form.control, name: 'subjectId' });
+  const detailsField = useController({ control: form.control, name: 'details' });
   const watched = useWatch({ control: form.control });
 
   const [file, setFile] = useState<FileRef | null>(item?.evidenceFile ?? null);
@@ -159,9 +214,64 @@ export function PortfolioForm({
   const [confirm, setConfirm] = useState<SaveRequest | null>(null);
 
   const selectedType = watched.type as PortfolioItemType | '' | undefined;
+  const structured = selectedType ? isStructuredPortfolioType(selectedType) : false;
+  const certificate = selectedType ? CERTIFICATE_GROUP.includes(selectedType) : false;
   const creative = selectedType ? isCreativeType(selectedType) : false;
+  const olympiad = selectedType === 'OLYMPIAD';
+  const details = asDetails(detailsField.field.value);
+  const summary = structured && selectedType ? portfolioDetailsSummary(selectedType, details) : null;
   const keyChanged = item ? keyFieldsChanged(item, watched) : false;
   const author = item?.owner.fullName ?? me?.fullName ?? '';
+
+  // Nom taklifi: foydalanuvchi nomni o‘zi o‘zgartirmagan bo‘lsa, ma’lumotlar bilan birga yangilanadi.
+  const suggestion = suggestTitle(selectedType, details, watched.level as AchievementLevel | null | undefined);
+  const lastSuggestion = useRef(item ? suggestTitle(item.type, item.details, item.level) : null);
+  useEffect(() => {
+    if (!suggestion) return;
+    const title = form.getValues('title') ?? '';
+    if (!title.trim() || title === lastSuggestion.current) {
+      form.setValue('title', suggestion, { shouldDirty: true });
+      form.clearErrors('title');
+    }
+    lastSuggestion.current = suggestion;
+  }, [suggestion, form]);
+
+  // Milliy sertifikat va olimpiada fani maktab fanlari ro‘yxatiga moslanadi (filtrlar uchun).
+  const detailSubject =
+    selectedType === 'NATIONAL_CERTIFICATE' || selectedType === 'OLYMPIAD'
+      ? typeof details.subject === 'string'
+        ? details.subject
+        : ''
+      : null;
+  const initialDetailsSubject = asDetails(item?.details).subject;
+  const initialSubject = typeof initialDetailsSubject === 'string' ? initialDetailsSubject : null;
+  useEffect(() => {
+    if (detailSubject === null || !subjects.data) return;
+    if (item && detailSubject === initialSubject && selectedType === item.type) return;
+    const needle = normalizeForSearch(detailSubject);
+    const match = needle ? subjects.data.find((subject) => normalizeForSearch(subject.name) === needle) : undefined;
+    const next = match?.id ?? null;
+    if ((form.getValues('subjectId') ?? null) !== next) form.setValue('subjectId', next, { shouldDirty: true });
+  }, [detailSubject, initialSubject, subjects.data, form, item, selectedType]);
+
+  const typeField = register('type');
+  const onTypeChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const previous = form.getValues('type');
+    void typeField.onChange(event);
+    const next = event.target.value as PortfolioItemType | '';
+    if (next === previous) return;
+    // Turga xos maydonlar yangi turdan boshlanadi.
+    form.setValue('details', next && isStructuredPortfolioType(next) ? initialDetails(next) : null);
+    form.clearErrors('details');
+    if (!form.getValues('level') && next && DEFAULT_LEVEL[next]) form.setValue('level', DEFAULT_LEVEL[next]);
+    const organization = (form.getValues('organization') ?? '').trim();
+    const previousDefault = previous ? DEFAULT_ORGANIZATION[previous] : undefined;
+    if (!organization || organization === previousDefault) {
+      form.setValue('organization', (next && DEFAULT_ORGANIZATION[next]) || '');
+    }
+    const title = form.getValues('title') ?? '';
+    if (title && title === lastSuggestion.current) form.setValue('title', '');
+  };
 
   const upload = useMutation({
     mutationFn: (selected: File) => api.upload<FileRef>('/files', selected),
@@ -205,13 +315,23 @@ export function PortfolioForm({
       let mapped = false;
       for (const [path, message] of Object.entries(caught.fieldErrors)) {
         const name = path.split('.')[0] ?? '';
-        if (isFieldName(name)) {
+        if (name === 'details' && path !== 'details') {
+          // Ichki maydon: details.overall, details.total …
+          form.setError(path as never, { type: 'server', message });
+          mapped = true;
+        } else if (isFieldName(name)) {
           form.setError(name, { type: 'server', message });
           mapped = true;
         }
       }
       if (caught.code === 'TYPE_NOT_ALLOWED') {
         form.setError('type', { type: 'server', message: caught.message });
+        mapped = true;
+      }
+      if (caught.status === 404 && caught.message.startsWith('Fayl')) {
+        setFileError(
+          'Dalil fayli topilmadi yoki ishlatib bo‘lmaydi (profil rasmi dalil bo‘la olmaydi). Boshqa fayl yuklang.',
+        );
         mapped = true;
       }
       setError(
@@ -223,6 +343,10 @@ export function PortfolioForm({
   const handle = (submitAfter: boolean) =>
     form.handleSubmit((values) => {
       setError(null);
+      if (values.type === 'OLYMPIAD' && !values.level) {
+        form.setError('level', { type: 'manual', message: 'Olimpiada bosqichini tanlang' });
+        return;
+      }
       const request = { values, submitAfter };
       const losesApproval = item?.status === 'APPROVED' && keyFieldsChanged(item, values);
       const leavesReview = item?.status === 'SUBMITTED' && !submitAfter;
@@ -260,14 +384,21 @@ export function PortfolioForm({
   const submitLabel = item?.status === 'SUBMITTED' ? 'Saqlash va qayta yuborish' : 'Saqlash va tekshiruvga yuborish';
   const busy = save.isPending || confirm !== null;
   const evidenceError = fileError ?? errors.evidenceFileId?.message ?? null;
+  const detailErrors = detailErrorsOf(errors.details);
+  const organizationOptions = [
+    ...(selectedType === 'CEFR' && typeof details.provider === 'string' && details.provider ? [details.provider] : []),
+    ...((selectedType && ORGANIZATION_SUGGESTIONS[selectedType]) ?? []),
+  ].filter((value, index, all) => all.indexOf(value) === index);
+  const currentTitle = watched.title ?? '';
 
   return (
     <form noValidate onSubmit={handle(false)} className="flex flex-col">
       <div className="space-y-4">
         {item?.status === 'APPROVED' && (
           <Alert tone="warning" title="Yozuv tasdiqlangan">
-            Tur, nom, fan, tashkilot, sana, bosqich, natija yoki dalil o‘zgartirilsa, yozuv qoralamaga qaytadi va qayta
-            tasdiqlanishi kerak. Tavsif, yo‘nalish va ko‘rinish doirasini o‘zgartirish tasdiqqa ta’sir qilmaydi.
+            Tur, nom, fan, tashkilot, sana, bosqich, natija, sertifikat ma’lumotlari yoki dalil o‘zgartirilsa, yozuv
+            qoralamaga qaytadi va qayta tasdiqlanishi kerak. Tavsif, yo‘nalish va ko‘rinish doirasini o‘zgartirish
+            tasdiqqa ta’sir qilmaydi.
           </Alert>
         )}
         {item?.status === 'SUBMITTED' && (
@@ -283,7 +414,7 @@ export function PortfolioForm({
           <legend className="sr-only">Yozuv ma’lumotlari</legend>
 
           <Field label="Turi" required error={errors.type?.message}>
-            <Select {...register('type')}>
+            <Select {...typeField} onChange={onTypeChange}>
               <option value="">Turini tanlang</option>
               {TYPE_GROUPS.map((group) => {
                 const types = group.types.filter((type) => staff || !group.teacherOnly || type === item?.type);
@@ -301,7 +432,7 @@ export function PortfolioForm({
             </Select>
           </Field>
 
-          <Field label="Bosqich" error={errors.level?.message}>
+          <Field label="Bosqich" required={olympiad} error={errors.level?.message}>
             <Select {...register('level', { setValueAs: emptyToNull })}>
               <option value="">Ko‘rsatilmagan</option>
               {ACHIEVEMENT_LEVELS.map((level) => (
@@ -319,68 +450,150 @@ export function PortfolioForm({
             </Alert>
           )}
 
-          <Field label="Nomi" required error={errors.title?.message} className="sm:col-span-2">
+          {structured && selectedType && isStructuredPortfolioType(selectedType) && (
+            <div className="space-y-4 rounded-xl border border-brand-100 bg-brand-50/40 p-4 sm:col-span-2">
+              <p className="text-sm font-semibold text-slate-800">
+                {olympiad ? 'Olimpiada natijasi' : `${PORTFOLIO_ITEM_TYPE_LABELS[selectedType]} ma’lumotlari`}
+              </p>
+              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+                <DetailsFields
+                  key={selectedType}
+                  type={selectedType}
+                  value={details}
+                  onChange={(next) => detailsField.field.onChange(next)}
+                  errors={detailErrors}
+                />
+              </div>
+              <p className="text-sm">
+                <span className="text-slate-500">Natija (avtomatik): </span>
+                {summary ? (
+                  <span className="font-medium text-slate-900">{summary}</span>
+                ) : (
+                  <span className="text-slate-500">majburiy maydonlarni to‘ldiring</span>
+                )}
+              </p>
+            </div>
+          )}
+
+          <Field
+            label="Nomi"
+            required
+            error={errors.title?.message}
+            className="sm:col-span-2"
+            hint={
+              suggestion && currentTitle.trim() !== suggestion ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-brand-700 hover:underline"
+                  onClick={() => {
+                    form.setValue('title', suggestion, { shouldDirty: true });
+                    lastSuggestion.current = suggestion;
+                  }}
+                >
+                  <Sparkles className="size-3.5" aria-hidden />
+                  Taklif: “{suggestion}” — qo‘llash
+                </button>
+              ) : structured ? (
+                'Ma’lumotlardan avtomatik taklif qilinadi — xohlasangiz o‘zgartiring.'
+              ) : undefined
+            }
+          >
             <Input
               maxLength={300}
               placeholder={
-                creative ? 'Masalan: “Kuz ohanglari” she’ri' : 'Masalan: Matematika fan olimpiadasi, tuman bosqichi'
+                creative
+                  ? 'Masalan: “Kuz ohanglari” she’ri'
+                  : certificate
+                    ? 'Masalan: Milliy sertifikat — Matematika (A+)'
+                    : 'Masalan: Matematika fan olimpiadasi, tuman bosqichi'
               }
               {...register('title')}
             />
           </Field>
 
-          <Field label="Fan" error={errors.subjectId?.message}>
-            <Select
-              name={subjectField.field.name}
-              ref={subjectField.field.ref}
-              value={subjectField.field.value ?? ''}
-              onChange={(event) => subjectField.field.onChange(event.target.value || null)}
-              onBlur={subjectField.field.onBlur}
-              disabled={subjects.isPending}
-            >
-              <option value="">{subjects.isPending ? 'Yuklanmoqda…' : 'Fanga bog‘liq emas'}</option>
-              {item?.subject && !subjects.data?.some((subject) => subject.id === item.subject?.id) && (
-                <option value={item.subject.id}>{item.subject.name}</option>
-              )}
-              {subjects.data?.map((subject) => (
-                <option key={subject.id} value={subject.id}>
-                  {subject.name}
-                </option>
+          {!structured && (
+            <>
+              <Field label="Fan" error={errors.subjectId?.message}>
+                <Select
+                  name={subjectField.field.name}
+                  ref={subjectField.field.ref}
+                  value={subjectField.field.value ?? ''}
+                  onChange={(event) => subjectField.field.onChange(event.target.value || null)}
+                  onBlur={subjectField.field.onBlur}
+                  disabled={subjects.isPending}
+                >
+                  <option value="">{subjects.isPending ? 'Yuklanmoqda…' : 'Fanga bog‘liq emas'}</option>
+                  {item?.subject && !subjects.data?.some((subject) => subject.id === item.subject?.id) && (
+                    <option value={item.subject.id}>{item.subject.name}</option>
+                  )}
+                  {subjects.data?.map((subject) => (
+                    <option key={subject.id} value={subject.id}>
+                      {subject.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+
+              <Field label="Yo‘nalish" error={errors.direction?.message}>
+                <Input maxLength={200} placeholder="Masalan: she’riyat, robototexnika" {...register('direction')} />
+              </Field>
+            </>
+          )}
+
+          <Field
+            label={certificate ? 'Tashkilot (sertifikat bergan)' : 'Tashkilot'}
+            error={errors.organization?.message}
+          >
+            <Input
+              maxLength={300}
+              list={organizationOptions.length ? organizationListId : undefined}
+              placeholder={
+                organizationOptions[0] ? `Masalan: ${organizationOptions[0]}` : 'Masalan: Tuman xalq ta’limi bo‘limi'
+              }
+              {...register('organization')}
+            />
+          </Field>
+          {organizationOptions.length > 0 && (
+            <datalist id={organizationListId}>
+              {organizationOptions.map((option) => (
+                <option key={option} value={option} />
               ))}
-            </Select>
-          </Field>
+            </datalist>
+          )}
 
-          <Field label="Yo‘nalish" error={errors.direction?.message}>
-            <Input maxLength={200} placeholder="Masalan: she’riyat, robototexnika" {...register('direction')} />
-          </Field>
-
-          <Field label="Tashkilot" error={errors.organization?.message}>
-            <Input maxLength={300} placeholder="Masalan: Tuman xalq ta’limi bo‘limi" {...register('organization')} />
-          </Field>
-
-          <Field label="Sana" error={errors.date?.message}>
+          <Field label={certificate ? 'Imtihon (berilgan) sanasi' : 'Sana'} error={errors.date?.message}>
             <Input type="date" {...register('date', { setValueAs: emptyToNull })} />
           </Field>
 
-          <Field label="Natija yoki o‘rin" error={errors.result?.message} className="sm:col-span-2">
-            <Input maxLength={200} placeholder="Masalan: 1-o‘rin, diplom, faxriy yorliq" {...register('result')} />
-          </Field>
+          {!structured && (
+            <Field label="Natija yoki o‘rin" error={errors.result?.message} className="sm:col-span-2">
+              <Input maxLength={200} placeholder="Masalan: 1-o‘rin, diplom, faxriy yorliq" {...register('result')} />
+            </Field>
+          )}
 
           <Field
             label="Tavsif"
-            hint={creative ? 'Asar matni yoki qisqa mazmuni.' : 'Qisqacha: nima qilindi va qanday natijaga erishildi.'}
+            hint={
+              creative
+                ? 'Asar matni yoki qisqa mazmuni.'
+                : structured
+                  ? 'Ixtiyoriy: qo‘shimcha izoh (masalan, qaysi maqsadda topshirilgan).'
+                  : 'Qisqacha: nima qilindi va qanday natijaga erishildi.'
+            }
             error={errors.description?.message}
             className="sm:col-span-2"
           >
-            <Textarea rows={4} maxLength={5000} {...register('description')} />
+            <Textarea rows={structured ? 2 : 4} maxLength={5000} {...register('description')} />
           </Field>
 
           <div className="space-y-3 sm:col-span-2">
             <div>
               <p className="text-sm font-medium text-slate-700">Dalil</p>
               <p className="text-xs text-slate-500">
-                Diplom, sertifikat, nashr sahifasi yoki ish fayli — tasdiqlovchi shu asosida tekshiradi. Fayl yopiq
-                omborda saqlanadi.
+                {certificate
+                  ? 'Sertifikat skaneri yoki PDF nusxasi — tasdiqlovchi shu asosida tekshiradi.'
+                  : 'Diplom, sertifikat, nashr sahifasi yoki ish fayli — tasdiqlovchi shu asosida tekshiradi.'}{' '}
+                Fayl yopiq omborda saqlanadi.
               </p>
             </div>
             {file ? (
@@ -415,7 +628,9 @@ export function PortfolioForm({
                 ) : (
                   <>
                     <FileUp className="size-6 text-brand-600" aria-hidden />
-                    <span className="text-sm font-medium text-slate-800">Fayl tanlash</span>
+                    <span className="text-sm font-medium text-slate-800">
+                      {certificate ? 'Sertifikat faylini tanlash' : 'Fayl tanlash'}
+                    </span>
                     <span className="text-xs text-slate-500">PDF, JPG, PNG, WEBP yoki DOCX · 10 MB gacha</span>
                   </>
                 )}
@@ -429,13 +644,17 @@ export function PortfolioForm({
               </label>
             )}
             {evidenceError && (
-              <p role="alert" className="text-xs font-medium text-red-600">
+              <p role="alert" className="text-xs font-medium text-red-700">
                 {evidenceError}
               </p>
             )}
             <Field
               label="Tashqi havola"
-              hint="Ixtiyoriy. Masalan, nashr yoki tanlov natijalari sahifasi."
+              hint={
+                certificate
+                  ? 'Ixtiyoriy. Masalan, sertifikatni tekshirish sahifasi.'
+                  : 'Ixtiyoriy. Masalan, nashr yoki tanlov natijalari sahifasi.'
+              }
               error={errors.evidenceUrl?.message}
             >
               <Input type="url" inputMode="url" placeholder="https://…" maxLength={1000} {...register('evidenceUrl')} />
@@ -522,28 +741,32 @@ export function PortfolioForm({
 export function PortfolioFormDialog({
   open,
   item,
+  presetType,
   onClose,
   onSaved,
 }: {
   open: boolean;
   item?: PortfolioItemView | null;
+  presetType?: PortfolioItemType;
   onClose: () => void;
   onSaved?: (item: PortfolioItemView) => void;
 }) {
+  const presetLabel = presetType ? PORTFOLIO_ITEM_TYPE_LABELS[presetType] : null;
   return (
     <Dialog
       open={open}
       onClose={onClose}
       size="lg"
-      title={item ? 'Yozuvni tahrirlash' : 'Yangi portfolio yozuvi'}
+      title={item ? 'Yozuvni tahrirlash' : presetLabel ? `Yangi yozuv: ${presetLabel}` : 'Yangi portfolio yozuvi'}
       description={
         item ? item.title : 'Yozuv qoralama sifatida saqlanadi; tasdiqlanishi uchun uni tekshiruvga yuboring.'
       }
     >
       {open && (
         <PortfolioForm
-          key={item?.id ?? 'new'}
+          key={item?.id ?? `new:${presetType ?? ''}`}
           item={item}
+          presetType={presetType}
           onCancel={onClose}
           onSaved={(saved) => {
             onSaved?.(saved);

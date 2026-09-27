@@ -15,7 +15,7 @@ export function Table({ className, children, caption }: { className?: string; ch
 
 export function THead({ children, sticky }: { children: ReactNode; sticky?: boolean }) {
   return (
-    <thead className={cn('bg-slate-50 text-xs uppercase tracking-wide text-slate-500', sticky && 'sticky top-0 z-10')}>
+    <thead className={cn('bg-slate-50 text-xs tracking-wide text-slate-500 uppercase', sticky && 'sticky top-0 z-10')}>
       {children}
     </thead>
   );
@@ -25,7 +25,7 @@ export function TH({ className, children, ...props }: ComponentProps<'th'>) {
   return (
     <th
       scope="col"
-      className={cn('border-b border-slate-200 px-3 py-2.5 font-medium whitespace-nowrap', className)}
+      className={cn('border-b border-slate-200 px-3 py-2.5 font-semibold whitespace-nowrap', className)}
       {...props}
     >
       {children}
@@ -35,7 +35,10 @@ export function TH({ className, children, ...props }: ComponentProps<'th'>) {
 
 export function TR({ className, children, ...props }: ComponentProps<'tr'>) {
   return (
-    <tr className={cn('border-b border-slate-100 last:border-0 hover:bg-slate-50/60', className)} {...props}>
+    <tr
+      className={cn('border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/70', className)}
+      {...props}
+    >
       {children}
     </tr>
   );

@@ -28,6 +28,7 @@ import {
   formatPoints,
   schoolInputToDate,
 } from '@ijod/shared';
+import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
@@ -468,6 +469,16 @@ export function SessionOverview({ session }: { session: SessionDetail }) {
                   session.shuffleOptions ? 'variantlar aralashtiriladi' : 'variantlar tartibi o‘zgarmaydi',
                   session.allowBackNavigation ? 'orqaga qaytish mumkin' : 'orqaga qaytib bo‘lmaydi',
                 ].join('; ')}
+              </Row>
+              <Row label="To‘liq ekran nazorati">
+                <Badge tone={session.requireFullscreen ? 'green' : 'gray'}>
+                  {session.requireFullscreen ? 'Yoqilgan' : 'O‘chirilgan'}
+                </Badge>
+                <p className="mt-1 text-slate-500">
+                  {session.requireFullscreen
+                    ? 'Test to‘liq ekranda ishlanadi. To‘liq ekrandan chiqqan yoki boshqa oyna/ilovaga o‘tgan o‘quvchining testi avtomatik to‘xtatiladi — “Jonli kuzatuv”da ruxsat berasiz.'
+                    : 'Oynadan chiqish holatlari faqat signal sifatida qayd etiladi, test to‘xtatilmaydi.'}
+                </p>
               </Row>
               <Row label="Ballni ko‘rsatish">
                 {SCORE_VISIBILITY_LABELS[session.scoreVisibility]}

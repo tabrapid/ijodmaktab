@@ -1,9 +1,30 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Clock, MonitorSmartphone, Plus, UserMinus, WifiOff, XCircle } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { SUBMIT_SOURCE_LABELS, formatDuration, formatInternalId, formatTime } from '@ijod/shared';
+import {
+  AlertTriangle,
+  Bell,
+  BellOff,
+  Clock,
+  MonitorSmartphone,
+  Plus,
+  ShieldAlert,
+  ShieldCheck,
+  UserMinus,
+  WifiOff,
+  XCircle,
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ATTEMPT_LOCK_REASON_LABELS,
+  SUBMIT_SOURCE_LABELS,
+  formatDuration,
+  formatInternalId,
+  formatTime,
+  type AttemptLockReason,
+  type SessionState,
+} from '@ijod/shared';
+import { Avatar } from '@/components/avatar';
 import { ParticipationBadge } from '@/components/status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,15 +35,135 @@ import { Checkbox, Field, Input, Select, Textarea } from '@/components/ui/form';
 import { ProgressBar } from '@/components/ui/stat';
 import { TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
-import { api, errorMessage } from '@/lib/api';
+import { ApiError, api, errorMessage } from '@/lib/api';
 import { hasRole, useMe } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import type { ClassDetail, ClassListItem, LiveRow, LiveView, SessionDetail } from '@/lib/types';
 import { sessionKey } from './use-session';
 
-type RowFilter = 'all' | 'IN_PROGRESS' | 'NOT_STARTED' | 'FINISHED' | 'ISSUE' | 'CANCELLED';
+type RowFilter = 'all' | 'IN_PROGRESS' | 'NOT_STARTED' | 'FINISHED' | 'ISSUE' | 'CANCELLED' | 'LOCKED';
 
 const FINISHED = new Set(['SUBMITTED', 'EXPIRED', 'UNDER_REVIEW']);
+
+/** Jadval nishoni uchun qisqa sabab (to‘liq matn — ATTEMPT_LOCK_REASON_LABELS). */
+const LOCK_REASON_SHORT: Record<AttemptLockReason, string> = {
+  FULLSCREEN_EXIT: 'to‘liq ekrandan chiqdi',
+  PAGE_HIDDEN: 'boshqa oynaga o‘tdi',
+};
+
+const SOUND_KEY = 'ijod:live-sound';
+
+function readSoundPreference() {
+  try {
+    return localStorage.getItem(SOUND_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+function writeSoundPreference(on: boolean) {
+  try {
+    localStorage.setItem(SOUND_KEY, on ? 'on' : 'off');
+  } catch {
+    // Brauzer xotirasi yopiq — sozlama faqat shu oynada amal qiladi.
+  }
+}
+
+let audioContext: AudioContext | null = null;
+
+/** Qisqa ikki tovushli ogohlantirish (brauzer ruxsat bermasa — jim o‘tadi). */
+function beep() {
+  try {
+    const Context =
+      window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Context) return;
+    audioContext ??= new Context();
+    const audio = audioContext;
+    if (audio.state === 'suspended') void audio.resume().catch(() => undefined);
+    const start = audio.currentTime + 0.01;
+    for (const [offset, frequency] of [
+      [0, 880],
+      [0.22, 660],
+    ] as const) {
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001, start + offset);
+      gain.gain.exponentialRampToValueAtTime(0.25, start + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.18);
+      oscillator.connect(gain).connect(audio.destination);
+      oscillator.start(start + offset);
+      oscillator.stop(start + offset + 0.2);
+    }
+  } catch {
+    // Ovoz ixtiyoriy.
+  }
+}
+
+/**
+ * Jonli kuzatuv ma’lumoti: ochiq sessiyada muntazam yangilanadi (ruxsat kutayotgan o‘quvchi bo‘lsa —
+ * tezroq), boshqa tabda ham ogohlantirish kelishi uchun fonda ham. Barcha kuzatuvchilar bitta keshni ulashadi.
+ */
+export function useLiveView(sessionId: string, sessionState: SessionState | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['session-live', sessionId],
+    queryFn: () => api.get<LiveView>(`/sessions/${sessionId}/live`),
+    enabled,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const state = data?.state ?? sessionState;
+      if (state === 'OPEN') return data?.counts.locked ? 3000 : 5000;
+      return state === 'SCHEDULED' ? 15_000 : false;
+    },
+    refetchIntervalInBackground: true,
+  });
+}
+
+/**
+ * Yangi to‘xtatilgan o‘quvchi paydo bo‘lganda: bildirishnoma, qisqa ovoz (yoqilgan bo‘lsa) va
+ * (sahifa ko‘rinmayotgan bo‘lsa) sarlavhada “(!)” belgisi — o‘qituvchi sahifaga qaytguncha.
+ */
+export function useLockAlerts(view: LiveView | undefined) {
+  const toast = useToast();
+  const known = useRef<Set<string> | null>(null);
+  const [attention, setAttention] = useState(false);
+
+  useEffect(() => {
+    if (!view) return;
+    const locked = view.rows.filter((row) => row.lockedAt && row.attemptId);
+    // Bir o‘quvchi qayta chetlatilsa ham yangi hodisa sifatida sanaladi.
+    const keys = new Set(locked.map((row) => `${row.attemptId}:${row.lockCount}`));
+    const previous = known.current;
+    known.current = keys;
+    if (previous === null) return;
+    const fresh = locked.filter((row) => !previous.has(`${row.attemptId}:${row.lockCount}`));
+    if (fresh.length === 0) return;
+    const first = fresh[0]!;
+    toast.error(
+      fresh.length === 1
+        ? `${first.fullName} testdan chetlatildi (${LOCK_REASON_SHORT[first.lockReason ?? 'FULLSCREEN_EXIT']}). Ruxsat berishingizni kutmoqda.`
+        : `${fresh.length} nafar o‘quvchi testdan chetlatildi va ruxsatingizni kutmoqda.`,
+    );
+    if (readSoundPreference()) beep();
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) setAttention(true);
+  }, [view, toast]);
+
+  useEffect(() => {
+    if (!attention) return;
+    if (!document.title.startsWith('(!) ')) document.title = `(!) ${document.title}`;
+    const seen = () => {
+      if (document.visibilityState === 'visible' && document.hasFocus()) setAttention(false);
+    };
+    window.addEventListener('focus', seen);
+    document.addEventListener('visibilitychange', seen);
+    return () => {
+      window.removeEventListener('focus', seen);
+      document.removeEventListener('visibilitychange', seen);
+      document.title = document.title.replace(/^\(!\) /, '');
+    };
+  }, [attention]);
+}
 
 function useNow(intervalMs: number) {
   const [now, setNow] = useState(() => Date.now());
@@ -83,7 +224,127 @@ function CountTile({
 
 // ------------------------------------------------------------ Dialoglar
 
-type RowAction = { kind: 'extend' | 'cancel' | 'remove'; row: LiveRow };
+type RowAction = { kind: 'extend' | 'cancel' | 'remove' | 'unlock'; row: LiveRow };
+
+/** To‘xtatilgan o‘quvchiga testni davom ettirishga ruxsat berish (ixtiyoriy qo‘shimcha vaqt bilan). */
+function UnlockDialog({
+  row,
+  serverNow,
+  onClose,
+  onDone,
+  onStale,
+}: {
+  row: LiveRow;
+  serverNow: number;
+  onClose: () => void;
+  onDone: (view: LiveView) => void;
+  onStale: () => void;
+}) {
+  const toast = useToast();
+  const [minutes, setMinutes] = useState('0');
+  const [note, setNote] = useState('');
+  const unlock = useMutation({
+    mutationFn: () =>
+      api.post<LiveView>(`/attempts/${row.attemptId}/unlock`, {
+        extraMinutes: Number(minutes),
+        note: note.trim() || undefined,
+      }),
+    onSuccess: (view) => {
+      toast.success(
+        Number(minutes) > 0
+          ? `${row.fullName}ga ruxsat berildi va ${minutes} daqiqa qo‘shildi.`
+          : `${row.fullName}ga testni davom ettirishga ruxsat berildi.`,
+      );
+      onDone(view);
+    },
+    onError: (error) => {
+      toast.error(errorMessage(error));
+      // Holat o‘zgargan (allaqachon ruxsat berilgan yoki urinish yakunlangan) — ro‘yxat yangilanadi.
+      if (error instanceof ApiError && error.status === 409) onStale();
+    },
+  });
+  const value = Number(minutes);
+  const valid = minutes.trim() !== '' && Number.isInteger(value) && value >= 0 && value <= 60;
+  const lockedFor = row.lockedAt ? Math.max(0, serverNow - new Date(row.lockedAt).getTime()) : 0;
+  const lockedMinutes = Math.min(60, Math.ceil(lockedFor / 60_000));
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Testga qayta ruxsat berish"
+      description={row.fullName}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Bekor qilish
+          </Button>
+          <Button
+            onClick={() => unlock.mutate()}
+            loading={unlock.isPending}
+            disabled={!valid}
+            icon={<ShieldCheck className="size-4" />}
+          >
+            Ruxsat berish
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <dl className="grid gap-3 rounded-lg bg-slate-50 p-3 text-sm sm:grid-cols-3">
+          <div>
+            <dt className="text-xs text-slate-500">Sabab</dt>
+            <dd className="font-medium text-slate-900">
+              {row.lockReason ? ATTEMPT_LOCK_REASON_LABELS[row.lockReason] : '—'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500">To‘xtatilgan</dt>
+            <dd className="font-medium text-slate-900 tabular">
+              {formatTime(row.lockedAt)} · {ago(lockedFor)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500">Chetlatishlar soni</dt>
+            <dd className="font-medium text-slate-900 tabular">{row.lockCount}</dd>
+          </div>
+        </dl>
+        <div className="space-y-1.5">
+          <Field
+            label="Qo‘shimcha vaqt (daqiqa)"
+            hint="0–60. Test to‘xtatilganda ham vaqt davom etgan — kerak bo‘lsa qoplang; 0 — vaqt qo‘shilmaydi."
+          >
+            <Input
+              type="number"
+              min={0}
+              max={60}
+              className="w-28"
+              value={minutes}
+              onChange={(event) => setMinutes(event.target.value)}
+            />
+          </Field>
+          {lockedMinutes > 0 && (
+            <Button size="sm" variant="secondary" onClick={() => setMinutes(String(lockedMinutes))}>
+              To‘xtab turgan vaqtni qo‘shish: +{lockedMinutes} daq.
+            </Button>
+          )}
+        </div>
+        <Field label="Izoh" hint="Ixtiyoriy, audit jurnaliga yoziladi">
+          <Textarea
+            rows={2}
+            maxLength={300}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Masalan: tasodifan Esc bosildi, o‘quvchi bilan gaplashildi"
+          />
+        </Field>
+        <Alert tone="info">
+          O‘quvchi ekranida “Davom etish” tugmasi paydo bo‘ladi va test yana to‘liq ekranda davom etadi. Ruxsat
+          berganingiz jurnalga yoziladi.
+        </Alert>
+      </div>
+    </Dialog>
+  );
+}
 
 function ExtendDialog({
   sessionId,
@@ -367,14 +628,9 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
   const [search, setSearch] = useState('');
   const [action, setAction] = useState<RowAction | null>(null);
   const [adding, setAdding] = useState(false);
-  const live = useQuery({
-    queryKey: ['session-live', session.id],
-    queryFn: () => api.get<LiveView>(`/sessions/${session.id}/live`),
-    refetchInterval: (query) => {
-      const state = query.state.data?.state ?? session.state;
-      return state === 'OPEN' ? 5000 : state === 'SCHEDULED' ? 15_000 : false;
-    },
-  });
+  const [sound, setSound] = useState(() => (typeof window === 'undefined' ? true : readSoundPreference()));
+  // Ogohlantirishlar (useLockAlerts) sessiya sahifasining o‘zida ishlaydi — boshqa bo‘limda ham.
+  const live = useLiveView(session.id, session.state);
   const now = useNow(1000);
 
   // Sessiya holati o‘zgarsa (masalan, vaqt tugab yopilsa), sarlavhadagi ma’lumot ham yangilanadi.
@@ -403,6 +659,8 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
           return FINISHED.has(row.status);
         case 'ISSUE':
           return row.connectionIssue;
+        case 'LOCKED':
+          return Boolean(row.lockedAt);
         default:
           return row.status === filter;
       }
@@ -421,10 +679,57 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
   const editable = session.state !== 'CANCELLED';
   // Ro‘yxatni faqat sessiya yopilguncha o‘zgartirish mumkin (server ham shuni tekshiradi).
   const rosterEditable = session.state === 'SCHEDULED' || session.state === 'OPEN';
+  const proctored = session.requireFullscreen || counts.locked > 0;
+  const lockedRows = live.data.rows.filter((row) => row.lockedAt && row.attemptId);
+  const toggleSound = () => {
+    const next = !sound;
+    setSound(next);
+    writeSoundPreference(next);
+    // Brauzer ovozni faqat foydalanuvchi bosgandan keyin ruxsat beradi — shu yerda sinab ko‘ramiz.
+    if (next) beep();
+  };
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {counts.locked > 0 && (
+        <Alert
+          tone="danger"
+          title={`${counts.locked} nafar o‘quvchi testdan chetlatildi`}
+          action={
+            filter !== 'LOCKED' ? (
+              <Button size="sm" variant="outline" onClick={() => setFilter('LOCKED')}>
+                Jadvalda ko‘rsatish
+              </Button>
+            ) : undefined
+          }
+        >
+          <p>
+            {counts.locked === 1 ? 'O‘quvchi' : 'Ular'} to‘liq ekrandan chiqqan yoki boshqa oyna/ilovaga o‘tgan.
+            Vaziyatni tekshirib, “Ruxsat berish” tugmasi bilan testni davom ettiring. Vaqt to‘xtamaydi — kerak bo‘lsa
+            qo‘shimcha daqiqa bering.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {lockedRows.slice(0, 8).map((row) => (
+              <li key={row.studentId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <Avatar name={row.fullName} src={row.avatarUrl} size="xs" />
+                <span className="font-medium">{row.fullName}</span>
+                <span className="text-xs">
+                  {row.lockReason && LOCK_REASON_SHORT[row.lockReason]} · {formatTime(row.lockedAt)}
+                </span>
+                <Button
+                  size="sm"
+                  className="ml-auto"
+                  icon={<ShieldCheck className="size-3.5" />}
+                  onClick={() => setAction({ kind: 'unlock', row })}
+                >
+                  Ruxsat berish
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+      <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-4', proctored ? 'lg:grid-cols-7' : 'lg:grid-cols-6')}>
         <CountTile
           label="Tayinlangan"
           value={counts.assigned}
@@ -443,6 +748,15 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
           active={filter === 'IN_PROGRESS'}
           onClick={() => setFilter('IN_PROGRESS')}
         />
+        {proctored && (
+          <CountTile
+            label="To‘xtatilgan"
+            value={counts.locked}
+            active={filter === 'LOCKED'}
+            onClick={() => setFilter('LOCKED')}
+            tone="red"
+          />
+        )}
         <CountTile
           label="Yakunlagan"
           value={counts.finished}
@@ -470,11 +784,23 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
           title="O‘quvchilar"
           description={
             live.data.state === 'OPEN'
-              ? `Har 5 soniyada yangilanadi · oxirgi yangilanish ${formatTime(new Date(live.dataUpdatedAt))}`
+              ? `Har ${counts.locked ? 3 : 5} soniyada yangilanadi · oxirgi yangilanish ${formatTime(new Date(live.dataUpdatedAt))}`
               : 'Sessiya ochiq bo‘lganda ro‘yxat avtomatik yangilanadi.'
           }
           actions={
             <>
+              {proctored && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={sound ? <Bell className="size-4" /> : <BellOff className="size-4" />}
+                  onClick={toggleSound}
+                  aria-pressed={sound}
+                  title="Yangi o‘quvchi chetlatilganda ovozli ogohlantirish"
+                >
+                  {sound ? 'Ovoz yoqilgan' : 'Ovoz o‘chirilgan'}
+                </Button>
+              )}
               <div className="w-48">
                 <Input
                   value={search}
@@ -512,19 +838,36 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                     ? (new Date(row.deadlineAt).getTime() - serverNow) / 1000
                     : null;
                 const lastSignal = row.lastSeenAt ?? row.startedAt;
+                const locked = Boolean(row.lockedAt);
                 return (
-                  <TR key={row.studentId} className={cn(row.connectionIssue && 'bg-amber-50/60')}>
+                  <TR
+                    key={row.studentId}
+                    className={cn(locked ? 'bg-red-50/70 hover:bg-red-50' : row.connectionIssue && 'bg-amber-50/60')}
+                  >
                     <TD>
-                      <p className="font-medium text-slate-900">{row.fullName}</p>
-                      <p className="text-xs text-slate-500">
-                        {formatInternalId(row.internalId)}
-                        {row.className && ` · ${row.className}`}
-                        {row.attemptsCount > 1 && ` · ${row.attemptsCount}-urinish`}
-                      </p>
+                      <div className="flex items-center gap-3">
+                        <Avatar name={row.fullName} src={row.avatarUrl} size="sm" />
+                        <div className="min-w-0">
+                          <p className="font-medium text-slate-900">{row.fullName}</p>
+                          <p className="text-xs text-slate-500">
+                            {formatInternalId(row.internalId)}
+                            {row.className && ` · ${row.className}`}
+                            {row.attemptsCount > 1 && ` · ${row.attemptsCount}-urinish`}
+                          </p>
+                        </div>
+                      </div>
                     </TD>
                     <TD>
                       <span className="inline-flex flex-wrap items-center gap-1">
                         <ParticipationBadge status={row.status} />
+                        {locked && row.lockReason && (
+                          <span title={ATTEMPT_LOCK_REASON_LABELS[row.lockReason]}>
+                            <Badge tone="red">
+                              <ShieldAlert className="size-3" aria-hidden />
+                              To‘xtatildi · {LOCK_REASON_SHORT[row.lockReason]} · {formatTime(row.lockedAt)}
+                            </Badge>
+                          </span>
+                        )}
                         {row.connectionIssue && (
                           <Badge tone="amber">
                             <WifiOff className="size-3" aria-hidden />
@@ -570,6 +913,11 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                       {row.extraMinutes > 0 && (
                         <p className="text-xs text-brand-700">+{row.extraMinutes} daqiqa berilgan</p>
                       )}
+                      {locked && row.lockedAt && (
+                        <p className="text-xs font-medium text-red-700">
+                          Ruxsat kutmoqda: {ago(serverNow - new Date(row.lockedAt).getTime())}
+                        </p>
+                      )}
                       {row.status === 'IN_PROGRESS' && lastSignal && (
                         <p className="text-xs text-slate-500">
                           Signal: {ago(serverNow - new Date(lastSignal).getTime())}
@@ -579,9 +927,19 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                     <TD>
                       <span
                         className="inline-flex flex-wrap gap-1"
-                        title="Bu belgilar faqat signal — qoidabuzarlik isboti emas."
+                        title={
+                          session.requireFullscreen
+                            ? '“Chetlatish” — test necha marta avtomatik to‘xtatilgani. Qurilma almashishi faqat signal.'
+                            : 'Bu belgilar faqat signal — qoidabuzarlik isboti emas.'
+                        }
                       >
-                        {row.focusLossCount > 0 && (
+                        {row.lockCount > 0 && (
+                          <Badge tone="red">
+                            <ShieldAlert className="size-3" aria-hidden />
+                            Chetlatish: {row.lockCount}
+                          </Badge>
+                        )}
+                        {!session.requireFullscreen && row.focusLossCount > 0 && (
                           <Badge tone="gray">
                             <AlertTriangle className="size-3" aria-hidden />
                             Oynadan chiqish: {row.focusLossCount}
@@ -593,14 +951,23 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                             Qurilma almashgan: {row.deviceChangeCount}
                           </Badge>
                         )}
-                        {row.focusLossCount === 0 && row.deviceChangeCount === 0 && (
-                          <span className="text-slate-400">—</span>
-                        )}
+                        {row.lockCount === 0 &&
+                          (session.requireFullscreen || row.focusLossCount === 0) &&
+                          row.deviceChangeCount === 0 && <span className="text-slate-400">—</span>}
                       </span>
                     </TD>
                     {editable && (
                       <TD className="text-right whitespace-nowrap">
                         <span className="inline-flex gap-1">
+                          {locked && row.attemptId && (
+                            <Button
+                              size="sm"
+                              icon={<ShieldCheck className="size-3.5" />}
+                              onClick={() => setAction({ kind: 'unlock', row })}
+                            >
+                              Ruxsat berish
+                            </Button>
+                          )}
                           {(row.status === 'IN_PROGRESS' || row.status === 'NOT_STARTED') &&
                             session.state !== 'CLOSED' && (
                               <Button
@@ -644,7 +1011,10 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
       </Card>
       <p className="text-xs text-slate-500">
         “Aloqa uzilgan” — o‘quvchi qurilmasidan 45 soniyadan ko‘p signal kelmagan. Javoblar serverda saqlangan; aloqa
-        tiklanganda o‘quvchi davom etadi. Oynadan chiqish va qurilma almashishi faqat signal, qoidabuzarlik isboti emas.
+        tiklanganda o‘quvchi davom etadi.{' '}
+        {session.requireFullscreen
+          ? '“To‘xtatilgan” — o‘quvchi to‘liq ekrandan chiqqan yoki boshqa oyna/ilovaga o‘tgan, test avtomatik to‘xtatilgan. Ruxsat berguningizcha u javob yoza olmaydi, vaqt esa davom etadi. Qurilma almashishi faqat signal, qoidabuzarlik isboti emas.'
+          : 'Bu sessiyada to‘liq ekran nazorati o‘chirilgan: oynadan chiqish va qurilma almashishi faqat signal, qoidabuzarlik isboti emas.'}
       </p>
 
       {action?.kind === 'extend' && (
@@ -659,6 +1029,18 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
             void queryClient.invalidateQueries({ queryKey: ['session-live', session.id] });
             void queryClient.invalidateQueries({ queryKey: sessionKey(session.id) });
             void queryClient.invalidateQueries({ queryKey: ['session-results', session.id] });
+          }}
+        />
+      )}
+      {action?.kind === 'unlock' && (
+        <UnlockDialog
+          row={action.row}
+          serverNow={serverNow}
+          onClose={() => setAction(null)}
+          onDone={setView}
+          onStale={() => {
+            setAction(null);
+            void queryClient.invalidateQueries({ queryKey: ['session-live', session.id] });
           }}
         />
       )}

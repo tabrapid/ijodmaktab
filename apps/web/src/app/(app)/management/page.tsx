@@ -76,7 +76,7 @@ export default function ManagementDashboardPage() {
         {pendingTotal > 0 && (
           <div className="grid gap-3 sm:grid-cols-2">
             {data.pending.portfolio > 0 && (
-              <LinkTile href="/portfolio/review">
+              <LinkTile href="/management/portfolio?tab=review">
                 <Stat
                   label="Portfolio tasdiqlash navbati"
                   value={data.pending.portfolio}

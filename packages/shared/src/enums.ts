@@ -356,6 +356,28 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 /** Direktor o‘rinbosari yarata oladigan va boshqara oladigan hisob rollari. */
 export const DEPUTY_MANAGED_ROLES: readonly Role[] = ['TEACHER', 'STUDENT'];
 
+/** Administrator beradigan rollar; ADMIN va SUPER_ADMIN rollarini faqat super admin beradi. */
+export const ADMIN_GRANTABLE_ROLES: readonly Role[] = ['STUDENT', 'TEACHER', 'DEPUTY'];
+
+/**
+ * Foydalanuvchi bera oladigan (va shu rollardagi hisoblarni boshqara oladigan) rollar.
+ * Bir nechta rolli foydalanuvchi uchun eng keng vakolat olinadi.
+ */
+export function grantableRolesFor(roles: readonly Role[]): readonly Role[] {
+  if (roles.includes('SUPER_ADMIN')) return ROLES;
+  if (roles.includes('ADMIN')) return ADMIN_GRANTABLE_ROLES;
+  if (roles.includes('DEPUTY')) return DEPUTY_MANAGED_ROLES;
+  return [];
+}
+
+/** Hisobni boshqarish mumkinmi: hisobning har bir roli boshqaruvchi bera oladigan rollar ichida. */
+export function canManageRoles(viewerRoles: readonly Role[], targetRoles: readonly Role[]): boolean {
+  const grantable = grantableRolesFor(viewerRoles);
+  return grantable.length > 0 && targetRoles.every((role) => grantable.includes(role));
+}
+
 /** Profil rasmi: yuklanadigan fayl chegarasi (server kichraytirib WEBP ga o‘giradi). */
 export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 export const AVATAR_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+/** Profil rasmi: eni × bo‘yi chegarasi (40 megapiksel) — undan katta rasmlar qayta ishlanmaydi. */
+export const AVATAR_MAX_PIXELS = 40_000_000;

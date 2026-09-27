@@ -12,6 +12,7 @@ import { EndEnrollmentDialog, TransferDialog } from '@/components/admin/enrollme
 import { BackLink } from '@/components/admin/info-list';
 import { adminKeys } from '@/components/admin/queries';
 import { RequireRole } from '@/components/app-shell';
+import { Avatar } from '@/components/avatar';
 import { UserStatusBadge } from '@/components/status';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
@@ -161,12 +162,15 @@ function ClassDetailView() {
                   <TR key={student.enrollmentId}>
                     <TD className="font-mono text-xs text-slate-600 tabular">{formatInternalId(student.internalId)}</TD>
                     <TD className="min-w-48">
-                      <Link
-                        href={`/admin/users/${student.id}`}
-                        className="font-medium text-slate-900 hover:text-brand-700 hover:underline"
-                      >
-                        {student.fullName}
-                      </Link>
+                      <span className="flex items-center gap-2.5">
+                        <Avatar name={student.fullName} src={student.avatarUrl} size="sm" />
+                        <Link
+                          href={`/admin/users/${student.id}`}
+                          className="font-medium text-slate-900 hover:text-brand-700 hover:underline"
+                        >
+                          {student.fullName}
+                        </Link>
+                      </span>
                     </TD>
                     <TD>
                       <UserStatusBadge status={student.status} />

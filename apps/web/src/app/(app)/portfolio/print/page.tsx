@@ -5,8 +5,18 @@ import { ArrowLeft, FileQuestion, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, type ReactNode } from 'react';
-import { PORTFOLIO_STATUS_LABELS, formatDate, formatDateTime, formatInternalId } from '@ijod/shared';
+import {
+  PORTFOLIO_STATUS_LABELS,
+  formatDate,
+  formatDateTime,
+  formatInternalId,
+  portfolioCategoryOf,
+  portfolioDetailsLines,
+  type PortfolioCategory,
+} from '@ijod/shared';
 import { RequireRole } from '@/components/app-shell';
+import { BrandLogo } from '@/components/brand-logo';
+import { DetailsView } from '@/components/portfolio/details-view';
 import { isCreativeType, isUuid, levelLabel, portfolioKeys } from '@/components/portfolio/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -43,6 +53,21 @@ function ReviewerLine({ item }: { item: PortfolioItemView }) {
     <span className="block text-xs text-slate-600 print:text-black">
       Tasdiqladi: {item.reviewer.fullName}
       {item.reviewedAt ? `, ${formatDate(item.reviewedAt)}` : ''}
+    </span>
+  );
+}
+
+/** Natijadan tashqari muhim rekvizitlar: sertifikat va TRF raqami, amal qilish muddati. */
+const EXTRA_DETAIL_FIELDS = ['certificateNumber', 'trfNumber', 'validUntil', 'provider'];
+
+function DetailExtras({ item }: { item: PortfolioItemView }) {
+  const lines = portfolioDetailsLines(item.type, item.details).filter((line) =>
+    EXTRA_DETAIL_FIELDS.includes(line.field),
+  );
+  if (lines.length === 0) return null;
+  return (
+    <span className="block text-xs text-slate-600 print:text-black">
+      {lines.map((line) => `${line.label}: ${line.value}`).join(' · ')}
     </span>
   );
 }
@@ -90,7 +115,10 @@ function AchievementsTable({ items }: { items: PortfolioItemView[] }) {
               </td>
               <td className={cell}>{item.typeLabel}</td>
               <td className={cell}>{levelLabel(item.level) ?? '—'}</td>
-              <td className={cell}>{item.result ?? '—'}</td>
+              <td className={cell}>
+                {item.details ? <DetailsView type={item.type} details={item.details} compact /> : (item.result ?? '—')}
+                <DetailExtras item={item} />
+              </td>
               <td className={cell}>{item.organization ?? '—'}</td>
             </tr>
           ))}
@@ -189,9 +217,18 @@ function UnapprovedTable({ items, author }: { items: PortfolioItemView[]; author
   );
 }
 
+const TABLE_SECTIONS: { category: Exclude<PortfolioCategory, 'CREATIVE'>; title: string }[] = [
+  { category: 'CERTIFICATES', title: 'Sertifikatlar va imtihon natijalari' },
+  { category: 'OLYMPIADS', title: 'Olimpiada va tanlovlar' },
+  { category: 'OTHER', title: 'Boshqa yutuqlar' },
+];
+
 function PrintDocument({ data }: { data: PrintablePortfolio }) {
-  const achievements = data.approved.filter((item) => !isCreativeType(item.type));
-  const creative = data.approved.filter((item) => isCreativeType(item.type));
+  const byCategory = (category: PortfolioCategory) =>
+    data.approved.filter((item) => portfolioCategoryOf(item.type) === category);
+  const creative = byCategory('CREATIVE');
+  const tables = TABLE_SECTIONS.map((section) => ({ ...section, items: byCategory(section.category) }));
+  const achievements = data.approved.length - creative.length;
   const author = data.owner.fullName;
   return (
     <article
@@ -200,11 +237,14 @@ function PrintDocument({ data }: { data: PrintablePortfolio }) {
         'print:max-w-none print:rounded-none print:border-0 print:p-0 print:text-black print:shadow-none',
       )}
     >
-      <header className="border-b-2 border-slate-800 pb-4 text-center print:border-black">
-        <p className="text-xs font-semibold tracking-[0.18em] text-slate-600 uppercase print:text-black">
-          {data.school}
-        </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Portfolio</h1>
+      <header className="flex items-center gap-4 border-b-2 border-slate-800 pb-4 print:border-black">
+        <BrandLogo size={72} plate="dark" />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold tracking-[0.14em] text-slate-600 uppercase print:text-black">
+            {data.school}
+          </p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">Portfolio</h1>
+        </div>
       </header>
 
       <dl className="mt-5 grid gap-x-8 gap-y-1.5 text-sm sm:grid-cols-2 print:grid-cols-2">
@@ -234,18 +274,24 @@ function PrintDocument({ data }: { data: PrintablePortfolio }) {
       </dl>
 
       <p className="mt-4 text-sm text-slate-600 print:text-black">
-        Tasdiqlangan yutuqlar: <strong className="tabular">{achievements.length}</strong> · Tasdiqlangan ijodiy ishlar:{' '}
+        Tasdiqlangan yutuqlar: <strong className="tabular">{achievements}</strong> · Tasdiqlangan ijodiy ishlar:{' '}
         <strong className="tabular">{creative.length}</strong> · Tasdiqlanmagan yozuvlar:{' '}
         <strong className="tabular">{data.unapproved.length}</strong>
       </p>
 
-      <Section title="Tasdiqlangan yutuqlar">
-        {achievements.length > 0 ? (
-          <AchievementsTable items={achievements} />
-        ) : (
+      {tables.map(
+        (section) =>
+          section.items.length > 0 && (
+            <Section key={section.category} title={section.title}>
+              <AchievementsTable items={section.items} />
+            </Section>
+          ),
+      )}
+      {achievements === 0 && (
+        <Section title="Tasdiqlangan yutuqlar">
           <p className="text-sm text-slate-500 print:text-black">Tanlangan yozuvlar orasida tasdiqlangan yutuq yo‘q.</p>
-        )}
-      </Section>
+        </Section>
+      )}
 
       {creative.length > 0 && (
         <Section title="Ijodiy ishlar" note="Tasdiqlangan ijodiy ishlar. Asarlarning muallifligi saqlanadi.">
@@ -263,9 +309,9 @@ function PrintDocument({ data }: { data: PrintablePortfolio }) {
       )}
 
       <footer className="mt-10 border-t border-slate-300 pt-3 text-xs text-slate-500 print:border-slate-500 print:text-black">
-        Hujjat “{data.school}” axborot tizimida {formatDateTime(data.generatedAt)} da shakllantirildi. “Tasdiqlangan
-        yutuqlar” va “Ijodiy ishlar” bo‘limlaridagi yozuvlar sinf rahbari yoki maktab rahbariyati tomonidan
-        tasdiqlangan. Portfolio ommaga ochiq emas.
+        Hujjat “{data.school}” axborot tizimida {formatDateTime(data.generatedAt)} da shakllantirildi. “Tasdiqlanmagan
+        yozuvlar”dan boshqa barcha bo‘limlardagi yozuvlar sinf rahbari yoki maktab rahbariyati tomonidan tasdiqlangan.
+        Portfolio ommaga ochiq emas.
       </footer>
     </article>
   );

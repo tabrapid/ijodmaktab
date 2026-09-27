@@ -9,7 +9,7 @@ import { PageHeader } from '@/components/ui/card';
 import { ErrorState, PageLoader } from '@/components/ui/feedback';
 import { Tabs, type TabItem } from '@/components/ui/tabs';
 import { sessionTimeRange } from './session-list';
-import { LiveMonitor } from './live-monitor';
+import { LiveMonitor, useLiveView, useLockAlerts } from './live-monitor';
 import { AnswerMatrix, GradingHistory } from './matrix-history';
 import { QuestionAnalysis } from './question-analysis';
 import { ResultsView } from './results-view';
@@ -25,7 +25,13 @@ export function SessionDetailView({ id, backHref, backLabel }: { id: string; bac
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // Bildirishnomadagi havola “?tab=live” bilan to‘g‘ridan-to‘g‘ri jonli kuzatuvni ochadi.
   const requested = searchParams.get('tab') as TabId | null;
+  // Ochiq sessiyada to‘xtatilgan o‘quvchilar boshqa bo‘limda turganda ham kuzatiladi (jonli kuzatuv
+  // bo‘limi ochiq bo‘lsa, so‘rovni uning o‘zi yuboradi — kesh umumiy).
+  const watching = Boolean(session.data?.canManage && session.data.state === 'OPEN');
+  const live = useLiveView(id, session.data?.state, watching && requested !== 'live');
+  useLockAlerts(watching ? live.data : undefined);
 
   if (session.isPending) return <PageLoader />;
   if (session.isError) return <ErrorState error={session.error} onRetry={() => session.refetch()} />;
@@ -38,7 +44,12 @@ export function SessionDetailView({ id, backHref, backLabel }: { id: string; bac
           {
             id: 'live' as const,
             label: 'Jonli kuzatuv',
-            badge: data.inProgressCount > 0 ? <Badge tone="blue">{data.inProgressCount}</Badge> : undefined,
+            badge:
+              watching && live.data?.counts.locked ? (
+                <Badge tone="red">{live.data.counts.locked} to‘xtatilgan</Badge>
+              ) : data.inProgressCount > 0 ? (
+                <Badge tone="blue">{data.inProgressCount}</Badge>
+              ) : undefined,
           },
         ]
       : []),

@@ -12,6 +12,7 @@ import {
   formatDate,
   formatDateTime,
   formatInternalId,
+  grantableRolesFor,
   updateUserSchema,
   type Role,
   type UserStatus,
@@ -20,11 +21,18 @@ import type { z } from 'zod';
 import { EndEnrollmentDialog, EnrollDialog, TransferDialog } from '@/components/admin/enrollment-dialogs';
 import { applyServerErrors } from '@/components/admin/form-dialog';
 import { BackLink, InfoList } from '@/components/admin/info-list';
-import { ADMIN_GRANTABLE_ROLES, endReasonLabel } from '@/components/admin/labels';
+import { endReasonLabel } from '@/components/admin/labels';
 import { adminKeys, useInvalidate } from '@/components/admin/queries';
 import { RoleCheckboxes } from '@/components/admin/role-checkboxes';
-import { DeleteUserCard, SecurityCard, StatusCard, StatusDialog } from '@/components/admin/user-account-actions';
+import {
+  DeleteUserCard,
+  RemoveAvatarButton,
+  SecurityCard,
+  StatusCard,
+  StatusDialog,
+} from '@/components/admin/user-account-actions';
 import { RequireRole } from '@/components/app-shell';
+import { Avatar } from '@/components/avatar';
 import { RoleBadges, UserStatusBadge } from '@/components/status';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
@@ -52,7 +60,7 @@ function ProfileCard({ user, disabled, isSelf }: { user: UserDetail; disabled: b
       lastName: user.lastName,
       firstName: user.firstName,
       middleName: user.middleName ?? '',
-      login: user.login ?? '',
+      login: user.login,
     },
   });
   const save = useMutation({
@@ -63,7 +71,7 @@ function ProfileCard({ user, disabled, isSelf }: { user: UserDetail; disabled: b
         lastName: result.lastName,
         firstName: result.firstName,
         middleName: result.middleName ?? '',
-        login: result.login ?? '',
+        login: result.login,
       });
       toast.success('Ma’lumotlar saqlandi.');
       await invalidate(adminKeys.users, adminKeys.classes, adminKeys.staffAll, ...(isSelf ? [ME_KEY] : []));
@@ -85,7 +93,10 @@ function ProfileCard({ user, disabled, isSelf }: { user: UserDetail; disabled: b
 
   return (
     <Card>
-      <CardHeader title="Shaxsiy ma’lumotlar" description="F.I.Sh. va tizimga kirish logini" />
+      <CardHeader
+        title="Shaxsiy ma’lumotlar"
+        description={user.login !== undefined ? 'F.I.Sh. va tizimga kirish logini' : 'F.I.Sh.'}
+      />
       <CardBody>
         <form onSubmit={submit} className="space-y-4" noValidate>
           {error && <Alert tone="danger">{error}</Alert>}
@@ -99,14 +110,16 @@ function ProfileCard({ user, disabled, isSelf }: { user: UserDetail; disabled: b
             <Field label="Otasining ismi" error={errors.middleName?.message}>
               <Input autoComplete="off" {...form.register('middleName')} />
             </Field>
-            <Field
-              label="Login"
-              required
-              hint="Lotin harflari, raqam, nuqta, chiziqcha (3–50 belgi)."
-              error={errors.login?.message}
-            >
-              <Input autoComplete="off" autoCapitalize="none" spellCheck={false} {...form.register('login')} />
-            </Field>
+            {user.login !== undefined && (
+              <Field
+                label="Login"
+                required
+                hint="Lotin harflari, raqam, nuqta, chiziqcha (3–50 belgi)."
+                error={errors.login?.message}
+              >
+                <Input autoComplete="off" autoCapitalize="none" spellCheck={false} {...form.register('login')} />
+              </Field>
+            )}
           </fieldset>
           {!disabled && (
             <div className="flex flex-wrap items-center gap-3">
@@ -131,11 +144,11 @@ function ProfileCard({ user, disabled, isSelf }: { user: UserDetail; disabled: b
 function RolesCard({
   user,
   disabled,
-  viewerIsSuperAdmin,
+  viewerRoles,
 }: {
   user: UserDetail;
   disabled: boolean;
-  viewerIsSuperAdmin: boolean;
+  viewerRoles: readonly Role[];
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -148,7 +161,9 @@ function RolesCard({
     setRoles(user.roles);
   }
   // Berish mumkin bo‘lgan rollar va foydalanuvchida bor rollar (masalan, administrator ko‘rayotgan boshqa administrator).
-  const grantable: readonly Role[] = viewerIsSuperAdmin ? [...ADMIN_GRANTABLE_ROLES, 'ADMIN'] : ADMIN_GRANTABLE_ROLES;
+  const grantable = grantableRolesFor(viewerRoles);
+  const viewerIsSuperAdmin = viewerRoles.includes('SUPER_ADMIN');
+  const viewerIsAdmin = viewerIsSuperAdmin || viewerRoles.includes('ADMIN');
   const options = ROLES.filter(
     (role) => role !== 'SUPER_ADMIN' && (grantable.includes(role) || user.roles.includes(role)),
   );
@@ -189,7 +204,11 @@ function RolesCard({
           error={roles.length === 0 ? 'Kamida bitta rol tanlang' : undefined}
         />
         {!viewerIsSuperAdmin && (
-          <p className="text-xs text-slate-500">Administrator va super admin rollarini faqat super admin beradi.</p>
+          <p className="text-xs text-slate-500">
+            {viewerIsAdmin
+              ? 'Administrator va super admin rollarini faqat super admin beradi.'
+              : 'Direktor o‘rinbosari faqat o‘qituvchi va o‘quvchi rollarini beradi. Rahbariyat rolini administrator beradi.'}
+          </p>
         )}
         {!disabled && (
           <div className="flex flex-wrap gap-3">
@@ -212,7 +231,15 @@ function RolesCard({
 
 type EnrollmentDialog = 'transfer' | 'end' | 'enroll' | null;
 
-function EnrollmentsCard({ user, canManage }: { user: UserDetail; canManage: boolean }) {
+function EnrollmentsCard({
+  user,
+  canManage,
+  classHref,
+}: {
+  user: UserDetail;
+  canManage: boolean;
+  classHref: (id: string) => string;
+}) {
   const [dialog, setDialog] = useState<EnrollmentDialog>(null);
   const active: EnrollmentItem | undefined = user.enrollments.find((item) => item.endsOn === null);
   const isStudent = user.roles.includes('STUDENT');
@@ -276,7 +303,7 @@ function EnrollmentsCard({ user, canManage }: { user: UserDetail; canManage: boo
             {user.enrollments.map((item) => (
               <TR key={item.id}>
                 <TD className="whitespace-nowrap">
-                  <Link href={`/admin/classes/${item.class.id}`} className="font-medium text-brand-700 hover:underline">
+                  <Link href={classHref(item.class.id)} className="font-medium text-brand-700 hover:underline">
                     {item.class.name}
                   </Link>
                   {item.endsOn === null && (
@@ -318,18 +345,35 @@ function EnrollmentsCard({ user, canManage }: { user: UserDetail; canManage: boo
 
 // ---------------------------------------------------------------- O‘qituvchi
 
-function TeachingCard({ user }: { user: UserDetail }) {
+function TeachingCard({
+  user,
+  classHref,
+  canManageStructure,
+}: {
+  user: UserDetail;
+  classHref: (id: string) => string;
+  canManageStructure: boolean;
+}) {
   const assignments = user.teachingAssignments ?? [];
   const homeroom = user.homeroomClasses ?? [];
   return (
     <Card>
       <CardHeader
         title="Dars va sinf rahbarligi"
-        description="Joriy o‘quv yili bo‘yicha"
+        description={
+          canManageStructure
+            ? 'Joriy o‘quv yili bo‘yicha'
+            : 'Joriy o‘quv yili bo‘yicha. Fan va sinflarga biriktirishni administrator boshqaradi.'
+        }
         actions={
-          <Link href="/admin/structure?tab=assignments" className="text-sm font-medium text-brand-700 hover:underline">
-            Biriktirishlarni boshqarish
-          </Link>
+          canManageStructure ? (
+            <Link
+              href="/admin/structure?tab=assignments"
+              className="text-sm font-medium text-brand-700 hover:underline"
+            >
+              Biriktirishlarni boshqarish
+            </Link>
+          ) : undefined
         }
       />
       <CardBody className="space-y-4">
@@ -342,7 +386,7 @@ function TeachingCard({ user }: { user: UserDetail }) {
               {homeroom.map((item) => (
                 <li key={item.id}>
                   <Link
-                    href={`/admin/classes/${item.id}`}
+                    href={classHref(item.id)}
                     className="inline-flex rounded-md bg-brand-50 px-2 py-1 text-sm font-medium text-brand-700 hover:underline"
                   >
                     {item.name}
@@ -361,7 +405,7 @@ function TeachingCard({ user }: { user: UserDetail }) {
               {assignments.map((item) => (
                 <li key={item.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <span className="text-slate-900">{item.subject.name}</span>
-                  <Link href={`/admin/classes/${item.class.id}`} className="font-medium text-brand-700 hover:underline">
+                  <Link href={classHref(item.class.id)} className="font-medium text-brand-700 hover:underline">
                     {item.class.name}
                   </Link>
                 </li>
@@ -377,6 +421,8 @@ function TeachingCard({ user }: { user: UserDetail }) {
 // ---------------------------------------------------------------- Sahifa
 
 function AccountInfoCard({ user }: { user: UserDetail }) {
+  // Kirish ma’lumotlari faqat hisobni boshqara oladiganlarga (va administratorga) keladi.
+  const credentials = user.login !== undefined;
   return (
     <Card>
       <CardHeader title="Hisob" />
@@ -387,30 +433,41 @@ function AccountInfoCard({ user }: { user: UserDetail }) {
               label: 'Ichki ID',
               value: <span className="font-mono tabular">{formatInternalId(user.internalId)}</span>,
             },
-            { label: 'Login', value: <span className="font-mono">{user.login ?? '—'}</span> },
+            ...(credentials ? [{ label: 'Login', value: <span className="font-mono">{user.login}</span> }] : []),
             { label: 'Yaratilgan', value: formatDateTime(user.createdAt) },
             { label: 'Oxirgi kirish', value: user.lastLoginAt ? formatDateTime(user.lastLoginAt) : 'Hali kirmagan' },
             { label: 'Oxirgi faollik', value: user.lastActiveAt ? formatDateTime(user.lastActiveAt) : '—' },
-            {
-              label: 'Parol',
-              value: user.mustChangePassword ? (
-                <Badge tone="amber">Vaqtinchalik, almashtirilmagan</Badge>
-              ) : (
-                'Foydalanuvchi o‘rnatgan'
-              ),
-            },
-            {
-              label: 'Ikki bosqichli kirish',
-              value: user.mfaEnabled ? <Badge tone="green">Yoqilgan</Badge> : <Badge tone="gray">O‘chirilgan</Badge>,
-            },
-            {
-              label: 'Blok',
-              value: user.lockedUntil ? <Badge tone="red">{formatDateTime(user.lockedUntil)} gacha</Badge> : 'Yo‘q',
-            },
           ]}
         />
+        {credentials && <CredentialInfo user={user} />}
       </CardBody>
     </Card>
+  );
+}
+
+function CredentialInfo({ user }: { user: UserDetail }) {
+  return (
+    <InfoList
+      className="mt-2.5 border-t border-slate-100 pt-2.5"
+      items={[
+        {
+          label: 'Parol',
+          value: user.mustChangePassword ? (
+            <Badge tone="amber">Vaqtinchalik, almashtirilmagan</Badge>
+          ) : (
+            'Foydalanuvchi o‘rnatgan'
+          ),
+        },
+        {
+          label: 'Ikki bosqichli kirish',
+          value: user.mfaEnabled ? <Badge tone="green">Yoqilgan</Badge> : <Badge tone="gray">O‘chirilgan</Badge>,
+        },
+        {
+          label: 'Blok',
+          value: user.lockedUntil ? <Badge tone="red">{formatDateTime(user.lockedUntil)} gacha</Badge> : 'Yo‘q',
+        },
+      ]}
+    />
   );
 }
 
@@ -435,16 +492,23 @@ function UserDetailView() {
   }
 
   const user = query.data;
-  const viewerIsSuperAdmin = hasRole(me, 'SUPER_ADMIN');
+  const viewerIsAdmin = hasRole(me, 'ADMIN', 'SUPER_ADMIN');
   const isSelf = me?.id === user.id;
-  const manageable = viewerIsSuperAdmin || user.roles.every((role) => ADMIN_GRANTABLE_ROLES.includes(role));
-  const canManage = manageable && !isSelf;
+  // Server hisoblaydi: o‘z hisobi va vakolatdan tashqari rollar (o‘rinbosar uchun rahbariyat, administrator) — yo‘q.
+  const canManage = user.manageable;
+  // Direktor o‘rinbosari administrator sahifalariga emas, o‘qituvchi bo‘limidagi sinf sahifasiga o‘tadi.
+  const classHref = (classId: string) => (viewerIsAdmin ? `/admin/classes/${classId}` : `/teacher/classes/${classId}`);
 
   return (
     <div className="space-y-6">
       <PageHeader
         back={<BackLink href="/admin/users">Foydalanuvchilar</BackLink>}
-        title={user.fullName}
+        title={
+          <span className="flex items-center gap-3">
+            <Avatar name={user.fullName} src={user.avatarUrl} size="lg" />
+            <span className="min-w-0">{user.fullName}</span>
+          </span>
+        }
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
             <span className="font-mono tabular">ID {formatInternalId(user.internalId)}</span>
@@ -460,29 +524,35 @@ function UserDetailView() {
           </span>
         }
         actions={
-          <ButtonLink
-            href={`/admin/audit?entityType=User&entityId=${user.id}`}
-            variant="outline"
-            size="sm"
-            icon={<ScrollText className="size-4" aria-hidden />}
-          >
-            Audit jurnali
-          </ButtonLink>
+          <>
+            {user.avatarUrl && canManage && <RemoveAvatarButton user={user} />}
+            <ButtonLink
+              href={`/admin/audit?entityType=User&entityId=${user.id}`}
+              variant="outline"
+              size="sm"
+              icon={<ScrollText className="size-4" aria-hidden />}
+            >
+              Audit jurnali
+            </ButtonLink>
+          </>
         }
       />
 
       {isSelf && (
         <Alert tone="info" title="Bu sizning hisobingiz">
-          Parol, sessiyalar va ikki bosqichli kirish{' '}
+          Parol, profil rasmi, sessiyalar va ikki bosqichli kirish{' '}
           <Link href="/profile" className="font-medium underline">
             “Mening hisobim”
           </Link>{' '}
           sahifasida boshqariladi. Rollar, holat, blok va o‘chirish amallari o‘z hisobingiz uchun bajarilmaydi.
+          {!viewerIsAdmin && ' Ism-familiya yoki loginda xato bo‘lsa, administratorga murojaat qiling.'}
         </Alert>
       )}
-      {!manageable && !isSelf && (
+      {!canManage && !isSelf && (
         <Alert tone="warning" title="Faqat ko‘rish">
-          Administrator hisoblarini faqat super admin boshqaradi.
+          {viewerIsAdmin
+            ? 'Administrator hisoblarini faqat super admin boshqaradi.'
+            : 'Direktor o‘rinbosari faqat o‘qituvchi va o‘quvchi hisoblarini boshqaradi. Bu hisob bo‘yicha administratorga murojaat qiling.'}
         </Alert>
       )}
       {user.lockedUntil && (
@@ -499,12 +569,14 @@ function UserDetailView() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <ProfileCard user={user} disabled={!manageable && !isSelf} isSelf={isSelf} />
-          <RolesCard user={user} disabled={!canManage} viewerIsSuperAdmin={viewerIsSuperAdmin} />
+          <ProfileCard user={user} disabled={!canManage && !(isSelf && viewerIsAdmin)} isSelf={isSelf} />
+          <RolesCard user={user} disabled={!canManage} viewerRoles={me?.roles ?? []} />
           {(user.roles.includes('STUDENT') || user.enrollments.length > 0) && (
-            <EnrollmentsCard user={user} canManage={canManage} />
+            <EnrollmentsCard user={user} canManage={canManage} classHref={classHref} />
           )}
-          {user.roles.includes('TEACHER') && <TeachingCard user={user} />}
+          {user.roles.includes('TEACHER') && (
+            <TeachingCard user={user} classHref={classHref} canManageStructure={viewerIsAdmin} />
+          )}
         </div>
         <div className="space-y-6">
           <AccountInfoCard user={user} />
@@ -521,7 +593,7 @@ function UserDetailView() {
 
 export default function UserDetailPage() {
   return (
-    <RequireRole roles={['ADMIN', 'SUPER_ADMIN']}>
+    <RequireRole roles={['DEPUTY', 'ADMIN', 'SUPER_ADMIN']}>
       <UserDetailView />
     </RequireRole>
   );

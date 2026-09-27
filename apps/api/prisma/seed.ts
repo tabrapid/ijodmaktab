@@ -7,18 +7,24 @@
  * DIQQAT: haqiqiy maktab bazasida ishlatmang.
  */
 import 'dotenv/config';
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt, randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
   gradeAttempt,
   normalizeForSearch,
+  portfolioDetailsSummary,
   userSearchText,
+  type AchievementLevel,
   type Category,
   type GradableQuestion,
+  type PortfolioItemType,
   type Role,
 } from '@ijod/shared';
 import { hashPassword } from '../src/auth/passwords.js';
 import { PrismaClient, type Prisma } from '../src/generated/prisma/client.js';
+import { snapshotOf } from '../src/portfolio/portfolio-common.js';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL ?? '' }),
@@ -44,7 +50,9 @@ async function main() {
 
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
-  await prisma.school.create({ data: { id: 1, name: 'Ijod maktabi', shortName: 'Ijod maktabi' } });
+  await prisma.school.create({
+    data: { id: 1, name: 'Hamid Olimjon va Zulfiya ijod maktabi', shortName: 'Ijod maktabi' },
+  });
 
   const year = await prisma.academicYear.create({
     data: {
@@ -177,6 +185,7 @@ async function main() {
       ['Ahmedova', 'Kamola', 'Rashidovna'],
       ['Nurmatov', 'Eldor', 'Hasanovich'],
       ['Saidova', 'Munisa', 'Anvarovna'],
+      ['Abduganiyev', 'Jaloliddin', 'Baxtiyorovich'],
     ],
   };
 
@@ -318,6 +327,9 @@ async function main() {
       academicYearId: year.id,
       tags: ['algebra', 'nazorat ishi'],
       status: 'ACTIVE',
+      // Maktab test bankida: barcha o‘qituvchilar muzlatilgan v1 ni ko‘radi va o‘tkaza oladi.
+      visibility: 'SCHOOL',
+      schoolSharedAt: new Date(),
       searchText: normalizeForSearch('Algebra: kvadrat tenglamalar (1-bob) Kvadrat tenglamalar'),
     },
   });
@@ -512,45 +524,146 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- Portfolio
-  const zebo = studentsByClass[class9A.id]![1]!;
-  await prisma.portfolioItem.create({
-    data: {
-      ownerId: zebo.id,
-      type: 'POEM',
-      title: '“Kuz ohanglari” she’ri',
-      direction: 'Badiiy ijod',
-      description: 'Maktab devoriy gazetasida chop etilgan she’r.',
-      organization: 'Ijod maktabi',
-      date: new Date('2026-09-20'),
-      level: 'SCHOOL',
-      status: 'APPROVED',
-      reviewerId: karimova.id,
-      reviewedAt: new Date(),
-      submittedAt: new Date(),
-      searchText: normalizeForSearch('Kuz ohanglari she’ri Badiiy ijod'),
-      reviews: {
-        create: {
-          reviewerId: karimova.id,
-          decision: 'APPROVED',
-          snapshot: { title: '“Kuz ohanglari” she’ri', level: 'SCHOOL' },
-        },
+  const storageDir = resolve(process.env.STORAGE_DIR || './storage');
+  await mkdir(join(storageDir, 'files'), { recursive: true });
+
+  /** Demo dalil fayli: kichik haqiqiy PDF (matni lotin harflarida, xref jadvali bilan) yopiq omborga yoziladi. */
+  async function demoPdf(ownerId: string, originalName: string, lines: string[]) {
+    const text = lines
+      .map((line, index) => `BT /F1 ${index === 0 ? 20 : 12} Tf 60 ${770 - index * 28} Td (${line}) Tj ET`)
+      .join('\n');
+    const objects = [
+      '<</Type/Catalog/Pages 2 0 R>>',
+      '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+      '<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>',
+      `<</Length ${Buffer.byteLength(text)}>>stream\n${text}\nendstream`,
+      '<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>',
+    ];
+    let body = '%PDF-1.4\n';
+    const offsets: number[] = [];
+    objects.forEach((object, index) => {
+      offsets.push(Buffer.byteLength(body));
+      body += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    });
+    const xref = Buffer.byteLength(body);
+    body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    body += offsets.map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('');
+    body += `trailer\n<</Size ${objects.length + 1}/Root 1 0 R>>\nstartxref\n${xref}\n%%EOF\n`;
+    const pdf = Buffer.from(body, 'latin1');
+    const storageKey = `${randomUUID()}.pdf`;
+    await writeFile(join(storageDir, 'files', storageKey), pdf, { mode: 0o600 });
+    return prisma.fileAsset.create({
+      data: {
+        ownerId,
+        storageKey,
+        originalName,
+        mimeType: 'application/pdf',
+        sizeBytes: pdf.length,
+        sha256: createHash('sha256').update(pdf).digest('hex'),
       },
-    },
+    });
+  }
+
+  const daysAgo = (days: number) => new Date(now - days * 24 * 60 * 60_000);
+
+  interface DemoItem {
+    ownerId: string;
+    type: PortfolioItemType;
+    title: string;
+    subject?: string;
+    organization?: string;
+    date: string;
+    level?: AchievementLevel;
+    details?: Record<string, unknown>;
+    result?: string;
+    description?: string;
+    direction?: string;
+    file?: { name: string; lines: string[] };
+    status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'RETURNED';
+    reviewerId?: string;
+    returnReason?: string;
+    /** Necha kun oldin tekshiruvga yuborilgan (va ko‘rib chiqilgan). */
+    sentDaysAgo?: number;
+  }
+
+  /** Portfolio yozuvi: tuzilgan turlarda natija details dan yasaladi, qarorlar to‘liq snapshot bilan saqlanadi. */
+  async function addPortfolio(input: DemoItem) {
+    const file = input.file ? await demoPdf(input.ownerId, input.file.name, input.file.lines) : null;
+    const result = input.details ? portfolioDetailsSummary(input.type, input.details) : (input.result ?? null);
+    const sentAt = daysAgo(input.sentDaysAgo ?? 3);
+    const reviewed = input.status === 'APPROVED' || input.status === 'RETURNED';
+    const item = await prisma.portfolioItem.create({
+      data: {
+        ownerId: input.ownerId,
+        type: input.type,
+        title: input.title,
+        subjectId: input.subject ? subjects[input.subject]!.id : null,
+        direction: input.direction ?? null,
+        description: input.description ?? null,
+        organization: input.organization ?? null,
+        date: new Date(input.date),
+        level: input.level ?? null,
+        result,
+        details: (input.details ?? undefined) as Prisma.InputJsonValue | undefined,
+        evidenceFileId: file?.id ?? null,
+        status: input.status,
+        submittedAt: input.status === 'DRAFT' ? null : sentAt,
+        reviewerId: reviewed ? input.reviewerId : null,
+        reviewedAt: reviewed ? new Date(sentAt.getTime() + 26 * 60 * 60_000) : null,
+        returnReason: input.status === 'RETURNED' ? input.returnReason : null,
+        searchText: normalizeForSearch(
+          [input.title, input.direction, input.organization, result].filter(Boolean).join(' '),
+        ),
+      },
+      include: { subject: { select: { name: true } }, evidenceFile: { select: { originalName: true } } },
+    });
+    if (reviewed) {
+      await prisma.portfolioReview.create({
+        data: {
+          itemId: item.id,
+          reviewerId: input.reviewerId!,
+          decision: input.status,
+          reason: input.status === 'RETURNED' ? input.returnReason : null,
+          snapshot: snapshotOf(item) as Prisma.InputJsonValue,
+          createdAt: item.reviewedAt!,
+        },
+      });
+    }
+    return item;
+  }
+
+  const student = (login: string) => prisma.user.findUniqueOrThrow({ where: { login } });
+
+  // Zebo (9-A): tasdiqlangan she’r va tekshiruvdagi olimpiada.
+  const zebo = studentsByClass[class9A.id]![1]!;
+  await addPortfolio({
+    ownerId: zebo.id,
+    type: 'POEM',
+    title: '“Kuz ohanglari” she’ri',
+    direction: 'Badiiy ijod',
+    description: 'Maktab devoriy gazetasida chop etilgan she’r.',
+    organization: 'Ijod maktabi',
+    date: '2026-09-20',
+    level: 'SCHOOL',
+    status: 'APPROVED',
+    reviewerId: karimova.id,
+    sentDaysAgo: 5,
   });
-  await prisma.portfolioItem.create({
-    data: {
-      ownerId: zebo.id,
-      type: 'OLYMPIAD',
-      title: 'Matematika fan olimpiadasi, tuman bosqichi',
-      subjectId: subjects['Matematika']!.id,
-      organization: 'Tuman xalq ta’limi bo‘limi',
-      date: new Date('2026-09-25'),
-      level: 'DISTRICT',
-      result: '2-o‘rin',
-      status: 'SUBMITTED',
-      submittedAt: new Date(),
-      searchText: normalizeForSearch('Matematika fan olimpiadasi, tuman bosqichi'),
+  await addPortfolio({
+    ownerId: zebo.id,
+    type: 'OLYMPIAD',
+    title: 'Matematika fan olimpiadasi, tuman bosqichi',
+    subject: 'Matematika',
+    organization: 'Tuman xalq ta’limi bo‘limi',
+    date: '2026-09-25',
+    level: 'DISTRICT',
+    details: { subject: 'Matematika', place: 'SECOND' },
+    file: {
+      name: 'olimpiada-diplom.pdf',
+      lines: ['Diplom (DEMO)', 'Matematika fan olimpiadasi, tuman bosqichi', "2-o'rin"],
     },
+    status: 'SUBMITTED',
+    sentDaysAgo: 1,
   });
   await prisma.portfolioItem.create({
     data: {
@@ -566,12 +679,282 @@ async function main() {
     },
   });
 
+  // Jaloliddin Abduganiyev (10-A): xalqaro va milliy sertifikatlar, olimpiada; ikkita yozuv tekshiruvda.
+  const jaloliddin = await student('jaloliddin.abduganiyev');
+  await addPortfolio({
+    ownerId: jaloliddin.id,
+    type: 'IELTS',
+    title: 'IELTS Academic — 7.5',
+    organization: 'British Council',
+    date: '2026-06-13',
+    level: 'INTERNATIONAL',
+    details: {
+      testType: 'ACADEMIC',
+      overall: 7.5,
+      listening: 8,
+      reading: 7.5,
+      writing: 6.5,
+      speaking: 7,
+      trfNumber: '26UZ004512ABDJ001A',
+    },
+    file: {
+      name: 'IELTS_TRF_Abduganiyev.pdf',
+      lines: ['IELTS Test Report Form (DEMO)', 'Candidate: Abduganiyev Jaloliddin', 'Academic - Overall band 7.5'],
+    },
+    status: 'APPROVED',
+    reviewerId: rahimov.id,
+    sentDaysAgo: 90,
+  });
+  await addPortfolio({
+    ownerId: jaloliddin.id,
+    type: 'NATIONAL_CERTIFICATE',
+    title: 'Milliy sertifikat — Matematika (A+)',
+    subject: 'Matematika',
+    organization: 'Bilim va malakalarni baholash agentligi',
+    date: '2026-05-20',
+    level: 'NATIONAL',
+    details: {
+      subject: 'Matematika',
+      grade: 'A+',
+      score: 95,
+      certificateNumber: 'MS-2026-104578',
+      validUntil: '2029-05-20',
+    },
+    file: {
+      name: 'milliy-sertifikat-matematika.pdf',
+      lines: ['Milliy sertifikat (DEMO)', 'Abduganiyev Jaloliddin', 'Matematika - A+ (95 ball)'],
+    },
+    status: 'APPROVED',
+    reviewerId: rahimov.id,
+    sentDaysAgo: 110,
+  });
+  await addPortfolio({
+    ownerId: jaloliddin.id,
+    type: 'SAT',
+    title: 'SAT — 1450',
+    organization: 'College Board',
+    date: '2026-03-14',
+    level: 'INTERNATIONAL',
+    details: { total: 1450, readingWriting: 720, math: 730 },
+    file: { name: 'SAT_score_report.pdf', lines: ['SAT Score Report (DEMO)', 'Total 1450: RW 720, Math 730'] },
+    status: 'APPROVED',
+    reviewerId: deputy.id,
+    sentDaysAgo: 170,
+  });
+  await addPortfolio({
+    ownerId: jaloliddin.id,
+    type: 'OLYMPIAD',
+    title: 'Fizika fan olimpiadasi — viloyat bosqichi',
+    subject: 'Fizika',
+    organization: 'Viloyat maktabgacha va maktab ta’limi boshqarmasi',
+    date: '2026-02-18',
+    level: 'REGION',
+    details: { subject: 'Fizika', place: 'FIRST' },
+    file: {
+      name: 'fizika-olimpiada-diplom.pdf',
+      lines: ['Diplom (DEMO)', 'Fizika fan olimpiadasi, viloyat bosqichi', "1-o'rin"],
+    },
+    status: 'APPROVED',
+    reviewerId: rahimov.id,
+    sentDaysAgo: 200,
+  });
+  // Yangi yozuv: hali hech qachon tasdiqlanmagan.
+  await addPortfolio({
+    ownerId: jaloliddin.id,
+    type: 'CEFR',
+    title: 'CEFR — Ingliz tili (B2)',
+    organization: 'Bilim va malakalarni baholash agentligi',
+    date: '2026-09-10',
+    level: 'NATIONAL',
+    details: {
+      language: 'Ingliz tili',
+      level: 'B2',
+      score: 58,
+      provider: 'Multilevel',
+      certificateNumber: 'ML-2026-33871',
+    },
+    file: { name: 'cefr-b2-sertifikat.pdf', lines: ['CEFR sertifikati (DEMO)', 'Ingliz tili - B2 (Multilevel)'] },
+    status: 'SUBMITTED',
+    sentDaysAgo: 2,
+  });
+  // O‘zgartirilgan yozuv: avval B+ bilan tasdiqlangan, o‘quvchi qayta topshirib A oldi va yangiladi.
+  const previousFile = await demoPdf(jaloliddin.id, 'milliy-ona-tili-2025.pdf', [
+    'Milliy sertifikat (DEMO)',
+    'Ona tili va adabiyot - B+ (78 ball)',
+  ]);
+  const retaken = await addPortfolio({
+    ownerId: jaloliddin.id,
+    type: 'NATIONAL_CERTIFICATE',
+    title: 'Milliy sertifikat — Ona tili va adabiyot (A)',
+    subject: 'Ona tili va adabiyot',
+    organization: 'Bilim va malakalarni baholash agentligi',
+    date: '2026-08-22',
+    level: 'NATIONAL',
+    details: { subject: 'Ona tili va adabiyot', grade: 'A', score: 88, certificateNumber: 'MS-2026-219044' },
+    file: {
+      name: 'milliy-ona-tili-2026.pdf',
+      lines: ['Milliy sertifikat (DEMO)', 'Ona tili va adabiyot - A (88 ball)'],
+    },
+    status: 'SUBMITTED',
+    sentDaysAgo: 1,
+  });
+  await prisma.portfolioReview.create({
+    data: {
+      itemId: retaken.id,
+      reviewerId: rahimov.id,
+      decision: 'APPROVED',
+      createdAt: daysAgo(280),
+      snapshot: {
+        ...snapshotOf({
+          ...retaken,
+          title: 'Milliy sertifikat — Ona tili va adabiyot (B+)',
+          date: new Date('2025-11-29'),
+          result: 'Ona tili va adabiyot — B+ (78 ball)',
+          details: { subject: 'Ona tili va adabiyot', grade: 'B+', score: 78, certificateNumber: 'MS-2025-087310' },
+          evidenceFileId: previousFile.id,
+          evidenceFile: { originalName: previousFile.originalName },
+        }),
+      } as Prisma.InputJsonValue,
+    },
+  });
+
+  // Boshqa o‘quvchilar: katalogda turli natijalar (9-B sinfida hali yozuv yo‘q).
+  const temur = await student('temur.mirzayev');
+  await addPortfolio({
+    ownerId: temur.id,
+    type: 'IELTS',
+    title: 'IELTS Academic — 6.5',
+    organization: 'IDP',
+    date: '2026-04-25',
+    level: 'INTERNATIONAL',
+    details: { testType: 'ACADEMIC', overall: 6.5, listening: 7, reading: 6.5, writing: 6, speaking: 6.5 },
+    file: { name: 'ielts-trf.pdf', lines: ['IELTS Test Report Form (DEMO)', 'Academic - Overall band 6.5'] },
+    status: 'APPROVED',
+    reviewerId: rahimov.id,
+    sentDaysAgo: 140,
+  });
+  await addPortfolio({
+    ownerId: temur.id,
+    type: 'NATIONAL_CERTIFICATE',
+    title: 'Milliy sertifikat — Tarix (B+)',
+    subject: 'Tarix',
+    organization: 'Bilim va malakalarni baholash agentligi',
+    date: '2026-05-27',
+    level: 'NATIONAL',
+    details: { subject: 'Tarix', grade: 'B+', score: 76 },
+    status: 'APPROVED',
+    reviewerId: rahimov.id,
+    sentDaysAgo: 100,
+  });
+  const dilafruz = await student('dilafruz.hamidova');
+  await addPortfolio({
+    ownerId: dilafruz.id,
+    type: 'NATIONAL_CERTIFICATE',
+    title: 'Milliy sertifikat — Ona tili va adabiyot (A+)',
+    subject: 'Ona tili va adabiyot',
+    organization: 'Bilim va malakalarni baholash agentligi',
+    date: '2026-05-20',
+    level: 'NATIONAL',
+    details: { subject: 'Ona tili va adabiyot', grade: 'A+', score: 97 },
+    file: { name: 'milliy-sertifikat.pdf', lines: ['Milliy sertifikat (DEMO)', 'Ona tili va adabiyot - A+ (97 ball)'] },
+    status: 'APPROVED',
+    reviewerId: rahimov.id,
+    sentDaysAgo: 105,
+  });
+  await addPortfolio({
+    ownerId: dilafruz.id,
+    type: 'CONTEST',
+    title: '“Zulfiya izdoshlari” respublika ko‘rik-tanlovi',
+    direction: 'She’riyat',
+    organization: 'O‘zbekiston Yozuvchilar uyushmasi',
+    date: '2026-03-08',
+    level: 'NATIONAL',
+    result: 'Faxriy yorliq',
+    status: 'APPROVED',
+    reviewerId: rahimov.id,
+    sentDaysAgo: 190,
+  });
+  await addPortfolio({
+    ownerId: dilafruz.id,
+    type: 'IELTS',
+    title: 'IELTS Academic — 7.0',
+    organization: 'British Council',
+    date: '2026-09-05',
+    level: 'INTERNATIONAL',
+    details: { testType: 'ACADEMIC', overall: 7, listening: 7.5, reading: 7, writing: 6.5, speaking: 7 },
+    file: { name: 'ielts-7.pdf', lines: ['IELTS Test Report Form (DEMO)', 'Academic - Overall band 7.0'] },
+    status: 'SUBMITTED',
+    sentDaysAgo: 4,
+  });
+  const kamola = await student('kamola.ahmedova');
+  await addPortfolio({
+    ownerId: kamola.id,
+    type: 'SAT',
+    title: 'SAT — 1320',
+    organization: 'College Board',
+    date: '2026-06-06',
+    level: 'INTERNATIONAL',
+    details: { total: 1320, readingWriting: 680, math: 640 },
+    status: 'APPROVED',
+    reviewerId: deputy.id,
+    sentDaysAgo: 80,
+  });
+  await addPortfolio({
+    ownerId: kamola.id,
+    type: 'IELTS',
+    title: 'IELTS General Training — 6.0',
+    organization: 'IDP',
+    date: '2026-09-19',
+    details: { testType: 'GENERAL', overall: 6 },
+    status: 'DRAFT',
+  });
+  const madina = await student('madina.qodirova');
+  await addPortfolio({
+    ownerId: madina.id,
+    type: 'CEFR',
+    title: 'CEFR — Ingliz tili (B1)',
+    organization: 'Bilim va malakalarni baholash agentligi',
+    date: '2026-06-18',
+    level: 'NATIONAL',
+    details: { language: 'Ingliz tili', level: 'B1', provider: 'Multilevel' },
+    status: 'APPROVED',
+    reviewerId: karimova.id,
+    sentDaysAgo: 75,
+  });
+  const sardor = await student('sardor.toshmatov');
+  await addPortfolio({
+    ownerId: sardor.id,
+    type: 'OLYMPIAD',
+    title: 'Informatika fan olimpiadasi — tuman bosqichi',
+    subject: 'Informatika',
+    organization: 'Tuman xalq ta’limi bo‘limi',
+    date: '2026-02-05',
+    level: 'DISTRICT',
+    details: { subject: 'Informatika', place: 'THIRD' },
+    status: 'APPROVED',
+    reviewerId: karimova.id,
+    sentDaysAgo: 210,
+  });
+  await addPortfolio({
+    ownerId: sardor.id,
+    type: 'CERTIFICATE',
+    title: 'Python dasturlash kursi sertifikati',
+    organization: 'IT Park',
+    date: '2026-07-30',
+    result: 'Kurs tugatildi',
+    status: 'RETURNED',
+    reviewerId: karimova.id,
+    returnReason: 'Sertifikat nusxasini (PDF yoki rasm) biriktiring.',
+    sentDaysAgo: 20,
+  });
+
   console.log('Demo ma’lumotlar yaratildi.');
   console.log(`  Parol (barcha demo hisoblar): ${DEMO_PASSWORD}`);
   console.log('  Super admin: superadmin (alohida kirish: /system/login, 2FA sozlash talab qilinadi)');
   console.log('  Administrator: admin · Direktor o‘rinbosari: b.yusupov');
   console.log('  O‘qituvchilar: d.karimova, j.rahimov, m.tursunova');
   console.log('  O‘quvchilar: ali.aliyev, zebo.karimova (9-A), jahongir.abdullayev (9-B) va boshqalar');
+  console.log('  Portfolio namunasi: jaloliddin.abduganiyev (10-A — IELTS, SAT, milliy sertifikatlar, olimpiada)');
   console.log(`  9-A uchun ochiq test kodi: ${DEMO_ACCESS_CODE}`);
 }
 

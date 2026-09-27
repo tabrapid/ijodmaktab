@@ -4,11 +4,13 @@ import {
   formatDateTime,
   fullName,
   gradeAttempt,
+  type AttemptLockReason,
   type AttemptStatus,
   type Blueprint,
   type GradingOverride,
   type SessionState,
   type assignmentChangeSchema,
+  type attemptUnlockSchema,
   type cancelAttemptSchema,
   type createSessionSchema,
   type regradeSchema,
@@ -123,7 +125,7 @@ export class SessionsService {
   // ------------------------------------------------------------ Yaratish (7–10-bosqichlar)
 
   async create(viewer: AuthUser, input: Out<typeof createSessionSchema>) {
-    const template = await this.tests.ensureConductPermission(viewer, input.testId);
+    const { template, permission } = await this.tests.ensureConductPermission(viewer, input.testId);
     const { year, subject, students } = await this.resolveAudience(
       viewer,
       template.subjectId,
@@ -145,11 +147,13 @@ export class SessionsService {
 
     const session = await this.prisma.$transaction(
       async (tx) => {
-        const version = await this.tests.freezeForSession(tx, viewer, template.id);
+        // Tahrirlovchi qoralamani muzlatadi; bank/nusxa huquqi tayyor versiyani ishlatadi.
+        const version = await this.tests.freezeForSession(tx, viewer, template.id, permission);
         const created = await tx.assessmentSession.create({
           data: {
             testVersionId: version.id,
-            title: input.title ?? template.title,
+            // Sukut bo‘yicha — sessiyadagi versiya nomi (muallifning tugallanmagan qoralamasi emas).
+            title: input.title ?? version.title,
             subjectId: template.subjectId,
             academicYearId: year.id,
             createdById: viewer.id,
@@ -741,6 +745,55 @@ export class SessionsService {
     return { ok: true };
   }
 
+  /**
+   * To‘xtatilgan (to‘liq ekrandan chiqqan) urinishga qayta ruxsat berish. Ixtiyoriy qo‘shimcha
+   * daqiqa “Vaqt qo‘shish” bilan bir xil qo‘llanadi: tayinlovga va urinish muddatiga.
+   */
+  async unlockAttempt(viewer: AuthUser, attemptId: string, input: Out<typeof attemptUnlockSchema>) {
+    const attempt = await this.prisma.attempt.findUnique({ where: { id: attemptId }, include: { session: true } });
+    if (!attempt || !this.access.canManageSession(viewer, attempt.session)) throw notFound('Urinish');
+    await this.prisma.$transaction(async (tx) => {
+      const status = await this.grading.lockAttempt(tx, attemptId);
+      if (status !== 'IN_PROGRESS') throw conflict('ATTEMPT_FINISHED', 'Bu urinish allaqachon yakunlangan.');
+      const current = await tx.attempt.findUniqueOrThrow({ where: { id: attemptId } });
+      if (!current.lockedAt) throw conflict('NOT_LOCKED', 'Bu urinish to‘xtatilmagan — ruxsat berish shart emas.');
+      const now = new Date();
+      let newDeadline: Date | null = null;
+      if (input.extraMinutes > 0) {
+        await tx.sessionAssignment.update({
+          where: { id: current.assignmentId },
+          data: { extraMinutes: { increment: input.extraMinutes } },
+        });
+        newDeadline = new Date(current.deadlineAt.getTime() + input.extraMinutes * 60_000);
+      }
+      await tx.attempt.update({
+        where: { id: attemptId },
+        data: {
+          lockedAt: null,
+          lockReason: null,
+          unlockedAt: now,
+          unlockedById: viewer.id,
+          ...(newDeadline ? { deadlineAt: newDeadline } : {}),
+        },
+      });
+      await this.audit.log(
+        'attempt.unlocked',
+        { type: 'Attempt', id: attemptId },
+        {
+          sessionId: attempt.sessionId,
+          studentId: attempt.studentId,
+          lockReason: current.lockReason,
+          lockedForMs: now.getTime() - current.lockedAt.getTime(),
+          extraMinutes: input.extraMinutes,
+          note: input.note ?? null,
+          newDeadline,
+        },
+        { tx },
+      );
+    });
+    return this.live(viewer, attempt.sessionId);
+  }
+
   // ------------------------------------------------------------ Jonli kuzatuv
 
   async live(viewer: AuthUser, id: string) {
@@ -750,7 +803,16 @@ export class SessionsService {
       this.prisma.sessionAssignment.findMany({
         where: { sessionId: id, removedAt: null },
         include: {
-          student: { select: { id: true, internalId: true, lastName: true, firstName: true, middleName: true } },
+          student: {
+            select: {
+              id: true,
+              internalId: true,
+              lastName: true,
+              firstName: true,
+              middleName: true,
+              avatarFileId: true,
+            },
+          },
           class: { select: { id: true, name: true } },
           attempts: {
             orderBy: { attemptNo: 'desc' },
@@ -761,7 +823,15 @@ export class SessionsService {
       this.prisma.testQuestion.count({ where: { testVersionId: session.testVersionId } }),
     ]);
 
-    const counts = { assigned: 0, notStarted: 0, inProgress: 0, finished: 0, connectionIssue: 0, cancelled: 0 };
+    const counts = {
+      assigned: 0,
+      notStarted: 0,
+      inProgress: 0,
+      finished: 0,
+      connectionIssue: 0,
+      cancelled: 0,
+      locked: 0,
+    };
     const rows = assignments
       .map((assignment) => {
         const latest = assignment.attempts[0] ?? null;
@@ -769,16 +839,20 @@ export class SessionsService {
         const lastSignal = latest ? (latest.lastSeenAt ?? latest.startedAt).getTime() : null;
         const connectionIssue =
           status === 'IN_PROGRESS' && lastSignal !== null && now - lastSignal > CONNECTION_ISSUE_MS;
+        // To‘xtatilgan: o‘quvchi to‘liq ekrandan chiqqan, o‘qituvchi ruxsatini kutmoqda.
+        const locked = status === 'IN_PROGRESS' && Boolean(latest?.lockedAt);
         counts.assigned += 1;
         if (status === 'NOT_STARTED') counts.notStarted += 1;
         else if (status === 'IN_PROGRESS') counts.inProgress += 1;
         else if (status === 'CANCELLED') counts.cancelled += 1;
         else counts.finished += 1;
         if (connectionIssue) counts.connectionIssue += 1;
+        if (locked) counts.locked += 1;
         return {
           studentId: assignment.student.id,
           internalId: assignment.student.internalId,
           fullName: fullName(assignment.student),
+          avatarUrl: assignment.student.avatarFileId ? `/api/files/${assignment.student.avatarFileId}` : null,
           className: assignment.class?.name ?? null,
           status,
           attemptId: latest?.id ?? null,
@@ -794,9 +868,16 @@ export class SessionsService {
           focusLossCount: latest?.focusLossCount ?? 0,
           deviceChangeCount: latest?.deviceChangeCount ?? 0,
           extraMinutes: assignment.extraMinutes,
+          lockedAt: locked ? latest!.lockedAt : null,
+          lockReason: locked ? ((latest!.lockReason ?? 'FULLSCREEN_EXIT') as AttemptLockReason) : null,
+          lockCount: latest?.lockCount ?? 0,
         };
       })
-      .sort((a, b) => a.fullName.localeCompare(b.fullName, 'uz'));
+      // Ruxsat kutayotganlar ro‘yxat boshida turadi.
+      .sort(
+        (a, b) =>
+          Number(Boolean(b.lockedAt)) - Number(Boolean(a.lockedAt)) || a.fullName.localeCompare(b.fullName, 'uz'),
+      );
 
     return {
       sessionId: id,

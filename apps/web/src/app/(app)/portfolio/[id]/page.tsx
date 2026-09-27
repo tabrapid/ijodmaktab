@@ -1,7 +1,18 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Check, FileQuestion, Pencil, Printer, Send, Trash2, Undo2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  FileQuestion,
+  FolderOpen,
+  GitCompare,
+  Pencil,
+  Printer,
+  Send,
+  Trash2,
+  Undo2,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
@@ -14,9 +25,13 @@ import {
   formatInternalId,
 } from '@ijod/shared';
 import { RequireRole } from '@/components/app-shell';
+import { Avatar } from '@/components/avatar';
+import { DetailsView } from '@/components/portfolio/details-view';
 import { AuthorshipNote, EvidenceLinks, LevelBadge, ReturnReasonAlert } from '@/components/portfolio/parts';
+import { ChangeKindBadge } from '@/components/portfolio/pending-item';
 import { PortfolioFormDialog } from '@/components/portfolio/portfolio-form';
 import { usePortfolioActions } from '@/components/portfolio/queries';
+import { ChangesTable } from '@/components/portfolio/review-diff';
 import { ReviewDialog, type ReviewTarget } from '@/components/portfolio/review-dialog';
 import {
   canDeleteItem,
@@ -68,9 +83,15 @@ function statusExplanation(item: PortfolioItemView) {
 
 function backLink(item: PortfolioItemView | undefined, me: Me | undefined) {
   if (!item || item.isMine) return { href: '/portfolio', label: 'Portfoliom' };
-  if (item.canReview) return { href: '/portfolio/review', label: 'Tasdiqlash navbati' };
-  if (hasRole(me, 'DEPUTY', 'SUPER_ADMIN')) return { href: '/management/portfolio', label: 'Maktab portfoliosi' };
-  return { href: '/portfolio/review', label: 'Tasdiqlash navbati' };
+  const leadership = hasRole(me, 'DEPUTY', 'SUPER_ADMIN');
+  const owner = encodeURIComponent(item.owner.id);
+  // Tekshiruvchi — shu o‘quvchining tekshiruv navbatiga qaytadi.
+  if (item.canReview) {
+    return leadership
+      ? { href: `/management/portfolio?tab=review&owner=${owner}`, label: 'Tasdiqlash navbati' }
+      : { href: `/portfolio/review?owner=${owner}`, label: 'Tasdiqlash navbati' };
+  }
+  return { href: `/portfolio/students/${owner}`, label: `${item.owner.fullName} portfoliosi` };
 }
 
 function ItemDetail() {
@@ -184,6 +205,7 @@ function ItemDetail() {
         description={
           <span className="mt-1 flex flex-wrap items-center gap-2">
             <PortfolioStatusBadge status={item.status} />
+            {item.canReview && <ChangeKindBadge item={item} />}
             <Badge tone="gray">{item.typeLabel}</Badge>
             {item.level && <LevelBadge level={item.level} />}
           </span>
@@ -201,8 +223,35 @@ function ItemDetail() {
       {item.status === 'RETURNED' && <ReturnReasonAlert reason={item.returnReason} />}
       {item.canReview && (
         <Alert tone="info" title="Yozuv sizning tasdiqlashingizni kutmoqda">
-          Dalilni ko‘rib chiqing va yozuvni tasdiqlang yoki sababini yozib tuzatishga qaytaring.
+          {item.changeKind === 'CHANGED'
+            ? 'Yozuv avval tasdiqlangan, keyin o‘zgartirilgan. Quyidagi farqlarni va dalilni ko‘rib chiqing.'
+            : 'Yangi yozuv. Dalilni ko‘rib chiqing va yozuvni tasdiqlang yoki sababini yozib tuzatishga qaytaring.'}
         </Alert>
+      )}
+      {item.canReview && item.wasReturned && (
+        <Alert tone="warning" title="Avval tuzatishga qaytarilgan">
+          {item.lastReturnReason ? `Sabab: ${item.lastReturnReason}` : 'Sabab ko‘rsatilmagan.'}
+        </Alert>
+      )}
+      {item.canReview && item.changeKind === 'CHANGED' && (
+        <Card>
+          <CardHeader
+            title={
+              <span className="inline-flex items-center gap-2">
+                <GitCompare className="size-4 text-amber-600" aria-hidden />
+                Nima o‘zgardi
+              </span>
+            }
+            description={
+              item.lastApprovedAt
+                ? `Oxirgi tasdiqlangan holat (${formatDate(item.lastApprovedAt)}) bilan solishtirildi.`
+                : 'Oxirgi tasdiqlangan holat bilan solishtirildi.'
+            }
+          />
+          <CardBody>
+            <ChangesTable changes={item.changes ?? []} type={item.type} />
+          </CardBody>
+        </Card>
       )}
       {item.isMine && item.status === 'SUBMITTED' && isReviewer && (
         <Alert tone="info">
@@ -216,12 +265,19 @@ function ItemDetail() {
           <CardBody className="py-1">
             <dl className="divide-y divide-slate-100">
               <DetailRow label="Turi">{item.typeLabel}</DetailRow>
+              {item.details && (
+                <DetailRow label={item.type === 'OLYMPIAD' ? 'Olimpiada natijasi' : 'Sertifikat ma’lumotlari'}>
+                  <DetailsView type={item.type} details={item.details} />
+                </DetailRow>
+              )}
               <DetailRow label="Fan">{item.subject?.name ?? empty}</DetailRow>
               <DetailRow label="Yo‘nalish">{item.direction ?? empty}</DetailRow>
               <DetailRow label="Tashkilot">{item.organization ?? empty}</DetailRow>
               <DetailRow label="Sana">{item.date ? formatDate(item.date) : empty}</DetailRow>
               <DetailRow label="Bosqich">{item.level ? <LevelBadge level={item.level} /> : empty}</DetailRow>
-              <DetailRow label="Natija yoki o‘rin">{item.result ?? empty}</DetailRow>
+              <DetailRow label={item.details ? 'Natija (avtomatik)' : 'Natija yoki o‘rin'}>
+                {item.result ?? empty}
+              </DetailRow>
               <DetailRow label="Dalil">
                 <EvidenceLinks file={item.evidenceFile} url={item.evidenceUrl} />
               </DetailRow>
@@ -284,13 +340,25 @@ function ItemDetail() {
           <Card>
             <CardHeader title="Egasi" />
             <CardBody className="space-y-1 text-sm">
-              <p className="font-medium text-slate-900">{item.owner.fullName}</p>
+              <div className="flex items-center gap-3">
+                <Avatar name={item.owner.fullName} src={item.owner.avatarUrl} size="md" />
+                <p className="font-medium text-slate-900">{item.owner.fullName}</p>
+              </div>
               <p className="text-slate-600">
                 {item.owner.className
                   ? `${item.owner.className} sinf`
                   : item.owner.roles.map((role) => ROLE_LABELS[role]).join(', ')}
               </p>
               <p className="text-xs text-slate-500 tabular">Ichki ID: {formatInternalId(item.owner.internalId)}</p>
+              {!item.isMine && isReviewer && (
+                <Link
+                  href={`/portfolio/students/${item.owner.id}`}
+                  className="inline-flex items-center gap-1 pt-1 text-sm font-medium text-brand-700 hover:underline"
+                >
+                  <FolderOpen className="size-4" aria-hidden />
+                  To‘liq portfolio
+                </Link>
+              )}
             </CardBody>
           </Card>
 

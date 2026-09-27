@@ -84,6 +84,7 @@ export class SessionService {
       mustChangePassword: user.mustChangePassword,
       mfaEnabled: Boolean(user.totpEnabledAt),
       mfaVerified: Boolean(session.mfaVerifiedAt),
+      avatarFileId: user.avatarFileId,
     };
   }
 

@@ -1,22 +1,76 @@
 @import 'tailwindcss';
 
+/* Qorong‘u rejim: <html class="dark"> — sinfni layout.tsx dagi skript va lib/theme.ts boshqaradi. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
+  /* Shriftlar o‘zimizda (fontsource): interfeys — Manrope, sarlavha va katta raqamlar — Fraunces. */
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+    'Manrope Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue',
+    Arial, sans-serif;
+  --font-display:
+    'Fraunces Variable', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
 
-  /* Asosiy rang (tugmalar, havolalar, faol holat). */
-  --color-brand-50: #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-200: #c7d2fe;
-  --color-brand-300: #a5b4fc;
-  --color-brand-400: #818cf8;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
-  --color-brand-800: #3730a3;
-  --color-brand-900: #312e81;
+  /* Asosiy rang — logotipdagi qirollik ko‘ki (#133890). Oq matn brand-600 ustida 7,1:1. */
+  --color-brand-50: #eef3fd;
+  --color-brand-100: #dce6fb;
+  --color-brand-200: #bccff6;
+  --color-brand-300: #8fadef;
+  --color-brand-400: #5d86e3;
+  --color-brand-500: #3563d4;
+  --color-brand-600: #2450bd;
+  --color-brand-700: #1d429c;
+  --color-brand-800: #173680;
+  --color-brand-900: #142c63;
+  --color-brand-950: #0d1b3e;
 
-  /* Karta va panellar yuzasi (qorong‘u rejimda to‘q rangga almashadi; bg-white o‘rniga ishlatiladi). */
+  /* Urg‘u — logotip nurlaridagi mis/shaftoli (#C79065). Matn sifatida faqat 700+ (yorug‘ fonda). */
+  --color-accent-50: #fdf6ef;
+  --color-accent-100: #fcead9;
+  --color-accent-200: #f8d5b7;
+  --color-accent-300: #edbc94;
+  --color-accent-400: #dda679;
+  --color-accent-500: #c79065;
+  --color-accent-600: #ac7046;
+  --color-accent-700: #8b532f;
+  --color-accent-800: #6d4025;
+  --color-accent-900: #56331f;
+  --color-accent-950: #311c0f;
+
+  /* Yaproq — logotipdagi barglar (#6DA14F): o‘sish va yutuq bezaklari. */
+  --color-leaf-50: #f1faed;
+  --color-leaf-100: #e0f4d5;
+  --color-leaf-200: #c4e7b1;
+  --color-leaf-300: #a2d287;
+  --color-leaf-400: #84ba65;
+  --color-leaf-500: #6da14f;
+  --color-leaf-600: #538439;
+  --color-leaf-700: #3e672c;
+  --color-leaf-800: #305224;
+  --color-leaf-900: #27411e;
+  --color-leaf-950: #13240f;
+
+  /* Siyoh — to‘q ko‘k; ikkala rejimda ham o‘zgarmaydi (yon panel, kirish paneli, qoplamalar, kod bloklari). */
+  --color-ink-50: #f2f4fa;
+  --color-ink-100: #e3e7f2;
+  --color-ink-200: #c4cce2;
+  --color-ink-300: #9ba7c9;
+  --color-ink-400: #7282b0;
+  --color-ink-500: #4d6095;
+  --color-ink-600: #2c4380;
+  --color-ink-700: #173168;
+  --color-ink-800: #101f48;
+  --color-ink-900: #0b1633;
+  --color-ink-950: #070d20;
+
+  /* Neytral: chegaralar va xira matn standartdan biroz to‘qroq (oq fonda 1,3:1 va 5,4:1). */
+  --color-slate-200: #dbe2ec;
+  --color-slate-300: #c3cfde;
+  --color-slate-400: #8495ae;
+  --color-slate-500: #5a6c85;
+
+  /* Sahifa foni va karta/panel yuzasi (qorong‘u rejimda almashadi; bg-white o‘rniga bg-surface). */
+  --color-canvas: #f4f6fb;
   --color-surface: #ffffff;
 
   /* Grafiklar (dataviz qoidalari bo‘yicha tekshirilgan qiymatlar). */
@@ -25,27 +79,171 @@
   --color-viz-grid: #e1e0d9;
   --color-viz-axis: #c3c2b7;
   --color-viz-muted: #898781;
+
+  /* Karta va ochiladigan oynalar soyasi (qorong‘u rejimda chegara bilan almashtiriladi). */
+  --shadow-card: 0 1px 2px 0 rgb(11 22 51 / 0.04), 0 1px 3px 0 rgb(11 22 51 / 0.05);
+  --shadow-pop: 0 18px 40px -12px rgb(11 22 51 / 0.28), 0 4px 10px -4px rgb(11 22 51 / 0.1);
 }
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    color-scheme: light;
+    accent-color: var(--color-brand-600);
+    --focus-ring: var(--color-brand-500);
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply bg-canvas text-slate-900 antialiased;
+    font-optical-sizing: auto;
   }
 
   /* Klaviatura bilan boshqarishda fokus doimo ko‘rinadi. */
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-brand-500;
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-brand-500) 26%, transparent);
+  }
+
+  dialog {
+    color: inherit;
   }
 
   dialog::backdrop {
-    background: rgb(15 23 42 / 0.45);
+    background: rgb(7 13 32 / 0.5);
+    backdrop-filter: blur(2px);
+  }
+
+  /*
+   * Qorong‘u rejim: neytral shkala to‘q ko‘k tuslarga to‘liq teskari, rangli shkalalarda 50–300 to‘q tusli,
+   * 400–600 o‘zgarmaydi (oq matnli tugma va nishonlar ishlayveradi), 700–950 och. Qiymatlar faqat ekran
+   * uchun — chop etish doimo yorug‘. Kontrast scratchpad dagi skript bilan tekshirilgan.
+   */
+  @media screen {
+    :root.dark {
+      color-scheme: dark;
+      accent-color: #5d86e3;
+      scrollbar-color: #344263 transparent;
+      --focus-ring: #5d86e3;
+
+      --color-canvas: #0a1020;
+      --color-surface: #111a2e;
+
+      --color-slate-50: #0e1628;
+      --color-slate-100: #1a253d;
+      --color-slate-200: #26324c;
+      --color-slate-300: #344263;
+      --color-slate-400: #6d7c98;
+      --color-slate-500: #9aa8c0;
+      --color-slate-600: #b4c0d4;
+      --color-slate-700: #cdd6e4;
+      --color-slate-800: #e1e7f0;
+      --color-slate-900: #f1f4f9;
+      --color-slate-950: #f8fafc;
+
+      --color-brand-50: #182239;
+      --color-brand-100: #1c2a4a;
+      --color-brand-200: #263962;
+      --color-brand-300: #374e80;
+      --color-brand-700: #8fadef;
+      --color-brand-800: #bccff6;
+      --color-brand-900: #dce6fb;
+      --color-brand-950: #eef3fd;
+
+      --color-accent-50: #2b2018;
+      --color-accent-100: #37281c;
+      --color-accent-200: #4b3525;
+      --color-accent-300: #654933;
+      --color-accent-700: #edbc94;
+      --color-accent-800: #f8d5b7;
+      --color-accent-900: #fcead9;
+      --color-accent-950: #fdf6ef;
+
+      --color-leaf-50: #1c2617;
+      --color-leaf-100: #22301a;
+      --color-leaf-200: #2d4122;
+      --color-leaf-300: #3e592f;
+      --color-leaf-700: #a2d287;
+      --color-leaf-800: #c4e7b1;
+      --color-leaf-900: #e0f4d5;
+      --color-leaf-950: #f1faed;
+
+      --color-red-50: #391715;
+      --color-red-100: #461d1a;
+      --color-red-200: #5c2925;
+      --color-red-300: #793a36;
+      --color-red-700: #ffa2a2;
+      --color-red-800: #ffc9c9;
+      --color-red-900: #ffe2e2;
+      --color-red-950: #fef2f2;
+
+      --color-emerald-50: #0f291c;
+      --color-emerald-100: #0d3322;
+      --color-emerald-200: #0a462d;
+      --color-emerald-300: #135e3f;
+      --color-emerald-700: #5ee9b5;
+      --color-emerald-800: #a4f4cf;
+      --color-emerald-900: #d0fae5;
+      --color-emerald-950: #ecfdf5;
+
+      --color-amber-50: #331d0e;
+      --color-amber-100: #41220d;
+      --color-amber-200: #582e0e;
+      --color-amber-300: #75411b;
+      --color-amber-700: #ffd230;
+      --color-amber-800: #fee685;
+      --color-amber-900: #fef3c6;
+      --color-amber-950: #fffbeb;
+
+      --color-sky-50: #0f2534;
+      --color-sky-100: #0d2e44;
+      --color-sky-200: #0b3f5d;
+      --color-sky-300: #16557b;
+      --color-sky-700: #74d4ff;
+      --color-sky-800: #b8e6fe;
+      --color-sky-900: #dff2fe;
+      --color-sky-950: #f0f9ff;
+
+      --color-violet-50: #241d3b;
+      --color-violet-100: #2d2448;
+      --color-violet-200: #3d325e;
+      --color-violet-300: #53457b;
+      --color-violet-700: #c4b4ff;
+      --color-violet-800: #ddd6ff;
+      --color-violet-900: #ede9fe;
+      --color-violet-950: #f5f3ff;
+
+      --color-viz-series: #3987e5;
+      --color-viz-series-hover: #4795f4;
+      --color-viz-grid: #26314a;
+      --color-viz-axis: #3a4660;
+      --color-viz-muted: #898781;
+    }
+
+    /* Halqa oralig‘i (ring-offset) to‘q yuza rangida bo‘lsin, oq “chegara” chiqmasin. */
+    :root.dark *,
+    :root.dark ::before,
+    :root.dark ::after {
+      --tw-ring-offset-color: #111a2e;
+    }
+
+    :root.dark dialog::backdrop {
+      background: rgb(2 5 14 / 0.66);
+    }
+
+    :root.dark ::selection {
+      background-color: color-mix(in oklab, #5d86e3 40%, transparent);
+    }
   }
 
   @media print {
+    :root {
+      color-scheme: light !important;
+    }
+
     body {
       @apply bg-white;
     }
@@ -54,4 +252,22 @@
 
 @utility tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Logotipdagi quyosh nurlari (faqat bezak, CSS gradient). Markaz: --rays-x/--rays-y, rang: --rays-color,
+ * so‘nish radiusi: --rays-fade. Ota element `relative overflow-hidden` bo‘lishi kerak.
+ */
+@utility rays {
+  background-image: repeating-conic-gradient(
+    from 0deg at var(--rays-x, 50%) var(--rays-y, 100%),
+    var(--rays-color, color-mix(in oklab, var(--color-accent-400) 17%, transparent)) 0deg 2.2deg,
+    transparent 3.2deg 9deg
+  );
+  mask-image: radial-gradient(
+    circle at var(--rays-x, 50%) var(--rays-y, 100%),
+    #000 0,
+    rgb(0 0 0 / 0.5) calc(var(--rays-fade, 70%) * 0.55),
+    transparent var(--rays-fade, 70%)
+  );
 }

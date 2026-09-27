@@ -17,6 +17,7 @@ import type {
   GradingOverride,
   ParticipationStatus,
   PortfolioDetails,
+  PortfolioFieldChange,
   PortfolioItemType,
   PortfolioStatus,
   PortfolioVisibility,
@@ -96,6 +97,10 @@ export interface UserListItem {
   status: UserStatus;
   currentClass: Ref | null;
   lastActiveAt: string | null;
+  /** Profil rasmi manzili yoki null. */
+  avatarUrl: string | null;
+  /** Joriy foydalanuvchi bu hisobni boshqara oladimi (parol, holat, rollar). */
+  manageable: boolean;
   login?: string;
   locked?: boolean;
   mustChangePassword?: boolean;
@@ -120,6 +125,10 @@ export interface UserDetail {
   fullName: string;
   roles: Role[];
   status: UserStatus;
+  /** Profil rasmi manzili yoki null. */
+  avatarUrl: string | null;
+  /** Joriy foydalanuvchi bu hisobni boshqara oladimi (o‘z hisobi — yo‘q). */
+  manageable: boolean;
   enrollments: EnrollmentItem[];
   teachingAssignments?: { id: string; class: Ref; subject: Ref }[];
   homeroomClasses?: Ref[];
@@ -179,6 +188,7 @@ export interface ClassStudent {
   fullName: string;
   status: UserStatus;
   lastActiveAt: string | null;
+  avatarUrl: string | null;
 }
 
 export interface ClassDetail {
@@ -307,11 +317,18 @@ export interface TestListItem {
   status: TestStatus;
   /** SCHOOL — maktab test bankida (barcha o‘qituvchi va rahbariyatga ko‘rinadi). */
   visibility: TestVisibility;
-  owner: PersonRef;
+  /** Maktab bankiga chiqarilgan vaqt (bankda bo‘lmasa null). */
+  schoolSharedAt: string | null;
+  owner: PersonRef & { avatarUrl: string | null };
   permission: 'OWNER' | SharePermission | 'SCHOOL';
+  /** Tahrirlovchi uchun joriy versiya, boshqalar uchun tayyor (muzlatilgan) versiya ko‘rsatkichlari. */
   questionCount: number;
   totalPoints: number;
   hasDraftChanges: boolean;
+  /** Oxirgi muzlatilgan (tayyor) versiya raqami. */
+  publishedVersionNo: number | null;
+  /** Shu test bilan sessiya yaratish mumkinmi (huquq va tayyor versiya bo‘yicha). */
+  canConduct: boolean;
   sessionCount: number;
   updatedAt: string;
 }
@@ -356,10 +373,17 @@ export interface TestDetail {
   owner: PersonRef;
   originalAuthor: PersonRef;
   copiedFrom: { id: string; title: string } | null;
-  permission: 'OWNER' | SharePermission;
+  permission: 'OWNER' | SharePermission | 'SCHOOL';
   canEdit: boolean;
   canCopy: boolean;
   canConduct: boolean;
+  schoolSharedAt: string | null;
+  /** Bankka chiqarish/olish mumkinmi (egasi; rahbariyat — faqat bankdan olish). */
+  canChangeVisibility: boolean;
+  /** Yangi sessiya ishlatadigan versiya (tahrirlovchi uchun qoralama muzlatiladi) yoki null. */
+  conductVersionNo: number | null;
+  /** Oxirgi muzlatilgan (tayyor) versiya raqami. */
+  publishedVersionNo: number | null;
   version: {
     id: string;
     versionNo: number;
@@ -465,6 +489,8 @@ export interface LiveRow {
   studentId: string;
   internalId: number;
   fullName: string;
+  /** Profil rasmi manzili (bo‘lmasa null). */
+  avatarUrl: string | null;
   className: string | null;
   status: AttemptStatus | 'NOT_STARTED';
   attemptId: string | null;
@@ -638,6 +664,8 @@ export interface SessionPreview {
   questionCount: number;
   totalPoints: number;
   allowBackNavigation: boolean;
+  /** Test to‘liq ekranda ishlanadi; chiqilsa urinish o‘qituvchi ruxsatigacha to‘xtatiladi. */
+  requireFullscreen: boolean;
   maxAttempts: number;
   attemptsUsed: number;
   attemptPolicy: AttemptPolicy;
@@ -784,17 +812,103 @@ export interface PortfolioItemView {
   submittedAt: string | null;
   reviewedAt: string | null;
   reviewer: PersonRef | null;
-  owner: { id: string; internalId: number; fullName: string; className: string | null; roles: Role[] };
+  owner: {
+    id: string;
+    internalId: number;
+    fullName: string;
+    className: string | null;
+    roles: Role[];
+    /** Profil rasmi manzili yoki null. */
+    avatarUrl?: string | null;
+  };
   isMine: boolean;
   canReview: boolean;
   createdAt: string;
   updatedAt: string;
   reviews?: { id: string; decision: PortfolioStatus; reason: string | null; createdAt: string; reviewer: PersonRef }[];
+  /** Tekshiruvchiga (faqat tekshiruvdagi yozuvda): yangi yozuvmi yoki tasdiqlangandan keyin o‘zgartirilganmi. */
+  changeKind?: 'NEW' | 'CHANGED';
+  /** Oxirgi tasdiqlangan holatdan farqlar. Fan va dalil fayli uchun qiymatlar — nomlar. */
+  changes?: PortfolioFieldChange[];
+  lastApprovedAt?: string | null;
+  /** Oxirgi qaror “tuzatishga qaytarish” bo‘lgan. */
+  wasReturned?: boolean;
+  lastReturnReason?: string | null;
+}
+
+/** Portfolio egasi (tekshiruv navbati, jamlangan portfolio). */
+export interface PortfolioOwnerRef {
+  id: string;
+  internalId: number;
+  fullName: string;
+  className: string | null;
+  roles: Role[];
+  avatarUrl: string | null;
+}
+
+/** Tekshiruv navbati: bitta o‘quvchi (ega) bo‘yicha. */
+export interface PortfolioReviewGroup {
+  owner: PortfolioOwnerRef;
+  pending: number;
+  newCount: number;
+  changedCount: number;
+  oldestSubmittedAt: string | null;
+  lastSubmittedAt: string | null;
+}
+
+export type PortfolioSkipReason = 'NOT_FOUND' | 'NOT_ALLOWED' | 'NOT_PENDING';
+
+export interface PortfolioBatchResult {
+  approved: number;
+  returned: number;
+  skipped: { id: string; reason: PortfolioSkipReason }[];
+}
+
+export interface PortfolioStatusCounts {
+  approved: number;
+  pending: number;
+  draft: number;
+  returned: number;
+}
+
+/** Rahbariyat katalogi: bitta o‘quvchi. */
+export interface PortfolioDirectoryItem {
+  id: string;
+  internalId: number;
+  fullName: string;
+  avatarUrl: string | null;
+  classId: string;
+  className: string;
+  gradeLevel: number;
+  counts: PortfolioStatusCounts;
+  certificates: number;
+  olympiads: number;
+  /** Qisqa nishonlar: “IELTS 7.5”, “SAT 1450”, … */
+  highlights: string[];
+  lastActivityAt: string | null;
+}
+
+/** Bitta o‘quvchining jamlangan portfoliosi. */
+export interface StudentPortfolioView {
+  owner: PortfolioOwnerRef & { classId: string | null };
+  counts: PortfolioStatusCounts;
+  byType: { type: PortfolioItemType; label: string; approved: number; pending: number }[];
+  items: PortfolioItemView[];
+  pendingItems: PortfolioItemView[];
+  canReview: boolean;
+  canExport: boolean;
 }
 
 export interface PrintablePortfolio {
   school: string;
-  owner: { id: string; internalId: number; fullName: string; className: string | null; roles: Role[] };
+  owner: {
+    id: string;
+    internalId: number;
+    fullName: string;
+    className: string | null;
+    roles: Role[];
+    avatarUrl?: string | null;
+  };
   approved: PortfolioItemView[];
   unapproved: PortfolioItemView[];
   generatedAt: string;

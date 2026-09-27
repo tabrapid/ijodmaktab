@@ -1,5 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { fullName, loginFromName, normalizeForSearch, userSearchText, type Role, type UserStatus } from '@ijod/shared';
+import {
+  canManageRoles,
+  fullName,
+  grantableRolesFor,
+  loginFromName,
+  normalizeForSearch,
+  userSearchText,
+  type Role,
+  type UserStatus,
+} from '@ijod/shared';
 import type { z } from 'zod';
 import type { createUserSchema, updateUserSchema, userListQuerySchema } from '@ijod/shared';
 import { AccessService } from '../access/access.service.js';
@@ -7,17 +16,15 @@ import { AuditService } from '../audit/audit.service.js';
 import { generateTemporaryPassword, hashPassword } from '../auth/passwords.js';
 import { SessionService } from '../auth/session.service.js';
 import type { AuthUser } from '../common/auth-user.js';
-import { hasRole } from '../common/auth-user.js';
+import { avatarUrlOf, hasRole } from '../common/auth-user.js';
 import { dateOnly } from '../common/dates.js';
 import { badRequest, conflict, forbidden, notFound } from '../common/errors.js';
 import { pageArgs, toPage } from '../common/pagination.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
+import { AvatarService } from './avatar.service.js';
 
 type UserListQuery = z.output<typeof userListQuerySchema>;
-
-/** Administrator beradigan rollar; ADMIN va SUPER_ADMIN rollarini faqat super admin beradi. */
-const ADMIN_GRANTABLE: readonly Role[] = ['STUDENT', 'TEACHER', 'DEPUTY'];
 
 const listInclude = {
   roles: { select: { role: true } },
@@ -37,14 +44,29 @@ export class UsersService {
     private readonly access: AccessService,
     private readonly audit: AuditService,
     private readonly sessions: SessionService,
+    private readonly avatars: AvatarService,
   ) {}
 
   private isAccountManager(viewer: AuthUser) {
     return hasRole(viewer, 'ADMIN', 'SUPER_ADMIN');
   }
 
+  /**
+   * Hisobni boshqarish (parolni tiklash, holat, rollar va h.k.) mumkinmi. O‘z hisobi bu yerda
+   * boshqarilmaydi; direktor o‘rinbosari faqat o‘qituvchi va o‘quvchi hisoblarini boshqaradi.
+   */
+  private canManage(viewer: AuthUser, targetId: string, targetRoles: readonly Role[]) {
+    return targetId !== viewer.id && canManageRoles(viewer.roles, targetRoles);
+  }
+
+  /** Kirish ma’lumotlari: administratorga barcha hisoblarda, rahbariyatga faqat boshqara oladigan hisoblarda. */
+  private seesCredentials(viewer: AuthUser, manageable: boolean) {
+    return this.isAccountManager(viewer) || manageable;
+  }
+
   private toListItem(user: ListUser, viewer: AuthUser) {
-    const manager = this.isAccountManager(viewer);
+    const roles = user.roles.map((item) => item.role as Role);
+    const manageable = this.canManage(viewer, user.id, roles);
     return {
       id: user.id,
       internalId: user.internalId,
@@ -52,11 +74,13 @@ export class UsersService {
       firstName: user.firstName,
       middleName: user.middleName,
       fullName: fullName(user),
-      roles: user.roles.map((item) => item.role as Role),
+      roles,
       status: user.status as UserStatus,
       currentClass: user.enrollments[0]?.class ?? null,
       lastActiveAt: user.lastActiveAt,
-      ...(manager
+      avatarUrl: avatarUrlOf(user.avatarFileId),
+      manageable,
+      ...(this.seesCredentials(viewer, manageable)
         ? {
             login: user.login,
             locked: Boolean(user.lockedUntil && user.lockedUntil > new Date()),
@@ -86,7 +110,12 @@ export class UsersService {
     if (query.status) and.push({ status: query.status });
     if (query.classId) and.push({ enrollments: { some: { classId: query.classId, endsOn: null } } });
     // Ogohlantirish filtrlari administrator bosh sahifasidagi hisoblar bilan bir xil shartda.
-    if (query.flag && this.isAccountManager(viewer)) {
+    // Direktor o‘rinbosari ularni faqat o‘zi boshqaradigan (o‘qituvchi va o‘quvchi) hisoblarda ko‘radi.
+    const flagAllowed = this.isAccountManager(viewer) || hasRole(viewer, 'DEPUTY');
+    if (query.flag && flagAllowed) {
+      if (!this.isAccountManager(viewer)) {
+        and.push({ roles: { every: { role: { in: [...grantableRolesFor(viewer.roles)] } } } });
+      }
       if (query.flag === 'locked') and.push({ lockedUntil: { gt: new Date() } });
       if (query.flag === 'mustChangePassword') and.push({ status: 'ACTIVE', mustChangePassword: true });
       if (query.flag === 'noClass') {
@@ -166,6 +195,7 @@ export class UsersService {
     if (!user) throw notFound('Foydalanuvchi');
     const roles = user.roles.map((item) => item.role as Role);
     if (roles.includes('SUPER_ADMIN') && !hasRole(viewer, 'SUPER_ADMIN')) throw notFound('Foydalanuvchi');
+    const manageable = this.canManage(viewer, user.id, roles);
 
     const base = {
       id: user.id,
@@ -176,6 +206,8 @@ export class UsersService {
       fullName: fullName(user),
       roles,
       status: user.status as UserStatus,
+      avatarUrl: avatarUrlOf(user.avatarFileId),
+      manageable,
       enrollments: user.enrollments.map((enrollment) => ({
         id: enrollment.id,
         class: enrollment.class,
@@ -201,7 +233,7 @@ export class UsersService {
       lastLoginAt: user.lastLoginAt,
       lastActiveAt: user.lastActiveAt,
       statusReason: user.statusReason,
-      ...(this.isAccountManager(viewer)
+      ...(this.seesCredentials(viewer, manageable)
         ? {
             login: user.login,
             mustChangePassword: user.mustChangePassword,
@@ -215,11 +247,13 @@ export class UsersService {
   // ------------------------------------------------------------ Yaratish va o‘zgartirish
 
   private assertCanGrant(viewer: AuthUser, roles: readonly Role[]) {
-    if (hasRole(viewer, 'SUPER_ADMIN')) return;
-    const denied = roles.filter((role) => !ADMIN_GRANTABLE.includes(role));
-    if (denied.length) {
-      throw forbidden('Administrator va super admin rollarini faqat super admin beradi.');
-    }
+    const grantable = grantableRolesFor(viewer.roles);
+    if (roles.every((role) => grantable.includes(role))) return;
+    throw forbidden(
+      hasRole(viewer, 'ADMIN', 'SUPER_ADMIN')
+        ? 'Administrator va super admin rollarini faqat super admin beradi.'
+        : 'Direktor o‘rinbosari faqat o‘qituvchi va o‘quvchi hisoblarini yarata oladi.',
+    );
   }
 
   private async assertManageable(viewer: AuthUser, targetId: string) {
@@ -232,9 +266,13 @@ export class UsersService {
     });
     if (!target) throw notFound('Foydalanuvchi');
     const roles = target.roles.map((item) => item.role as Role);
-    if (!hasRole(viewer, 'SUPER_ADMIN') && roles.some((role) => !ADMIN_GRANTABLE.includes(role))) {
+    if (!canManageRoles(viewer.roles, roles)) {
       if (roles.includes('SUPER_ADMIN')) throw notFound('Foydalanuvchi');
-      throw forbidden('Administrator hisoblarini faqat super admin boshqaradi.');
+      throw forbidden(
+        hasRole(viewer, 'ADMIN')
+          ? 'Administrator hisoblarini faqat super admin boshqaradi.'
+          : 'Direktor o‘rinbosari faqat o‘qituvchi va o‘quvchi hisoblarini boshqara oladi.',
+      );
     }
     return { target, roles };
   }
@@ -350,9 +388,9 @@ export class UsersService {
     return this.detail(viewer, id);
   }
 
-  /** Administrator o‘zining ism-familiyasini ham tahrirlay oladi. */
+  /** Administrator o‘zining ism-familiyasini ham tahrirlay oladi (rahbariyat — yo‘q). */
   private async assertManageableOrSelf(viewer: AuthUser, id: string) {
-    if (id === viewer.id) {
+    if (id === viewer.id && this.isAccountManager(viewer)) {
       const target = await this.prisma.user.findUniqueOrThrow({ where: { id } });
       return { target };
     }
@@ -410,7 +448,7 @@ export class UsersService {
   }
 
   async resetPassword(viewer: AuthUser, id: string) {
-    await this.assertManageable(viewer, id);
+    const { target } = await this.assertManageable(viewer, id);
     const temporaryPassword = generateTemporaryPassword();
     await this.prisma.user.update({
       where: { id },
@@ -423,7 +461,7 @@ export class UsersService {
     });
     await this.sessions.revokeAllForUser(id, 'password_reset');
     await this.audit.log('user.password_reset', { type: 'User', id });
-    return { temporaryPassword };
+    return { login: target.login, temporaryPassword };
   }
 
   async unlock(viewer: AuthUser, id: string) {
@@ -446,8 +484,11 @@ export class UsersService {
    */
   async remove(viewer: AuthUser, id: string) {
     const { target } = await this.assertManageable(viewer, id);
+    let avatarKey: string | null = null;
     try {
-      await this.prisma.$transaction(async (tx) => {
+      avatarKey = await this.prisma.$transaction(async (tx) => {
+        // Profil rasmi tarixiy ma’lumot emas: u hisob bilan birga o‘chiriladi.
+        const key = await this.avatars.detach(tx, id);
         await tx.enrollment.deleteMany({ where: { studentId: id } });
         await tx.user.delete({ where: { id } });
         await this.audit.log(
@@ -456,6 +497,7 @@ export class UsersService {
           { login: target.login, name: fullName(target) },
           { tx },
         );
+        return key;
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2003', 'P2014'].includes(error.code)) {
@@ -466,7 +508,15 @@ export class UsersService {
       }
       throw error;
     }
+    await this.avatars.removeBlob(avatarKey);
     return { ok: true };
+  }
+
+  /** Nomaqbul profil rasmini olib tashlash (moderatsiya). */
+  async removeAvatar(viewer: AuthUser, id: string) {
+    await this.assertManageable(viewer, id);
+    await this.avatars.remove(id, true);
+    return this.detail(viewer, id);
   }
 }
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
-export type BadgeTone = 'gray' | 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'brand';
+export type BadgeTone = 'gray' | 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'brand' | 'accent';
 
 const tones: Record<BadgeTone, string> = {
   gray: 'bg-slate-100 text-slate-700 ring-slate-200',
@@ -11,6 +11,7 @@ const tones: Record<BadgeTone, string> = {
   red: 'bg-red-50 text-red-700 ring-red-200',
   violet: 'bg-violet-50 text-violet-700 ring-violet-200',
   brand: 'bg-brand-50 text-brand-700 ring-brand-200',
+  accent: 'bg-accent-50 text-accent-800 ring-accent-200',
 };
 
 export function Badge({
@@ -25,7 +26,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
+        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset',
         tones[tone],
         className,
       )}

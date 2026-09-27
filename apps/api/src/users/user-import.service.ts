@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   IMPORT_FIELD_LABELS,
   fullName,
+  grantableRolesFor,
   normalizeForSearch,
   transliterate,
   userSearchText,
@@ -14,7 +15,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { generateTemporaryPassword, hashPassword } from '../auth/passwords.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { dateOnly } from '../common/dates.js';
-import { badRequest, conflict, notFound } from '../common/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../common/errors.js';
 import type { UploadedFileData } from '../common/uploaded-file.js';
 import { ExcelJS, addTableSheet, newWorkbook, workbookToBuffer } from '../common/xlsx.js';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -351,6 +352,11 @@ export class UserImportService {
     const rows = await this.validateRows(batch.rows, options);
     const importable = rows.filter((row) => row.status === 'ok' || row.status === 'warning');
     if (importable.length === 0) throw badRequest('NOTHING_TO_IMPORT', 'Import qilinadigan to‘g‘ri qator yo‘q.');
+    // Import faqat o‘quvchi va o‘qituvchi yaratadi; yuklovchi bu rollarni bera olishi shart.
+    const grantable = grantableRolesFor(viewer.roles);
+    if (importable.some((row) => !row.resolved.role || !grantable.includes(row.resolved.role))) {
+      throw forbidden('Bu rollardagi hisoblarni yaratishga ruxsatingiz yo‘q.');
+    }
 
     const year = await this.access.currentYear();
 

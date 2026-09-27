@@ -46,19 +46,22 @@ export function Dialog({
       onClick={(event) => {
         if (event.target === ref.current) onClose();
       }}
-      className={cn('m-auto w-[calc(100%-2rem)] rounded-xl bg-surface p-0 shadow-xl', widths[size])}
+      className={cn(
+        'm-auto w-[calc(100%-2rem)] rounded-2xl border border-slate-200 bg-surface p-0 text-slate-900 shadow-pop dark:shadow-none',
+        widths[size],
+      )}
     >
       {open && (
         <div className="flex max-h-[90vh] flex-col">
           <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+              <h2 className="text-base font-semibold tracking-tight text-slate-900">{title}</h2>
               {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              className="-m-1 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
               aria-label="Yopish"
             >
               <X className="size-5" />
@@ -66,7 +69,7 @@ export function Dialog({
           </div>
           <div className="overflow-y-auto px-5 py-4">{children}</div>
           {footer && (
-            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+            <div className="flex flex-wrap justify-end gap-2 rounded-b-2xl border-t border-slate-100 bg-slate-50/70 px-5 py-3">
               {footer}
             </div>
           )}

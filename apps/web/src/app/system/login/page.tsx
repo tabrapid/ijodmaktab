@@ -9,7 +9,8 @@ export const metadata: Metadata = { title: 'Tizim boshqaruvi', robots: { index: 
 export default function SystemLoginPage() {
   return (
     <AuthCard
-      title="Tizim boshqaruvi"
+      variant="system"
+      title="Super admin kirishi"
       description="Faqat super admin hisoblari uchun. Kirishdan so‘ng ikki bosqichli tasdiq talab qilinadi."
     >
       <Suspense>

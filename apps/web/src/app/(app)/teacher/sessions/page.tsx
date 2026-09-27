@@ -12,7 +12,7 @@ export default function TeacherSessionsPage() {
         title="Test sessiyalari"
         description="Rejalashtirilgan, ochiq va yakunlangan sessiyalar. Jonli kuzatuv, natijalar va eksport sessiya sahifasida."
         actions={
-          <ButtonLink href="/teacher/tests" icon={<Plus className="size-4" />}>
+          <ButtonLink href="/teacher/sessions/new" icon={<Plus className="size-4" />}>
             Yangi sessiya
           </ButtonLink>
         }
