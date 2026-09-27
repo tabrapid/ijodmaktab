@@ -1,0 +1,26 @@
+{
+  "name": "ijodmaktab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ijod maktabi: portfolio, onlayn nazorat ishlari va natijalar tahlili tizimi",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "pnpm --filter @ijod/shared build && pnpm --filter @ijod/api --filter @ijod/web build",
+    "dev": "pnpm --filter @ijod/shared build && pnpm --parallel --filter @ijod/shared --filter @ijod/api --filter @ijod/web dev",
+    "db:migrate": "pnpm --filter @ijod/api db:migrate",
+    "db:deploy": "pnpm --filter @ijod/api db:deploy",
+    "db:seed": "pnpm --filter @ijod/api db:seed",
+    "db:reset": "pnpm --filter @ijod/api db:reset",
+    "test": "pnpm --filter @ijod/shared build && pnpm -r test",
+    "test:e2e": "pnpm --filter @ijod/api test:e2e",
+    "typecheck": "pnpm --filter @ijod/shared build && pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}

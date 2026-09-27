@@ -1,0 +1,26 @@
+node_modules/
+dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+.turbo/
+
+# Muhit sozlamalari (maxfiy qiymatlar repozitoriyga kirmaydi)
+.env
+.env.*
+!.env.example
+
+# Prisma tomonidan generatsiya qilinadigan klient
+apps/api/src/generated/
+
+# Yuklangan fayllar va eksportlar
+storage/
+apps/api/storage/
+
+# Test va tahlil natijalari
+playwright-report/
+test-results/
+
+.DS_Store
+*.log
