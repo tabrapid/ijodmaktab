@@ -86,8 +86,7 @@ function detailsValidationError(input: ItemInput) {
 
 /** Qaror natijasi: qo‘llangan yozuv (snapshot uchun) yoki o‘tkazib yuborilish sababi. */
 type DecisionOutcome =
-  | { fresh: Prisma.PortfolioItemGetPayload<{ include: typeof snapshotInclude }> }
-  | { skipped: SkipReason };
+  { fresh: Prisma.PortfolioItemGetPayload<{ include: typeof snapshotInclude }> } | { skipped: SkipReason };
 
 /** Tekshiruvchi ko‘rgan versiya (ISO vaqt) → Date; berilmagan bo‘lsa tekshirilmaydi. */
 const seenVersion = (value: string | undefined) => (value ? new Date(value) : undefined);
@@ -651,7 +650,7 @@ export class PortfolioService {
     if (count === 0) {
       // Nega qo‘llanmadi: yozuv hali tekshiruvda bo‘lsa — demak, ko‘rilgandan keyin tahrirlanib qayta yuborilgan.
       const current = await tx.portfolioItem.findUnique({ where: { id }, select: { status: true } });
-      return { skipped: current?.status === 'SUBMITTED' ? 'CHANGED' : 'NOT_PENDING' };
+      return { skipped: seen && current?.status === 'SUBMITTED' ? 'CHANGED' : 'NOT_PENDING' };
     }
     const fresh = await tx.portfolioItem.findUniqueOrThrow({ where: { id }, include: snapshotInclude });
     await tx.portfolioReview.create({

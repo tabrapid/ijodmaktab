@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ieltsOverallFromBands,
+  isLegacyPortfolioDetails,
   parsePortfolioDetails,
   pickPortfolioHighlights,
   portfolioCategoryOf,
@@ -11,7 +12,7 @@ import {
   portfolioKeyChanges,
   portfolioStoredFields,
 } from './portfolio.js';
-import { portfolioItemSchema } from './schemas.js';
+import { portfolioItemSchema, portfolioItemUpdateSchema } from './schemas.js';
 
 describe('portfolio details', () => {
   it('IELTS: 0,5 qadamli ballar qabul qilinadi, boshqasi rad etiladi', () => {
@@ -48,6 +49,20 @@ describe('portfolio details', () => {
     const result = portfolioItemSchema.safeParse({ type: 'CEFR', title: 'CEFR', details: { language: 'Ingliz tili' } });
     expect(result.success).toBe(false);
     expect(result.error?.issues.some((issue) => issue.path.join('.') === 'details.level')).toBe(true);
+  });
+
+  it('avvalgi shakldagi olimpiada: tahrirlash sxemasi details’siz qabul qiladi, yaratish sxemasi — yo‘q', () => {
+    const legacy = { type: 'OLYMPIAD', title: 'Olimpiada', result: '2-o‘rin' };
+    expect(isLegacyPortfolioDetails('OLYMPIAD', null)).toBe(true);
+    expect(isLegacyPortfolioDetails('OLYMPIAD', { subject: ' ', place: undefined })).toBe(true);
+    expect(isLegacyPortfolioDetails('OLYMPIAD', { place: 'FIRST' })).toBe(false);
+    expect(isLegacyPortfolioDetails('IELTS', null)).toBe(false);
+    expect(portfolioItemUpdateSchema.safeParse(legacy).success).toBe(true);
+    expect(portfolioItemSchema.safeParse(legacy).success).toBe(false);
+    // Qisman to‘ldirilgan details (o‘rin bor, fan yo‘q) — tahrirlashda ham xato.
+    const partial = portfolioItemUpdateSchema.safeParse({ ...legacy, details: { place: 'FIRST' } });
+    expect(partial.error?.issues.map((issue) => issue.path.join('.'))).toEqual(['details.subject']);
+    expect(portfolioItemUpdateSchema.safeParse({ type: 'SAT', title: 'SAT' }).success).toBe(false);
   });
 });
 

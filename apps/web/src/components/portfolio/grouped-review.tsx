@@ -16,7 +16,7 @@ import { api, qs } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { PortfolioItemView, PortfolioOwnerRef, PortfolioReviewGroup } from '@/lib/types';
 import { PendingItemCard } from './pending-item';
-import { useReviewActions } from './queries';
+import { batchReviewInput, changedSinceView, useReviewActions } from './queries';
 import { ReviewDialog, type ReviewTarget } from './review-dialog';
 import { useUrlState } from './use-url-state';
 import { isUuid, portfolioKeys } from './utils';
@@ -185,13 +185,14 @@ export function GroupedReview({ note, emptyDescription }: { note?: ReactNode; em
   };
 
   const approveAll = () =>
-    batch.mutate(
-      { itemIds: reviewable.map((item) => item.id), decision: 'APPROVED' },
-      {
-        onSuccess: () => markHandled(reviewable.map((item) => item.id)),
-        onSettled: () => setConfirmAll(false),
+    batch.mutate(batchReviewInput(reviewable, 'APPROVED'), {
+      // Ko‘rilgandan keyin o‘zgartirilganlari navbatda qoladi — o‘quvchidan keyingisiga o‘tilmaydi.
+      onSuccess: (result) => {
+        const changed = changedSinceView(result);
+        markHandled(reviewable.map((item) => item.id).filter((id) => !changed.has(id)));
       },
-    );
+      onSettled: () => setConfirmAll(false),
+    });
 
   if (groups.isPending) return <PageLoader />;
   if (groups.isError) return <ErrorState error={groups.error} onRetry={() => groups.refetch()} />;

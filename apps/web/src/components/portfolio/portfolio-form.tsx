@@ -15,10 +15,12 @@ import {
   PORTFOLIO_VISIBILITIES,
   PORTFOLIO_VISIBILITY_LABELS,
   TEACHER_ONLY_PORTFOLIO_TYPES,
+  isLegacyPortfolioDetails,
   isStructuredPortfolioType,
   normalizeForSearch,
   portfolioDetailsSummary,
   portfolioItemSchema,
+  portfolioItemUpdateSchema,
   type AchievementLevel,
   type PortfolioItemInput,
   type PortfolioItemType,
@@ -195,9 +197,12 @@ export function PortfolioForm({
   const subjects = useSubjects();
   const staff = hasRole(me, 'TEACHER', 'DEPUTY', 'ADMIN', 'SUPER_ADMIN');
   const organizationListId = useId();
+  // Avvalgi shaklda kiritilgan olimpiada (fan va o‘rin alohida yo‘q): ular to‘ldirilmaguncha natija matni
+  // saqlanadi va tasdiq bekor bo‘lmaydi (server ham shunday yozuv uchun details’ni majburiy qilmaydi).
+  const legacyItem = Boolean(item && isLegacyPortfolioDetails(item.type, item.details));
 
   const form = useForm<PortfolioItemInput, unknown, PortfolioItemOutput>({
-    resolver: zodResolver(portfolioItemSchema),
+    resolver: zodResolver(legacyItem ? portfolioItemUpdateSchema : portfolioItemSchema),
     defaultValues: defaultsFor(item, presetType),
   });
   const {
@@ -219,6 +224,9 @@ export function PortfolioForm({
   const creative = selectedType ? isCreativeType(selectedType) : false;
   const olympiad = selectedType === 'OLYMPIAD';
   const details = asDetails(detailsField.field.value);
+  const legacy = legacyItem && selectedType === 'OLYMPIAD' && isLegacyPortfolioDetails(selectedType, details);
+  // Umumiy maydonlar (fan, yo‘nalish, natija) tuzilgan turlarda yashiriladi, eski olimpiadada qoladi.
+  const generic = !structured || legacy;
   const summary = structured && selectedType ? portfolioDetailsSummary(selectedType, details) : null;
   const keyChanged = item ? keyFieldsChanged(item, watched) : false;
   const author = item?.owner.fullName ?? me?.fullName ?? '';
@@ -247,7 +255,8 @@ export function PortfolioForm({
   const initialSubject = typeof initialDetailsSubject === 'string' ? initialDetailsSubject : null;
   useEffect(() => {
     if (detailSubject === null || !subjects.data) return;
-    if (item && detailSubject === initialSubject && selectedType === item.type) return;
+    // Tahrirlashda fan o‘zgarmagan bo‘lsa (eski olimpiadada details bo‘sh) — saqlangan fan qoladi.
+    if (item && detailSubject === (initialSubject ?? '') && selectedType === item.type) return;
     const needle = normalizeForSearch(detailSubject);
     const match = needle ? subjects.data.find((subject) => normalizeForSearch(subject.name) === needle) : undefined;
     const next = match?.id ?? null;
@@ -260,9 +269,15 @@ export function PortfolioForm({
     void typeField.onChange(event);
     const next = event.target.value as PortfolioItemType | '';
     if (next === previous) return;
-    // Turga xos maydonlar yangi turdan boshlanadi.
+    // Turga xos maydonlar yangi turdan boshlanadi. Tuzilgan turlarda fan va yo‘nalish yashirin — eski
+    // qiymatlar saqlanib qolmasligi uchun tozalanadi (milliy sertifikat va olimpiadada fan details dan olinadi).
+    const nextStructured = Boolean(next && isStructuredPortfolioType(next));
     form.setValue('details', next && isStructuredPortfolioType(next) ? initialDetails(next) : null);
     form.clearErrors('details');
+    if (nextStructured) {
+      form.setValue('subjectId', null);
+      form.setValue('direction', '');
+    }
     if (!form.getValues('level') && next && DEFAULT_LEVEL[next]) form.setValue('level', DEFAULT_LEVEL[next]);
     const organization = (form.getValues('organization') ?? '').trim();
     const previousDefault = previous ? DEFAULT_ORGANIZATION[previous] : undefined;
@@ -343,7 +358,8 @@ export function PortfolioForm({
   const handle = (submitAfter: boolean) =>
     form.handleSubmit((values) => {
       setError(null);
-      if (values.type === 'OLYMPIAD' && !values.level) {
+      const keepsLegacy = legacyItem && isLegacyPortfolioDetails(values.type, values.details);
+      if (values.type === 'OLYMPIAD' && !values.level && !keepsLegacy) {
         form.setError('level', { type: 'manual', message: 'Olimpiada bosqichini tanlang' });
         return;
       }
@@ -432,7 +448,7 @@ export function PortfolioForm({
             </Select>
           </Field>
 
-          <Field label="Bosqich" required={olympiad} error={errors.level?.message}>
+          <Field label="Bosqich" required={olympiad && !legacy} error={errors.level?.message}>
             <Select {...register('level', { setValueAs: emptyToNull })}>
               <option value="">Ko‘rsatilmagan</option>
               {ACHIEVEMENT_LEVELS.map((level) => (
@@ -462,16 +478,25 @@ export function PortfolioForm({
                   value={details}
                   onChange={(next) => detailsField.field.onChange(next)}
                   errors={detailErrors}
+                  optional={legacy}
                 />
               </div>
-              <p className="text-sm">
-                <span className="text-slate-500">Natija (avtomatik): </span>
-                {summary ? (
-                  <span className="font-medium text-slate-900">{summary}</span>
-                ) : (
-                  <span className="text-slate-500">majburiy maydonlarni to‘ldiring</span>
-                )}
-              </p>
+              {legacy ? (
+                <p className="text-sm text-slate-600">
+                  Bu yozuv avvalgi shaklda kiritilgan: fan va o‘rin alohida ko‘rsatilmagan, natija quyidagi “Natija yoki
+                  o‘rin” maydonida. Ularni to‘ldirsangiz, natija shulardan avtomatik yoziladi (tasdiqlangan yozuv qayta
+                  tasdiqlanishi kerak bo‘ladi). Bo‘sh qoldirsangiz, yozuv avvalgidek saqlanadi.
+                </p>
+              ) : (
+                <p className="text-sm">
+                  <span className="text-slate-500">Natija (avtomatik): </span>
+                  {summary ? (
+                    <span className="font-medium text-slate-900">{summary}</span>
+                  ) : (
+                    <span className="text-slate-500">majburiy maydonlarni to‘ldiring</span>
+                  )}
+                </p>
+              )}
             </div>
           )}
 
@@ -511,7 +536,7 @@ export function PortfolioForm({
             />
           </Field>
 
-          {!structured && (
+          {generic && (
             <>
               <Field label="Fan" error={errors.subjectId?.message}>
                 <Select
@@ -565,7 +590,7 @@ export function PortfolioForm({
             <Input type="date" {...register('date', { setValueAs: emptyToNull })} />
           </Field>
 
-          {!structured && (
+          {generic && (
             <Field label="Natija yoki o‘rin" error={errors.result?.message} className="sm:col-span-2">
               <Input maxLength={200} placeholder="Masalan: 1-o‘rin, diplom, faxriy yorliq" {...register('result')} />
             </Field>

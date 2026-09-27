@@ -47,13 +47,15 @@ interface Props {
   value: DetailsValue;
   onChange: (next: DetailsValue) => void;
   errors: DetailsErrors;
+  /** Avvalgi shakldagi olimpiada: fan ixtiyoriy (to‘ldirilmasa, natija matni saqlanadi). */
+  optional?: boolean;
 }
 
 /**
  * Turga xos maydonlar: milliy sertifikat, CEFR, IELTS, SAT va olimpiada. Qiymatlar `details`
  * obyektida saqlanadi va umumiy (@ijod/shared) sxema bilan tekshiriladi.
  */
-export function DetailsFields({ type, value, onChange, errors }: Props) {
+export function DetailsFields({ type, value, onChange, errors, optional = false }: Props) {
   const set = (key: string, next: unknown) => {
     const copy = { ...value };
     if (next === undefined || next === '') delete copy[key];
@@ -154,7 +156,12 @@ export function DetailsFields({ type, value, onChange, errors }: Props) {
     case 'OLYMPIAD':
       return (
         <>
-          <OlympiadSubjectField value={text(value.subject)} onChange={onText('subject')} error={errors.subject} />
+          <OlympiadSubjectField
+            value={text(value.subject)}
+            onChange={onText('subject')}
+            error={errors.subject}
+            optional={optional}
+          />
           <Field label="O‘rin" error={errors.place}>
             <Select value={text(value.place)} onChange={onText('place')}>
               <option value="">Ko‘rsatilmagan</option>
@@ -198,15 +205,22 @@ function OlympiadSubjectField({
   value,
   onChange,
   error,
+  optional,
 }: {
   value: string;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
   error?: string;
+  optional: boolean;
 }) {
   const listId = useId();
   return (
     <>
-      <Field label="Fan" required hint="Olimpiada qaysi fandan o‘tkazilgan." error={error}>
+      <Field
+        label="Fan"
+        required={!optional}
+        hint={optional ? 'Ixtiyoriy: olimpiada qaysi fandan o‘tkazilgan.' : 'Olimpiada qaysi fandan o‘tkazilgan.'}
+        error={error}
+      >
         <Input maxLength={100} list={listId} defaultValue={value} onChange={onChange} placeholder="Masalan: Fizika" />
       </Field>
       <datalist id={listId}>

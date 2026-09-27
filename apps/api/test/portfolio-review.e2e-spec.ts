@@ -2,11 +2,27 @@
  * Portfolio: tuzilgan sertifikat maydonlari, tasdiqdan keyingi o‘zgarishlar, o‘quvchilar bo‘yicha
  * guruhlangan tekshiruv navbati, ommaviy qaror, rahbariyat katalogi, jamlangan portfolio va ZIP eksport.
  */
+import { readdirSync, readlinkSync } from 'node:fs';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { join, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { INestApplication } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
+import request from 'supertest';
+import { AppConfig } from '../src/config/app-config.js';
 import type { PrismaService } from '../src/prisma/prisma.service.js';
-import { binaryParser, createApp, createFixture, createUser, currentYear, login, type Fixture } from './helpers.js';
+import {
+  PASSWORD,
+  binaryParser,
+  createApp,
+  createFixture,
+  createUser,
+  currentYear,
+  login,
+  type Fixture,
+} from './helpers.js';
 
 let app: INestApplication;
 let prisma: PrismaService;
@@ -59,6 +75,7 @@ async function submitted(agent: Agent, body: Record<string, unknown>) {
 }
 
 let deputy: Agent;
+let deputyId: string;
 let homeroom: Agent;
 let otherHomeroom: Agent;
 let subjectTeacher: Agent;
@@ -68,6 +85,7 @@ beforeAll(async () => {
   ({ app, prisma } = await createApp());
   fx = await createFixture(prisma, 3);
   const deputyUser = await createUser(prisma, ['DEPUTY']);
+  deputyId = deputyUser.id;
   deputy = await login(app, deputyUser.login);
   homeroom = await login(app, fx.teacher.login);
   otherHomeroom = await login(app, fx.otherTeacher.login);
@@ -663,5 +681,260 @@ describe('Sertifikatlar ZIP arxivi', () => {
     // Tasdiqlangan yozuvi yo‘q o‘quvchi — tushunarli xato.
     const empty = await deputy.get(`/api/portfolio/students/${fx.studentsB[0]!.id}/evidence.zip`).expect(400);
     expect(empty.body.code).toBe('NOTHING_TO_EXPORT');
+  });
+});
+
+/** Kirish cheklovi (bir login uchun daqiqasiga bir necha marta) — pastdagi testlar sessiyani qayta ishlatadi. */
+const sessions = new Map<string, Agent>();
+async function sessionOf(loginName: string) {
+  const existing = sessions.get(loginName);
+  if (existing) return existing;
+  const agent = await login(app, loginName);
+  sessions.set(loginName, agent);
+  return agent;
+}
+
+describe('Avvalgi shakldagi olimpiada yozuvlari', () => {
+  it('details’siz saqlangan olimpiada tasdiq va natija matnini yo‘qotmasdan tahrirlanadi', async () => {
+    const owner = fx.studentsA[0]!;
+    const student = await sessionOf(owner.login);
+    const legacy = await prisma.portfolioItem.create({
+      data: {
+        ownerId: owner.id,
+        type: 'OLYMPIAD',
+        title: 'Fizika olimpiadasi (viloyat)',
+        subjectId: fx.subjectId,
+        level: 'REGION',
+        result: '2-o‘rin, diplom va 45 ball',
+        status: 'APPROVED',
+        reviewerId: fx.teacher.id,
+        reviewedAt: new Date(),
+        submittedAt: new Date(),
+      },
+    });
+    const body = {
+      type: 'OLYMPIAD',
+      title: legacy.title,
+      subjectId: fx.subjectId,
+      level: 'REGION',
+      result: legacy.result,
+    };
+
+    // Tavsif va ko‘rinish o‘zgarsa — tasdiq ham, natija matni ham saqlanadi.
+    const kept = await student
+      .put(`/api/portfolio/${legacy.id}`)
+      .send({ ...body, description: 'Tavsif qo‘shildi', visibility: 'PRIVATE' })
+      .expect(200);
+    expect(kept.body).toMatchObject({
+      status: 'APPROVED',
+      result: '2-o‘rin, diplom va 45 ball',
+      details: null,
+      description: 'Tavsif qo‘shildi',
+    });
+
+    // Natija matnidagi xato tuzatilsa — qayta tekshiruv kerak, lekin details baribir majburiy emas.
+    const fixed = await student
+      .put(`/api/portfolio/${legacy.id}`)
+      .send({ ...body, result: '2-o‘rin, diplom (45 ball)' })
+      .expect(200);
+    expect(fixed.body).toMatchObject({ status: 'DRAFT', result: '2-o‘rin, diplom (45 ball)', details: null });
+
+    // Fan va o‘rin to‘ldirilsa — yangi shaklga o‘tadi, natija ulardan yoziladi.
+    const upgraded = await student
+      .put(`/api/portfolio/${legacy.id}`)
+      .send({ ...body, details: { subject: 'Fizika', place: 'SECOND' } })
+      .expect(200);
+    expect(upgraded.body).toMatchObject({
+      result: 'Fizika — 2-o‘rin',
+      details: { subject: 'Fizika', place: 'SECOND' },
+    });
+
+    // Endi (va har qanday yangi olimpiadada) details majburiy.
+    const again = await student.put(`/api/portfolio/${legacy.id}`).send(body);
+    expect(again.status).toBe(400);
+    expect(again.body).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      details: [{ path: 'details.subject', message: 'Fanni kiriting' }],
+    });
+    const created = await student.post('/api/portfolio').send(body);
+    expect(created.status).toBe(400);
+    expect(created.body.details.map((issue: { path: string }) => issue.path)).toContain('details.subject');
+    const poem = await createItem(student, { type: 'POEM', title: 'She’r (tur sinovi)' });
+    const converted = await student
+      .put(`/api/portfolio/${poem.id}`)
+      .send({ type: 'OLYMPIAD', title: 'Olimpiada', level: 'SCHOOL' });
+    expect(converted.status).toBe(400);
+    expect(converted.body.details.map((issue: { path: string }) => issue.path)).toContain('details.subject');
+  });
+});
+
+describe('Tekshiruvchi ko‘rgan versiya va bir vaqtdagi qarorlar', () => {
+  it('ko‘rilgandan keyin tahrirlanib qayta yuborilgan yozuv eski ko‘rinish bo‘yicha tasdiqlanmaydi', async () => {
+    const owner = fx.studentsA[0]!;
+    const student = await sessionOf(owner.login);
+    const item = await submitted(student, { ...IELTS, title: 'Versiya sinovi' });
+    const queue = await homeroom.get('/api/portfolio/review-queue').query({ ownerId: owner.id }).expect(200);
+    const seen = queue.body.find((row: { id: string }) => row.id === item.id).updatedAt as string;
+
+    // Egasi shu orada natijani o‘zgartirib, qayta yuboradi.
+    await student
+      .put(`/api/portfolio/${item.id}`)
+      .send({ ...IELTS, title: 'Versiya sinovi', details: { overall: 8 } })
+      .expect(200);
+    await student.post(`/api/portfolio/${item.id}/submit`).expect(200);
+
+    const single = await homeroom
+      .post(`/api/portfolio/${item.id}/review`)
+      .send({ decision: 'APPROVED', updatedAt: seen });
+    expect(single.status).toBe(409);
+    expect(single.body.code).toBe('CHANGED_SINCE_VIEW');
+    const batch = await homeroom
+      .post('/api/portfolio/review-batch')
+      .send({ itemIds: [item.id], decision: 'APPROVED', versions: { [item.id]: seen } })
+      .expect(200);
+    expect(batch.body).toEqual({ approved: 0, returned: 0, skipped: [{ id: item.id, reason: 'CHANGED' }] });
+    expect((await prisma.portfolioItem.findUniqueOrThrow({ where: { id: item.id } })).status).toBe('SUBMITTED');
+    expect(await prisma.portfolioReview.count({ where: { itemId: item.id } })).toBe(0);
+
+    // Yangi holat ko‘rilgach — tasdiqlanadi.
+    const fresh = await homeroom.get(`/api/portfolio/${item.id}`).expect(200);
+    expect(fresh.body.result).toContain('IELTS 8');
+    const approved = await homeroom
+      .post(`/api/portfolio/${item.id}/review`)
+      .send({ decision: 'APPROVED', updatedAt: fresh.body.updatedAt })
+      .expect(200);
+    expect(approved.body.status).toBe('APPROVED');
+  });
+
+  it('teskari tartibdagi bir vaqtdagi ommaviy qarorlar o‘zaro kutib qolmaydi: xato emas, “o‘tkazib yuborildi”', async () => {
+    const student = await sessionOf(fx.studentsA[1]!.login);
+    for (let round = 0; round < 4; round += 1) {
+      const ids: string[] = [];
+      for (let index = 0; index < 6; index += 1) {
+        ids.push((await submitted(student, { ...IELTS, title: `Tartib ${round}-${index}` })).id);
+      }
+      const [first, second] = await Promise.all([
+        deputy.post('/api/portfolio/review-batch').send({ itemIds: ids, decision: 'APPROVED' }),
+        homeroom.post('/api/portfolio/review-batch').send({ itemIds: [...ids].reverse(), decision: 'APPROVED' }),
+      ]);
+      expect([first.status, second.status], JSON.stringify([first.body, second.body])).toEqual([200, 200]);
+      expect(first.body.approved + second.body.approved).toBe(6);
+      expect(first.body.skipped.length + second.body.skipped.length).toBe(6);
+      expect(await prisma.portfolioReview.count({ where: { itemId: { in: ids } } })).toBe(6);
+    }
+  });
+});
+
+describe('Rahbariyat ro‘yxatlari', () => {
+  it('“Barcha yozuvlar”da qoralamalar ko‘rinmaydi', async () => {
+    const owner = fx.studentsA[0]!;
+    const student = await sessionOf(owner.login);
+    const draft = await createItem(student, { type: 'POEM', title: 'Maktab ro‘yxati qoralamasi' });
+    const drafts = await deputy.get('/api/portfolio/school').query({ status: 'DRAFT' }).expect(200);
+    expect(drafts.body).toMatchObject({ total: 0, items: [] });
+    const all = await deputy.get('/api/portfolio/school').query({ ownerId: owner.id, pageSize: 200 }).expect(200);
+    expect(all.body.items.length).toBeGreaterThan(0);
+    expect(all.body.items.some((item: { status: string }) => item.status === 'DRAFT')).toBe(false);
+    expect(all.body.items.some((item: { id: string }) => item.id === draft.id)).toBe(false);
+  });
+
+  it('bosh sahifadagi “tasdiqlash kutilmoqda” soni rahbarning o‘z yozuvlarini hisoblamaydi', async () => {
+    const before = (await deputy.get('/api/dashboard/leadership').expect(200)).body.pending.portfolio as number;
+    await submitted(deputy, { type: 'OPEN_LESSON', title: 'Rahbarning ochiq darsi' });
+    const after = (await deputy.get('/api/dashboard/leadership').expect(200)).body.pending.portfolio as number;
+    expect(after).toBe(before);
+    expect(after).toBe(
+      await prisma.portfolioItem.count({ where: { status: 'SUBMITTED', ownerId: { not: deputyId } } }),
+    );
+    const queue = await deputy.get('/api/portfolio/review-queue/students').expect(200);
+    expect(queue.body.reduce((sum: number, row: { pending: number }) => sum + row.pending, 0)).toBe(after);
+  });
+});
+
+describe('ZIP yuklab olish to‘xtatilganda', () => {
+  it('fayllar navbat bilan ochiladi va mijoz uzilganda hammasi yopiladi', async () => {
+    const owner = await createUser(prisma, ['STUDENT']);
+    const student = await login(app, owner.login);
+    // Bitta katta fayl ko‘p yozuvda: arxiv socket buferlariga sig‘maydi, yozish to‘xtab turadi.
+    const big = Buffer.concat([PDF, Buffer.alloc(3 * 1024 * 1024, 0x20)]);
+    const uploaded = await student
+      .post('/api/files')
+      .attach('file', big, { filename: 'katta.pdf', contentType: 'application/pdf' })
+      .expect(201);
+    for (let index = 0; index < 12; index += 1) {
+      await createItem(student, {
+        type: 'CERTIFICATE',
+        title: `Katta fayl ${index}`,
+        evidenceFileId: uploaded.body.id,
+      });
+    }
+
+    const root = join(resolve(app.get(AppConfig).storageDir), 'files');
+    const openFiles = () =>
+      readdirSync('/proc/self/fd').filter((fd) => {
+        try {
+          return readlinkSync(`/proc/self/fd/${fd}`).startsWith(root);
+        } catch {
+          return false;
+        }
+      }).length;
+    const settle = async (expected: number) => {
+      for (let attempt = 0; attempt < 60 && openFiles() !== expected; attempt += 1) await delay(50);
+      return openFiles();
+    };
+    const base = openFiles();
+
+    const session = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ login: owner.login, password: PASSWORD })
+      .expect(200);
+    const cookie = (session.headers['set-cookie'] as unknown as string[])
+      .map((entry) => entry.split(';')[0])
+      .join('; ');
+    const server = http.createServer(app.getHttpAdapter().getInstance());
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const during = await new Promise<number>((done, fail) => {
+        const req = http.get(
+          {
+            host: '127.0.0.1',
+            port,
+            path: `/api/portfolio/students/${owner.id}/evidence.zip?scope=all`,
+            headers: { cookie },
+          },
+          (res) => {
+            if (res.statusCode !== 200) {
+              fail(new Error(`HTTP ${res.statusCode}`));
+              return;
+            }
+            res.once('data', () => {
+              const count = openFiles();
+              req.destroy();
+              done(count);
+            });
+          },
+        );
+        req.on('error', () => undefined);
+      });
+      // Bir vaqtda ko‘pi bilan bitta fayl (almashish paytida — ikkita) ochiq.
+      expect(during).toBeLessThanOrEqual(2);
+      expect(await settle(base)).toBe(base);
+    } finally {
+      server.closeAllConnections();
+      await new Promise((done) => server.close(done));
+    }
+
+    // To‘liq yuklab olish ham ochiq fayl qoldirmaydi.
+    const full = await student
+      .get(`/api/portfolio/students/${owner.id}/evidence.zip`)
+      .query({ scope: 'all' })
+      .buffer(true)
+      .parse(binaryParser)
+      .expect(200);
+    const zip = await JSZip.loadAsync(full.body as Buffer);
+    const certificates = Object.keys(zip.files).filter((name) => name.includes('_Katta_fayl_'));
+    expect(certificates).toHaveLength(12);
+    expect(await settle(base)).toBe(base);
   });
 });

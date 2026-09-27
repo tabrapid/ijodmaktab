@@ -47,7 +47,9 @@ function ReviewForm({
   });
 
   const review = useMutation({
-    mutationFn: (values: ReviewOutput) => api.post<PortfolioItemView>(`/portfolio/${item.id}/review`, values),
+    // Ko‘rsatilgan versiya bilan: egasi shu orada tahrirlagan bo‘lsa, qaror qo‘llanmaydi (409).
+    mutationFn: (values: ReviewOutput) =>
+      api.post<PortfolioItemView>(`/portfolio/${item.id}/review`, { ...values, updatedAt: item.updatedAt }),
     onSuccess: (updated) => {
       queryClient.setQueryData(portfolioKeys.item(updated.id), updated);
       void queryClient.invalidateQueries({ queryKey: portfolioKeys.all });

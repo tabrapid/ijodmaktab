@@ -56,7 +56,27 @@ export interface BatchReviewInput {
   itemIds: string[];
   decision: 'APPROVED' | 'RETURNED';
   reason?: string | null;
+  /** Tekshiruvchi ko‘rgan versiyalar (yozuv ID → updatedAt): keyin o‘zgartirilganlari qo‘llanmaydi. */
+  versions?: Record<string, string>;
 }
+
+/** Ommaviy qaror so‘rovi ekranda ko‘rsatilgan yozuvlar versiyalari bilan. */
+export function batchReviewInput(
+  items: readonly PortfolioItemView[],
+  decision: BatchReviewInput['decision'],
+  reason?: string | null,
+): BatchReviewInput {
+  return {
+    itemIds: items.map((item) => item.id),
+    decision,
+    reason,
+    versions: Object.fromEntries(items.map((item) => [item.id, item.updatedAt])),
+  };
+}
+
+/** Ko‘rilgandan keyin o‘zgartirilgani uchun qo‘llanmagan (navbatda qolgan) yozuvlar. */
+export const changedSinceView = (result: PortfolioBatchResult) =>
+  new Set(result.skipped.filter((entry) => entry.reason === 'CHANGED').map((entry) => entry.id));
 
 /** Ommaviy qaror natijasi haqida xabar: nechtasi qo‘llandi, nechtasi o‘tkazib yuborildi. */
 function batchMessage(result: PortfolioBatchResult) {
@@ -65,10 +85,17 @@ function batchMessage(result: PortfolioBatchResult) {
     : result.returned
       ? `${result.returned} ta yozuv tuzatishga qaytarildi.`
       : 'Hech bir yozuv o‘zgartirilmadi.';
-  const skipped = result.skipped.length
-    ? ` ${result.skipped.length} tasi o‘tkazib yuborildi — ular allaqachon ko‘rib chiqilgan, tahrirlangan yoki sizning vakolatingizdan tashqarida.`
-    : '';
-  return `${done}${skipped}`;
+  const changed = changedSinceView(result).size;
+  const other = result.skipped.length - changed;
+  return [
+    done,
+    changed ? `${changed} tasi siz ko‘rganingizdan keyin o‘zgartirilgan — yangi holatini ko‘rib chiqing.` : null,
+    other
+      ? `${other} tasi o‘tkazib yuborildi — ular allaqachon ko‘rib chiqilgan, tahrirlangan yoki sizning vakolatingizdan tashqarida.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /**
@@ -79,9 +106,13 @@ export function useReviewActions() {
   const queryClient = useQueryClient();
   const toast = useToast();
 
+  // Ko‘rsatilgan versiya yuboriladi: egasi shu orada tahrirlab qayta yuborgan bo‘lsa, server 409 qaytaradi.
   const approve = useMutation({
     mutationFn: (item: PortfolioItemView) =>
-      api.post<PortfolioItemView>(`/portfolio/${item.id}/review`, { decision: 'APPROVED' }),
+      api.post<PortfolioItemView>(`/portfolio/${item.id}/review`, {
+        decision: 'APPROVED',
+        updatedAt: item.updatedAt,
+      }),
     onSuccess: (updated) => {
       queryClient.setQueryData(portfolioKeys.item(updated.id), updated);
       toast.success(`“${updated.title}” tasdiqlandi. Egasiga bildirishnoma yuborildi.`);
@@ -93,7 +124,8 @@ export function useReviewActions() {
   const batch = useMutation({
     mutationFn: (input: BatchReviewInput) => api.post<PortfolioBatchResult>('/portfolio/review-batch', input),
     onSuccess: (result) => {
-      if (result.approved || result.returned) toast.success(batchMessage(result));
+      if (changedSinceView(result).size) toast.info(batchMessage(result));
+      else if (result.approved || result.returned) toast.success(batchMessage(result));
       else toast.info(batchMessage(result));
     },
     onError: (error) => toast.error(errorMessage(error)),

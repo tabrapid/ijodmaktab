@@ -234,6 +234,11 @@ export class PortfolioExportService {
     res.on('close', () => {
       if (!res.writableFinished) cleanup();
     });
+    // Mijoz arxiv tayyorlanayotganda uzilgan bo‘lsa, 'close' allaqachon o‘tgan — oqim boshlanmaydi.
+    if (res.destroyed) {
+      cleanup();
+      return;
+    }
     stream.on('error', (error: Error) => {
       this.logger.error(`ZIP arxivini yaratib bo‘lmadi: ${error.message}`);
       cleanup();

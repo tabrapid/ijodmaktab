@@ -39,7 +39,7 @@ import {
   ReturnReasonAlert,
 } from '@/components/portfolio/parts';
 import { PendingItemCard } from '@/components/portfolio/pending-item';
-import { useReviewActions } from '@/components/portfolio/queries';
+import { batchReviewInput, useReviewActions } from '@/components/portfolio/queries';
 import { ReviewDialog, type ReviewTarget } from '@/components/portfolio/review-dialog';
 import { isCreativeType, isUuid, portfolioKeys, printHref } from '@/components/portfolio/utils';
 import { PortfolioStatusBadge } from '@/components/status';
@@ -336,10 +336,7 @@ function StudentPortfolio() {
         open={confirmAll}
         onClose={() => setConfirmAll(false)}
         onConfirm={() =>
-          batch.mutate(
-            { itemIds: reviewable.map((item) => item.id), decision: 'APPROVED' },
-            { onSettled: () => setConfirmAll(false) },
-          )
+          batch.mutate(batchReviewInput(reviewable, 'APPROVED'), { onSettled: () => setConfirmAll(false) })
         }
         loading={batch.isPending}
         title="Hammasini tasdiqlash"
