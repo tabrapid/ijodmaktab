@@ -176,6 +176,7 @@ export type UserListQuery = z.input<typeof userListQuerySchema>;
 
 /** Excel importida moslashtiriladigan maydonlar. */
 export const IMPORT_FIELDS = [
+  'fullName',
   'lastName',
   'firstName',
   'middleName',
@@ -186,6 +187,7 @@ export const IMPORT_FIELDS = [
 export type ImportField = (typeof IMPORT_FIELDS)[number];
 
 export const IMPORT_FIELD_LABELS: Record<ImportField, string> = {
+  fullName: 'F.I.Sh. (bitta ustunda)',
   lastName: 'Familiya',
   firstName: 'Ism',
   middleName: 'Otasining ismi',
@@ -196,9 +198,11 @@ export const IMPORT_FIELD_LABELS: Record<ImportField, string> = {
 
 export const importMappingSchema = z.object({
   /** Maydon → ustun tartib raqami (0 dan). `null` — ishlatilmaydi. */
-  mapping: z.record(z.enum(IMPORT_FIELDS), z.number().int().min(0).max(200).nullable()),
-  /** Rol ustuni bo‘lmasa qo‘llanadigan rol. */
+  mapping: z.partialRecord(z.enum(IMPORT_FIELDS), z.number().int().min(0).max(200).nullable()),
+  /** Rol ustuni bo‘lmasa yoki bo‘sh bo‘lsa qo‘llanadigan rol. */
   defaultRole: z.enum(['STUDENT', 'TEACHER']).default('STUDENT'),
+  /** Import qilinmaydigan qatorlar (Excel qator raqamlari). */
+  skipRows: z.array(z.number().int().min(1)).default([]),
 });
 export type ImportMappingInput = z.input<typeof importMappingSchema>;
 

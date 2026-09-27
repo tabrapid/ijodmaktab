@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { changePasswordSchema, loginSchema, totpCodeSchema } from '@ijod/shared';
 import type { Request, Response } from 'express';
@@ -6,6 +6,7 @@ import type { z } from 'zod';
 import type { AuthUser } from '../common/auth-user.js';
 import { AllowMfaPending, AllowPasswordChangePending, CurrentUser, Public } from '../common/decorators.js';
 import { notFound } from '../common/errors.js';
+import { Uuid } from '../common/uuid.pipe.js';
 import { zod } from '../common/zod.pipe.js';
 import { AuthService } from './auth.service.js';
 import { SESSION_COOKIE, SessionService } from './session.service.js';
@@ -118,7 +119,7 @@ export class AuthController {
   }
 
   @Delete('sessions/:id')
-  async revokeSession(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+  async revokeSession(@CurrentUser() user: AuthUser, @Param('id', Uuid) id: string) {
     const sessions = await this.sessions.listActive(user.id);
     if (!sessions.some((session) => session.id === id)) throw notFound('Sessiya');
     await this.sessions.revoke(id, 'revoked_by_user');

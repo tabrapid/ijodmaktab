@@ -42,3 +42,33 @@ export function userSearchText(person: PersonName & { login?: string | null }): 
 export function formatInternalId(internalId: number): string {
   return String(internalId).padStart(6, '0');
 }
+
+const CYRILLIC_TO_LATIN: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'j', з: 'z', и: 'i', й: 'y',
+  к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+  х: 'x', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sh', ъ: '', ы: 'i', ь: '', э: 'e', ю: 'yu', я: 'ya',
+  ў: "o'", қ: 'q', ғ: "g'", ҳ: 'h',
+};
+
+/** Kirill yozuvidagi matnni lotin yozuviga o‘giradi (login yaratish uchun yetarli aniqlikda). */
+export function transliterate(value: string): string {
+  return [...value]
+    .map((char) => {
+      const lower = char.toLowerCase();
+      const mapped = CYRILLIC_TO_LATIN[lower];
+      if (mapped === undefined) return char;
+      return char === lower ? mapped : mapped.charAt(0).toUpperCase() + mapped.slice(1);
+    })
+    .join('');
+}
+
+/** Ism-familiyadan login: “Zebo”, “O‘rinboyeva” → “zebo.orinboyeva”. */
+export function loginFromName(firstName: string, lastName: string): string {
+  const clean = (value: string) =>
+    normalizeApostrophes(transliterate(value))
+      .toLowerCase()
+      .replace(/'/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  const login = [clean(firstName), clean(lastName)].filter(Boolean).join('.');
+  return login.length >= 3 ? login.slice(0, 40) : `user.${login}`.slice(0, 40);
+}
