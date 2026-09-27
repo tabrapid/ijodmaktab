@@ -21,6 +21,16 @@ import { stateOf } from '../sessions/session-rules.js';
 
 const FINAL = Prisma.join([...FINAL_ATTEMPT_STATUSES].map((status) => Prisma.sql`${status}::"AttemptStatus"`));
 
+/**
+ * `DISTINCT ON (at."assignmentId")` uchun tartib: har tayinlovdan sessiya siyosati bo‘yicha
+ * hisobga olinadigan urinish qoladi (birinchi / oxirgi / eng yuqori foiz, tenglikda ertaroq urinish) —
+ * `selectCountedAttempt` bilan bir xil. So‘rovda `s` — AssessmentSession.
+ */
+const COUNTED_ORDER = Prisma.sql`at."assignmentId",
+  CASE WHEN s."attemptPolicy" = 'LAST' THEN -at."attemptNo" ELSE 0 END,
+  CASE WHEN s."attemptPolicy" = 'BEST' THEN at.score / NULLIF(at."maxScore", 0) END DESC NULLS LAST,
+  at."attemptNo"`;
+
 /** Toshkent bo‘yicha bugungi kun chegaralari (UTC). */
 function todayRange(now = new Date()) {
   const start = new Date(`${schoolToday(now)}T00:00:00+05:00`);
@@ -62,7 +72,9 @@ export class DashboardService {
         take: 20,
       }),
       this.prisma.assessmentSession.count({
-        where: { AND: [mine, { cancelledAt: null, startsAt: { gte: end, lt: new Date(end.getTime() + 7 * 86_400_000) } }] },
+        where: {
+          AND: [mine, { cancelledAt: null, startsAt: { gte: end, lt: new Date(end.getTime() + 7 * 86_400_000) } }],
+        },
       }),
       this.prisma.testTemplate.count({ where: { ownerId: viewer.id, status: 'DRAFT' } }),
       this.access.homeroomClassIds(viewer.id),
@@ -88,7 +100,8 @@ export class DashboardService {
     return {
       today: today.map((session) => {
         const classes = new Map<string, string>();
-        for (const assignment of session.assignments) if (assignment.class) classes.set(assignment.class.id, assignment.class.name);
+        for (const assignment of session.assignments)
+          if (assignment.class) classes.set(assignment.class.id, assignment.class.name);
         return {
           id: session.id,
           title: session.title,
@@ -99,7 +112,9 @@ export class DashboardService {
           classes: [...classes].map(([id, name]) => ({ id, name })),
           assignedCount: session.assignments.length,
           inProgressCount: session.attempts.filter((attempt) => attempt.status === 'IN_PROGRESS').length,
-          finishedCount: session.attempts.filter((attempt) => (FINAL_ATTEMPT_STATUSES as readonly string[]).includes(attempt.status)).length,
+          finishedCount: session.attempts.filter((attempt) =>
+            (FINAL_ATTEMPT_STATUSES as readonly string[]).includes(attempt.status),
+          ).length,
         };
       }),
       upcomingCount,
@@ -112,20 +127,24 @@ export class DashboardService {
         endsAt: session.endsAt,
         ...recentStats.get(session.id)!,
       })),
-      difficultTopics: await this.difficultTopics(Prisma.sql`(s."createdById" = ${viewer.id}::uuid OR s."conductorId" = ${viewer.id}::uuid)`),
+      difficultTopics: await this.difficultTopics(
+        Prisma.sql`(s."createdById" = ${viewer.id}::uuid OR s."conductorId" = ${viewer.id}::uuid)`,
+      ),
     };
   }
 
-  /** Sessiyalar bo‘yicha qatnashish va umumiy o‘zlashtirish (birinchi yakunlangan urinish bo‘yicha). */
+  /** Sessiyalar bo‘yicha qatnashish va umumiy o‘zlashtirish (hisobga olinadigan urinish bo‘yicha). */
   private async sessionStats(sessionIds: string[]) {
     const map = new Map<string, { participation: ReturnType<typeof ratio>; mastery: ReturnType<typeof ratio> }>();
     if (sessionIds.length === 0) return map;
-    const rows = await this.prisma.$queryRaw<{ sessionId: string; assigned: number; finished: number; earned: number | null; max: number | null }[]>`
+    const rows = await this.prisma.$queryRaw<
+      { sessionId: string; assigned: number; finished: number; earned: number | null; max: number | null }[]
+    >`
       WITH counted AS (
         SELECT DISTINCT ON (at."assignmentId") at."assignmentId", at.score, at."maxScore"
-        FROM "Attempt" at
+        FROM "Attempt" at JOIN "AssessmentSession" s ON s.id = at."sessionId"
         WHERE at.status IN (${FINAL}) AND at."sessionId" = ANY(${sessionIds}::uuid[])
-        ORDER BY at."assignmentId", at."attemptNo"
+        ORDER BY ${COUNTED_ORDER}
       )
       SELECT sa."sessionId" AS "sessionId",
              COUNT(*)::int AS assigned,
@@ -149,23 +168,28 @@ export class DashboardService {
   /** Mavzular bo‘yicha qiyinchiliklar (so‘nggi 60 kun): to‘g‘ri javob ulushi eng past mavzular. */
   private async difficultTopics(scope: Prisma.Sql) {
     const rows = await this.prisma.$queryRaw<{ topic: string; subject: string; correct: number; total: number }[]>`
+      WITH counted AS (
+        SELECT DISTINCT ON (at."assignmentId") at.id, at."sessionId"
+        FROM "Attempt" at JOIN "AssessmentSession" s ON s.id = at."sessionId"
+        WHERE ${scope}
+          AND at.status IN (${FINAL})
+          AND s."cancelledAt" IS NULL
+          AND s."startsAt" > now() - interval '60 days'
+        ORDER BY ${COUNTED_ORDER}
+      )
       SELECT COALESCE(NULLIF(q.topic, ''), NULLIF(tt.topic, ''), 'Mavzu ko‘rsatilmagan') AS topic,
              sub.name AS subject,
              COUNT(a.id) FILTER (WHERE a."isCorrect")::int AS correct,
              COUNT(*)::int AS total
-      FROM "Attempt" at
-      JOIN "AssessmentSession" s ON s.id = at."sessionId"
+      FROM counted ct
+      JOIN "AssessmentSession" s ON s.id = ct."sessionId"
       JOIN "TestQuestion" tq ON tq."testVersionId" = s."testVersionId"
-      LEFT JOIN "Answer" a ON a."attemptId" = at.id AND a."testQuestionId" = tq.id
+      LEFT JOIN "Answer" a ON a."attemptId" = ct.id AND a."testQuestionId" = tq.id
       JOIN "QuestionVersion" qv ON qv.id = tq."questionVersionId"
       JOIN "Question" q ON q.id = qv."questionId"
       JOIN "TestVersion" tv ON tv.id = s."testVersionId"
       JOIN "TestTemplate" tt ON tt.id = tv."templateId"
       JOIN "Subject" sub ON sub.id = s."subjectId"
-      WHERE ${scope}
-        AND at.status IN (${FINAL})
-        AND s."cancelledAt" IS NULL
-        AND s."startsAt" > now() - interval '60 days'
       GROUP BY 1, 2
       HAVING COUNT(*) >= 5
       ORDER BY COUNT(a.id) FILTER (WHERE a."isCorrect")::float / COUNT(*) ASC
@@ -180,12 +204,25 @@ export class DashboardService {
     const now = new Date();
     const yearFilter = year ? Prisma.sql`s."academicYearId" = ${year.id}::uuid` : Prisma.sql`TRUE`;
 
-    const [classRows, subjectRows, categoryRows, trendRows, counts, pendingPortfolio, pendingQuestions, recent] = await Promise.all([
-      this.prisma.$queryRaw<{ classId: string; name: string; gradeLevel: number; sessions: number; assigned: number; finished: number; earned: number | null; max: number | null }[]>`
+    const [classRows, subjectRows, categoryRows, trendRows, counts, pendingPortfolio, pendingQuestions, recent] =
+      await Promise.all([
+        this.prisma.$queryRaw<
+          {
+            classId: string;
+            name: string;
+            gradeLevel: number;
+            sessions: number;
+            assigned: number;
+            finished: number;
+            earned: number | null;
+            max: number | null;
+          }[]
+        >`
         WITH counted AS (
           SELECT DISTINCT ON (at."assignmentId") at."assignmentId", at.score, at."maxScore"
-          FROM "Attempt" at WHERE at.status IN (${FINAL})
-          ORDER BY at."assignmentId", at."attemptNo"
+          FROM "Attempt" at JOIN "AssessmentSession" s ON s.id = at."sessionId"
+          WHERE at.status IN (${FINAL})
+          ORDER BY ${COUNTED_ORDER}
         )
         SELECT c.id AS "classId", c.name, c."gradeLevel",
                COUNT(DISTINCT s.id)::int AS sessions,
@@ -199,11 +236,14 @@ export class DashboardService {
         WHERE sa."removedAt" IS NULL AND s."cancelledAt" IS NULL AND s."endsAt" <= now() AND ${yearFilter}
         GROUP BY c.id, c.name, c."gradeLevel"
         ORDER BY c."gradeLevel", c.name`,
-      this.prisma.$queryRaw<{ subjectId: string; name: string; sessions: number; earned: number | null; max: number | null }[]>`
+        this.prisma.$queryRaw<
+          { subjectId: string; name: string; sessions: number; earned: number | null; max: number | null }[]
+        >`
         WITH counted AS (
           SELECT DISTINCT ON (at."assignmentId") at."assignmentId", at."sessionId", at.score, at."maxScore"
-          FROM "Attempt" at WHERE at.status IN (${FINAL})
-          ORDER BY at."assignmentId", at."attemptNo"
+          FROM "Attempt" at JOIN "AssessmentSession" s ON s.id = at."sessionId"
+          WHERE at.status IN (${FINAL})
+          ORDER BY ${COUNTED_ORDER}
         )
         SELECT sub.id AS "subjectId", sub.name, COUNT(DISTINCT s.id)::int AS sessions,
                SUM(ct.score)::float AS earned, SUM(ct."maxScore")::float AS max
@@ -213,47 +253,51 @@ export class DashboardService {
         WHERE s."cancelledAt" IS NULL AND s."endsAt" <= now() AND ${yearFilter}
         GROUP BY sub.id, sub.name
         ORDER BY sub.name`,
-      this.prisma.$queryRaw<{ category: string; earned: number | null; max: number | null }[]>`
+        this.prisma.$queryRaw<{ category: string; earned: number | null; max: number | null }[]>`
         WITH counted AS (
           SELECT DISTINCT ON (at."assignmentId") at."categoryScores"
           FROM "Attempt" at JOIN "AssessmentSession" s ON s.id = at."sessionId"
-          WHERE at.status IN (${FINAL}) AND s."cancelledAt" IS NULL AND ${yearFilter}
-          ORDER BY at."assignmentId", at."attemptNo"
+          WHERE at.status IN (${FINAL}) AND s."cancelledAt" IS NULL AND s."endsAt" <= now() AND ${yearFilter}
+          ORDER BY ${COUNTED_ORDER}
         )
         SELECT kv.key AS category, SUM((kv.value->>'earned')::numeric)::float AS earned, SUM((kv.value->>'max')::numeric)::float AS max
         FROM counted, jsonb_each(counted."categoryScores") kv
         GROUP BY kv.key`,
-      this.prisma.$queryRaw<{ month: string; earned: number | null; max: number | null }[]>`
+        this.prisma.$queryRaw<{ month: string; earned: number | null; max: number | null }[]>`
         WITH counted AS (
           SELECT DISTINCT ON (at."assignmentId") at."submittedAt", at.score, at."maxScore"
           FROM "Attempt" at JOIN "AssessmentSession" s ON s.id = at."sessionId"
-          WHERE at.status IN (${FINAL}) AND s."cancelledAt" IS NULL AND ${yearFilter}
-          ORDER BY at."assignmentId", at."attemptNo"
+          WHERE at.status IN (${FINAL}) AND s."cancelledAt" IS NULL AND s."endsAt" <= now() AND ${yearFilter}
+          ORDER BY ${COUNTED_ORDER}
         )
         SELECT to_char(("submittedAt" AT TIME ZONE 'Asia/Tashkent'), 'YYYY-MM') AS month,
                SUM(score)::float AS earned, SUM("maxScore")::float AS max
         FROM counted GROUP BY 1 ORDER BY 1`,
-      Promise.all([
-        this.prisma.user.count({ where: { status: 'ACTIVE', roles: { some: { role: 'STUDENT' } } } }),
-        this.prisma.user.count({ where: { status: 'ACTIVE', roles: { some: { role: 'TEACHER' } } } }),
-        year ? this.prisma.class.count({ where: { academicYearId: year.id, archivedAt: null } }) : 0,
-        this.prisma.assessmentSession.count({ where: { cancelledAt: null, academicYearId: year?.id } }),
-        this.prisma.assessmentSession.count({ where: { cancelledAt: null, startsAt: { lte: now }, endsAt: { gt: now } } }),
-        this.prisma.attempt.count({ where: { status: 'IN_PROGRESS' } }),
-        this.prisma.attempt.count({ where: { status: 'UNDER_REVIEW' } }),
-      ]),
-      this.prisma.portfolioItem.count({ where: { status: 'SUBMITTED' } }),
-      this.prisma.question.count({ where: { visibility: 'PRIVATE', schoolRequestedAt: { not: null }, archivedAt: null } }),
-      this.prisma.assessmentSession.findMany({
-        where: { cancelledAt: null, academicYearId: year?.id },
-        orderBy: { startsAt: 'desc' },
-        take: 8,
-        include: {
-          subject: { select: { id: true, name: true } },
-          conductor: { select: { id: true, lastName: true, firstName: true, middleName: true } },
-        },
-      }),
-    ]);
+        Promise.all([
+          this.prisma.user.count({ where: { status: 'ACTIVE', roles: { some: { role: 'STUDENT' } } } }),
+          this.prisma.user.count({ where: { status: 'ACTIVE', roles: { some: { role: 'TEACHER' } } } }),
+          year ? this.prisma.class.count({ where: { academicYearId: year.id, archivedAt: null } }) : 0,
+          this.prisma.assessmentSession.count({ where: { cancelledAt: null, academicYearId: year?.id } }),
+          this.prisma.assessmentSession.count({
+            where: { cancelledAt: null, startsAt: { lte: now }, endsAt: { gt: now } },
+          }),
+          this.prisma.attempt.count({ where: { status: 'IN_PROGRESS' } }),
+          this.prisma.attempt.count({ where: { status: 'UNDER_REVIEW' } }),
+        ]),
+        this.prisma.portfolioItem.count({ where: { status: 'SUBMITTED' } }),
+        this.prisma.question.count({
+          where: { visibility: 'PRIVATE', schoolRequestedAt: { not: null }, archivedAt: null },
+        }),
+        this.prisma.assessmentSession.findMany({
+          where: { cancelledAt: null, academicYearId: year?.id },
+          orderBy: { startsAt: 'desc' },
+          take: 8,
+          include: {
+            subject: { select: { id: true, name: true } },
+            conductor: { select: { id: true, lastName: true, firstName: true, middleName: true } },
+          },
+        }),
+      ]);
     const [students, teachers, classes, sessions, openSessions, inProgress, underReview] = counts;
     const recentStats = await this.sessionStats(recent.map((session) => session.id));
 
@@ -307,27 +351,34 @@ export class DashboardService {
 
   async admin() {
     const year = await this.access.currentYear();
-    const [roleCounts, statusCounts, locked, mustChange, withoutClass, withoutHomeroom, classes, subjects, imports] = await Promise.all([
-      this.prisma.roleAssignment.groupBy({ by: ['role'], where: { user: { status: 'ACTIVE' } }, _count: { userId: true } }),
-      this.prisma.user.groupBy({ by: ['status'], _count: { id: true } }),
-      this.prisma.user.count({ where: { lockedUntil: { gt: new Date() } } }),
-      this.prisma.user.count({ where: { status: 'ACTIVE', mustChangePassword: true } }),
-      this.prisma.user.count({
-        where: {
-          status: 'ACTIVE',
-          roles: { some: { role: 'STUDENT' } },
-          enrollments: { none: { endsOn: null, academicYearId: year?.id } },
-        },
-      }),
-      year ? this.prisma.class.count({ where: { academicYearId: year.id, archivedAt: null, homeroomTeacherId: null } }) : 0,
-      year ? this.prisma.class.count({ where: { academicYearId: year.id, archivedAt: null } }) : 0,
-      this.prisma.subject.count({ where: { isActive: true } }),
-      this.prisma.importBatch.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 5,
-        include: { createdBy: { select: { id: true, lastName: true, firstName: true, middleName: true } } },
-      }),
-    ]);
+    const [roleCounts, statusCounts, locked, mustChange, withoutClass, withoutHomeroom, classes, subjects, imports] =
+      await Promise.all([
+        this.prisma.roleAssignment.groupBy({
+          by: ['role'],
+          where: { user: { status: 'ACTIVE' } },
+          _count: { userId: true },
+        }),
+        this.prisma.user.groupBy({ by: ['status'], _count: { id: true } }),
+        this.prisma.user.count({ where: { lockedUntil: { gt: new Date() } } }),
+        this.prisma.user.count({ where: { status: 'ACTIVE', mustChangePassword: true } }),
+        this.prisma.user.count({
+          where: {
+            status: 'ACTIVE',
+            roles: { some: { role: 'STUDENT' } },
+            enrollments: { none: { endsOn: null, academicYearId: year?.id } },
+          },
+        }),
+        year
+          ? this.prisma.class.count({ where: { academicYearId: year.id, archivedAt: null, homeroomTeacherId: null } })
+          : 0,
+        year ? this.prisma.class.count({ where: { academicYearId: year.id, archivedAt: null } }) : 0,
+        this.prisma.subject.count({ where: { isActive: true } }),
+        this.prisma.importBatch.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          include: { createdBy: { select: { id: true, lastName: true, firstName: true, middleName: true } } },
+        }),
+      ]);
     const byRole = Object.fromEntries(ROLES.map((role) => [role, 0])) as Record<Role, number>;
     for (const row of roleCounts) byRole[row.role as Role] = row._count.userId;
     return {
@@ -358,20 +409,31 @@ export class DashboardService {
   async system(viewer: AuthUser) {
     if (!hasRole(viewer, 'SUPER_ADMIN')) return null;
     const since = new Date(Date.now() - 24 * 60 * 60_000);
-    const [admin, activeSessions, failedLogins, mfaStaff, exportsReady, exportsFailed, recentAudit, quarantined] = await Promise.all([
-      this.admin(),
-      this.prisma.authSession.count({ where: { revokedAt: null, expiresAt: { gt: new Date() } } }),
-      this.prisma.auditEvent.count({ where: { action: { in: ['auth.login_failed', 'auth.account_locked'] }, createdAt: { gt: since } } }),
-      this.prisma.user.count({ where: { totpEnabledAt: { not: null } } }),
-      this.prisma.exportJob.count({ where: { status: 'READY' } }),
-      this.prisma.exportJob.count({ where: { status: 'FAILED', createdAt: { gt: since } } }),
-      this.prisma.auditEvent.findMany({
-        orderBy: { id: 'desc' },
-        take: 12,
-        include: { actor: { select: { id: true, lastName: true, firstName: true, middleName: true } } },
-      }),
-      this.prisma.fileAsset.count({ where: { status: 'QUARANTINED' } }),
-    ]);
+    const [admin, activeSessions, failedLogins, mfaStaff, exportsReady, exportsFailed, recentAudit, quarantined] =
+      await Promise.all([
+        this.admin(),
+        this.prisma.authSession.count({ where: { revokedAt: null, expiresAt: { gt: new Date() } } }),
+        // Bloklashga olib kelgan urinish “auth.account_locked” sifatida yoziladi — u ham muvaffaqiyatsiz kirish.
+        this.prisma.auditEvent.count({
+          where: { action: { in: ['auth.login_failed', 'auth.account_locked'] }, createdAt: { gt: since } },
+        }),
+        // Ikki bosqichli kirish yoqilgan xodimlar (o‘quvchilar hisobga olinmaydi).
+        this.prisma.user.count({
+          where: {
+            totpEnabledAt: { not: null },
+            status: 'ACTIVE',
+            roles: { some: { role: { in: ['TEACHER', 'DEPUTY', 'ADMIN', 'SUPER_ADMIN'] } } },
+          },
+        }),
+        this.prisma.exportJob.count({ where: { status: 'READY' } }),
+        this.prisma.exportJob.count({ where: { status: 'FAILED', createdAt: { gt: since } } }),
+        this.prisma.auditEvent.findMany({
+          orderBy: { id: 'desc' },
+          take: 12,
+          include: { actor: { select: { id: true, lastName: true, firstName: true, middleName: true } } },
+        }),
+        this.prisma.fileAsset.count({ where: { status: 'QUARANTINED' } }),
+      ]);
     return {
       ...admin,
       security: { activeSessions, failedLogins24h: failedLogins, mfaEnabled: mfaStaff, quarantinedFiles: quarantined },

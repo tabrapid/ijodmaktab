@@ -78,10 +78,10 @@ describe('gradeAttempt', () => {
   });
 
   it('kasr ballarni suzuvchi nuqta xatosisiz yig‘adi', () => {
-    const grade = gradeAttempt(
-      [q('x', 'KNOWLEDGE', 0.1), q('y', 'KNOWLEDGE', 0.2)],
-      { x: { optionId: 'a' }, y: { optionId: 'a' } },
-    );
+    const grade = gradeAttempt([q('x', 'KNOWLEDGE', 0.1), q('y', 'KNOWLEDGE', 0.2)], {
+      x: { optionId: 'a' },
+      y: { optionId: 'a' },
+    });
     expect(grade.total).toEqual({ earned: 0.3, max: 0.3 });
     expect(sumPoints([0.1, 0.2])).toBe(0.3);
   });

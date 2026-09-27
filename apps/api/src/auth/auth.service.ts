@@ -14,8 +14,7 @@ export const MAX_FAILED_LOGINS = 5;
 export const LOCK_MINUTES = 15;
 const TOTP_ISSUER = 'Ijod maktabi';
 
-const invalidCredentials = () =>
-  unauthorized('Login yoki parol noto‘g‘ri.', 'INVALID_CREDENTIALS');
+const invalidCredentials = () => unauthorized('Login yoki parol noto‘g‘ri.', 'INVALID_CREDENTIALS');
 
 const accountLocked = (until: Date) => {
   const minutes = Math.max(1, Math.ceil((until.getTime() - Date.now()) / 60_000));
@@ -77,7 +76,12 @@ export class AuthService {
     // Super admin hisobi faqat alohida kirish manzilidan, boshqalar esa faqat oddiy kirishdan.
     if ((realm === 'SYSTEM') !== isSuperAdmin) {
       await burnPasswordCheck(input.password);
-      await this.audit.log('auth.login_failed', { type: 'User', id: user.id }, { realm, reason: 'wrong_realm' }, { actor });
+      await this.audit.log(
+        'auth.login_failed',
+        { type: 'User', id: user.id },
+        { realm, reason: 'wrong_realm' },
+        { actor },
+      );
       throw invalidCredentials();
     }
 
@@ -106,7 +110,12 @@ export class AuthService {
     }
 
     if (user.status !== 'ACTIVE') {
-      await this.audit.log('auth.login_failed', { type: 'User', id: user.id }, { realm, reason: 'inactive' }, { actor });
+      await this.audit.log(
+        'auth.login_failed',
+        { type: 'User', id: user.id },
+        { realm, reason: 'inactive' },
+        { actor },
+      );
       throw forbidden('Hisob faol emas. Administratorga murojaat qiling.', 'ACCOUNT_DISABLED');
     }
 

@@ -1,17 +1,24 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import type { Response } from 'express';
 import { fileTypeFromBuffer } from 'file-type';
 import { AccessService } from '../access/access.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
-import { hasRole } from '../common/auth-user.js';
+import { hasRole, isStaff } from '../common/auth-user.js';
 import { badRequest, notFound } from '../common/errors.js';
 import { StorageService } from '../common/storage.service.js';
+import { AppConfig } from '../config/app-config.js';
 import type { UploadedFileData } from '../common/uploaded-file.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 export const FILE_MAX_BYTES = 10 * 1024 * 1024;
+
+/** Portfolio yozuviga biriktirilmagan yuklama shu muddatdan keyin o‘chiriladi (almashtirilgan yoki tashlab ketilgan dalil). */
+const ORPHAN_TTL_MS = 24 * 60 * 60_000;
+/** Karantindagi fayllar tekshirish uchun uzoqroq saqlanadi. */
+const QUARANTINE_TTL_MS = 30 * 24 * 60 * 60_000;
 
 /** Ruxsat etilgan turlar — haqiqiy mazmun (magic bytes) bo‘yicha aniqlanadi, kengaytma bo‘yicha emas. */
 const ALLOWED: Record<string, { mime: string; inline: boolean }> = {
@@ -24,12 +31,47 @@ const ALLOWED: Record<string, { mime: string; inline: boolean }> = {
 
 @Injectable()
 export class FilesService {
+  private readonly logger = new Logger('Files');
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly access: AccessService,
     private readonly audit: AuditService,
+    private readonly config: AppConfig,
   ) {}
+
+  @Interval(60 * 60_000)
+  async hourly() {
+    if (!this.config.backgroundJobs) return;
+    try {
+      await this.cleanupOrphans();
+    } catch (error) {
+      this.logger.error(error instanceof Error ? error.stack : String(error));
+    }
+  }
+
+  /** Hech bir portfolio yozuviga biriktirilmagan eski fayllarni ombordan o‘chiradi (yozuv “o‘chirilgan” deb belgilanadi). */
+  async cleanupOrphans(now = new Date()) {
+    const orphans = await this.prisma.fileAsset.findMany({
+      where: {
+        deletedAt: null,
+        portfolioItems: { none: {} },
+        OR: [
+          { status: 'CLEAN', createdAt: { lt: new Date(now.getTime() - ORPHAN_TTL_MS) } },
+          { status: 'QUARANTINED', createdAt: { lt: new Date(now.getTime() - QUARANTINE_TTL_MS) } },
+        ],
+      },
+      select: { id: true, storageKey: true, status: true },
+      take: 500,
+    });
+    for (const file of orphans) {
+      await this.storage.remove(file.status === 'CLEAN' ? 'files' : 'quarantine', file.storageKey);
+      await this.prisma.fileAsset.update({ where: { id: file.id }, data: { deletedAt: now } });
+    }
+    if (orphans.length) await this.audit.log('file.orphans_removed', null, { count: orphans.length }, { actor: null });
+    return orphans.length;
+  }
 
   /**
    * Faylni yopiq omborga saqlaydi. Hajmi va haqiqiy turi tekshiriladi; ruxsat etilmagan
@@ -59,10 +101,14 @@ export class FilesService {
           status: 'QUARANTINED',
         },
       });
-      await this.audit.log('file.quarantined', { type: 'FileAsset', id: quarantined.id }, {
-        originalName,
-        detected: detected?.ext ?? null,
-      });
+      await this.audit.log(
+        'file.quarantined',
+        { type: 'FileAsset', id: quarantined.id },
+        {
+          originalName,
+          detected: detected?.ext ?? null,
+        },
+      );
       throw badRequest(
         'FILE_TYPE_NOT_ALLOWED',
         'Bu turdagi fayl qabul qilinmaydi (ruxsat etilgan: PDF, JPG, PNG, WEBP, DOCX). Fayl karantinga olindi.',
@@ -85,22 +131,34 @@ export class FilesService {
     return { id: asset.id, originalName: asset.originalName, mimeType: asset.mimeType, sizeBytes: asset.sizeBytes };
   }
 
-  /** Faylga kirish: egasi yoki fayl biriktirilgan portfolio yozuvini ko‘ra oladigan xodim. */
+  /**
+   * Faylga kirish: egasi yoki fayl biriktirilgan portfolio yozuvini ko‘ra oladigan xodim
+   * (portfolio ko‘rinish qoidalari bilan bir xil: tekshiruvchi — har doim; boshqa xodim —
+   * “maktab xodimlari” ko‘rinishidagi yozuvda, o‘quvchi yozuvi bo‘lsa uni o‘qitadigan xodim).
+   */
   private async canRead(viewer: AuthUser, fileId: string, ownerId: string) {
     if (ownerId === viewer.id) return true;
     if (hasRole(viewer, 'SUPER_ADMIN', 'DEPUTY')) return true;
+    if (!isStaff(viewer)) return false;
     const items = await this.prisma.portfolioItem.findMany({
       where: { evidenceFileId: fileId },
-      select: { ownerId: true, visibility: true },
+      select: { ownerId: true, visibility: true, owner: { select: { roles: { select: { role: true } } } } },
     });
     for (const item of items) {
-      if (await this.access.canViewStudent(viewer, item.ownerId)) {
-        const homeroom = await this.access.homeroomClassIds(viewer.id);
-        const isHomeroomOfOwner =
-          homeroom.length > 0 &&
-          (await this.prisma.enrollment.count({ where: { studentId: item.ownerId, classId: { in: homeroom }, endsOn: null } })) > 0;
-        if (item.visibility === 'STAFF' || isHomeroomOfOwner) return true;
+      const ownerIsStudent = item.owner.roles.some((entry) => entry.role === 'STUDENT');
+      if (!ownerIsStudent) {
+        if (item.visibility === 'STAFF') return true;
+        continue;
       }
+      if (!(await this.access.canViewStudent(viewer, item.ownerId))) continue;
+      if (item.visibility === 'STAFF') return true;
+      const homeroom = await this.access.homeroomClassIds(viewer.id);
+      const isHomeroomOfOwner =
+        homeroom.length > 0 &&
+        (await this.prisma.enrollment.count({
+          where: { studentId: item.ownerId, classId: { in: homeroom }, endsOn: null },
+        })) > 0;
+      if (isHomeroomOfOwner) return true;
     }
     return false;
   }

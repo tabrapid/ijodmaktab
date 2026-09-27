@@ -1,12 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  fullName,
-  loginFromName,
-  normalizeForSearch,
-  userSearchText,
-  type Role,
-  type UserStatus,
-} from '@ijod/shared';
+import { fullName, loginFromName, normalizeForSearch, userSearchText, type Role, type UserStatus } from '@ijod/shared';
 import type { z } from 'zod';
 import type { createUserSchema, updateUserSchema, userListQuerySchema } from '@ijod/shared';
 import { AccessService } from '../access/access.service.js';
@@ -92,14 +85,24 @@ export class UsersService {
     if (query.role) and.push({ roles: { some: { role: query.role } } });
     if (query.status) and.push({ status: query.status });
     if (query.classId) and.push({ enrollments: { some: { classId: query.classId, endsOn: null } } });
+    // Ogohlantirish filtrlari administrator bosh sahifasidagi hisoblar bilan bir xil shartda.
+    if (query.flag && this.isAccountManager(viewer)) {
+      if (query.flag === 'locked') and.push({ lockedUntil: { gt: new Date() } });
+      if (query.flag === 'mustChangePassword') and.push({ status: 'ACTIVE', mustChangePassword: true });
+      if (query.flag === 'noClass') {
+        const year = await this.access.currentYear();
+        and.push({
+          status: 'ACTIVE',
+          roles: { some: { role: 'STUDENT' } },
+          enrollments: { none: { endsOn: null, academicYearId: year?.id } },
+        });
+      }
+    }
     if (query.q) {
       const text = normalizeForSearch(query.q);
       const asNumber = /^\d+$/.test(query.q.trim()) ? Number(query.q.trim()) : null;
       and.push({
-        OR: [
-          { searchText: { contains: text } },
-          ...(asNumber !== null ? [{ internalId: asNumber }] : []),
-        ],
+        OR: [{ searchText: { contains: text } }, ...(asNumber !== null ? [{ internalId: asNumber }] : [])],
       });
     }
 
@@ -177,6 +180,7 @@ export class UsersService {
         id: enrollment.id,
         class: enrollment.class,
         academicYear: enrollment.academicYear.name,
+        academicYearId: enrollment.academicYearId,
         startsOn: enrollment.startsOn,
         endsOn: enrollment.endsOn,
         endReason: enrollment.endReason,
@@ -236,7 +240,12 @@ export class UsersService {
   }
 
   /** Band bo‘lmagan login topadi: zebo.karimova, zebo.karimova2, ... */
-  async uniqueLogin(firstName: string, lastName: string, reserved: Set<string> = new Set(), tx: Tx | PrismaService = this.prisma) {
+  async uniqueLogin(
+    firstName: string,
+    lastName: string,
+    reserved: Set<string> = new Set(),
+    tx: Tx | PrismaService = this.prisma,
+  ) {
     const base = loginFromName(firstName, lastName);
     const existing = await tx.user.findMany({
       where: { login: { startsWith: base } },
@@ -325,10 +334,19 @@ export class UsersService {
       where: { id },
       data: { ...next, searchText: userSearchText(next) },
     });
-    await this.audit.log('user.update', { type: 'User', id }, {
-      before: { lastName: target.lastName, firstName: target.firstName, middleName: target.middleName, login: target.login },
-      after: next,
-    });
+    await this.audit.log(
+      'user.update',
+      { type: 'User', id },
+      {
+        before: {
+          lastName: target.lastName,
+          firstName: target.firstName,
+          middleName: target.middleName,
+          login: target.login,
+        },
+        after: next,
+      },
+    );
     return this.detail(viewer, id);
   }
 
@@ -380,7 +398,12 @@ export class UsersService {
           data: { endsOn: dateOnly(), endReason: 'OTHER' },
         });
       }
-      await this.audit.log('user.status_changed', { type: 'User', id }, { before: target.status, after: status, reason }, { tx });
+      await this.audit.log(
+        'user.status_changed',
+        { type: 'User', id },
+        { before: target.status, after: status, reason },
+        { tx },
+      );
     });
     if (status !== 'ACTIVE') await this.sessions.revokeAllForUser(id, `status_${status.toLowerCase()}`);
     return this.detail(viewer, id);
@@ -427,7 +450,12 @@ export class UsersService {
       await this.prisma.$transaction(async (tx) => {
         await tx.enrollment.deleteMany({ where: { studentId: id } });
         await tx.user.delete({ where: { id } });
-        await this.audit.log('user.delete', { type: 'User', id }, { login: target.login, name: fullName(target) }, { tx });
+        await this.audit.log(
+          'user.delete',
+          { type: 'User', id },
+          { login: target.login, name: fullName(target) },
+          { tx },
+        );
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2003', 'P2014'].includes(error.code)) {

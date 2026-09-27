@@ -34,7 +34,8 @@ export interface ReportMeta {
 }
 
 const fraction = (percent: number | null) => (percent === null ? null : percent / 100);
-const statusLabel = (status: string) => PARTICIPATION_STATUS_LABELS[status as keyof typeof PARTICIPATION_STATUS_LABELS] ?? status;
+const statusLabel = (status: string) =>
+  PARTICIPATION_STATUS_LABELS[status as keyof typeof PARTICIPATION_STATUS_LABELS] ?? status;
 const outcomeSymbol: Record<string, string> = {
   CORRECT: '✓',
   WRONG: '✗',
@@ -48,17 +49,27 @@ function filtersText(results: SessionResults) {
   const { filters } = results;
   if (filters.statuses?.length) parts.push(`holat: ${filters.statuses.map(statusLabel).join(', ')}`);
   if (filters.classIds?.length) {
-    const names = results.byClass.filter((item) => filters.classIds!.includes(item.classId)).map((item) => item.className);
+    const names = results.byClass
+      .filter((item) => filters.classIds!.includes(item.classId))
+      .map((item) => item.className);
     parts.push(`sinf: ${names.join(', ')}`);
   }
   if (filters.minPercent !== undefined) parts.push(`umumiy foiz ≥ ${filters.minPercent}%`);
   if (filters.maxPercent !== undefined) parts.push(`umumiy foiz ≤ ${filters.maxPercent}%`);
+  if (filters.category && filters.categoryMinPercent !== undefined) {
+    parts.push(`${CATEGORY_LABELS[filters.category]} ≥ ${filters.categoryMinPercent}%`);
+  }
+  if (filters.category && filters.categoryMaxPercent !== undefined) {
+    parts.push(`${CATEGORY_LABELS[filters.category]} ≤ ${filters.categoryMaxPercent}%`);
+  }
+  if (filters.studentIds?.length) parts.push(`tanlangan o‘quvchilar: ${filters.studentIds.length} nafar`);
   if (filters.q) parts.push(`qidiruv: “${filters.q}”`);
   if (results.limitedToClasses) parts.push('faqat sinf rahbari sinfi');
   return parts.length ? parts.join('; ') : 'Filtr qo‘llanmagan (barcha tayinlanganlar)';
 }
 
-const ratioText = (value: Ratio) => `${formatPercent(value.percent)} (${formatPoints(value.numerator)} / ${formatPoints(value.denominator)})`;
+const ratioText = (value: Ratio) =>
+  `${formatPercent(value.percent)} (${formatPoints(value.numerator)} / ${formatPoints(value.denominator)})`;
 
 // ============================================================ Excel
 
@@ -86,9 +97,10 @@ export async function buildResultsWorkbook(results: SessionResults, meta: Report
     ['Test versiyasi', `v${session.testVersionNo}`],
     ['Baholash versiyasi', `v${session.gradingVersion}`],
     ['Maksimal ball', session.totalPoints],
-    ...categories.map(
-      (item): [string, string | number] => [`${CATEGORY_LABELS[item.category]}: savollar / maksimal ball`, `${item.count} / ${formatPoints(item.max)}`],
-    ),
+    ...categories.map((item): [string, string | number] => [
+      `${CATEGORY_LABELS[item.category]}: savollar / maksimal ball`,
+      `${item.count} / ${formatPoints(item.max)}`,
+    ]),
     ['Urinishni hisoblash siyosati', ATTEMPT_POLICY_LABELS[session.attemptPolicy]],
     ['Kategoriya mezoni (chegara)', `${formatPoints(session.categoryThresholdPercent)}%`],
     ['O‘tish chegarasi', session.passPercent === null ? 'belgilanmagan' : `${formatPoints(session.passPercent)}%`],
@@ -98,7 +110,8 @@ export async function buildResultsWorkbook(results: SessionResults, meta: Report
     ['Tayyorlangan vaqt (Toshkent)', formatDateTime(meta.generatedAt)],
     ['Tayyorlagan', meta.generatedBy],
   ];
-  for (const [label, value] of info) summary.addRow({ label, value: typeof value === 'string' ? safeText(value) : value });
+  for (const [label, value] of info)
+    summary.addRow({ label, value: typeof value === 'string' ? safeText(value) : value });
   summary.getColumn('label').font = { bold: true };
   summary.addRow({});
   summary.addRow({ label: 'Ko‘rsatkichlar ta’rifi' }).font = { bold: true };
@@ -252,7 +265,9 @@ export async function buildResultsWorkbook(results: SessionResults, meta: Report
         responses: stats.responses,
         rate: fraction(stats.correctRate.percent),
         key: question.options.find((option) => option.id === question.correctOptionId)?.letter ?? '',
-        distribution: question.options.map((option) => `${option.letter}: ${stats.optionCounts[option.id] ?? 0}`).join('; '),
+        distribution: question.options
+          .map((option) => `${option.letter}: ${stats.optionCounts[option.id] ?? 0}`)
+          .join('; '),
         flag: stats.needsReview ? `Tekshirish tavsiya etiladi: ${stats.reviewReasons.join('; ')}` : '',
         override: question.override
           ? question.override.mode === 'EXCLUDE'
@@ -294,7 +309,11 @@ export async function buildResultsWorkbook(results: SessionResults, meta: Report
   matrix.columns = [
     { header: 'F.I.Sh.', key: 'name', width: 32 },
     { header: 'Sinf', key: 'className', width: 8 },
-    ...results.questions.map((question) => ({ header: `${question.number}-savol`, key: question.testQuestionId, width: 12 })),
+    ...results.questions.map((question) => ({
+      header: `${question.number}-savol`,
+      key: question.testQuestionId,
+      width: 12,
+    })),
   ];
   matrix.getRow(1).font = { bold: true };
   for (const row of results.rows) {
@@ -316,7 +335,9 @@ export async function buildResultsWorkbook(results: SessionResults, meta: Report
     });
   }
   matrix.addRow({});
-  matrix.addRow({ name: 'Belgilar: ✓ — to‘g‘ri, ✗ — noto‘g‘ri (qavsda tanlangan variant), — — javobsiz; son — olingan ball.' });
+  matrix.addRow({
+    name: 'Belgilar: ✓ — to‘g‘ri, ✗ — noto‘g‘ri (qavsda tanlangan variant), — — javobsiz; son — olingan ball.',
+  });
 
   return workbookToBuffer(workbook);
 }
@@ -326,7 +347,10 @@ export async function buildResultsWorkbook(results: SessionResults, meta: Report
 const border = { style: BorderStyle.SINGLE, size: 4, color: '999999' };
 const cellBorders = { top: border, bottom: border, left: border, right: border };
 
-function cell(text: string, options: { bold?: boolean; width?: number; align?: (typeof AlignmentType)[keyof typeof AlignmentType] } = {}) {
+function cell(
+  text: string,
+  options: { bold?: boolean; width?: number; align?: (typeof AlignmentType)[keyof typeof AlignmentType] } = {},
+) {
   return new TableCell({
     borders: cellBorders,
     width: options.width ? { size: options.width, type: WidthType.PERCENTAGE } : undefined,
@@ -343,13 +367,26 @@ function table(header: string[], rows: string[][], widths?: number[]) {
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
-      new TableRow({ tableHeader: true, children: header.map((text, index) => cell(text, { bold: true, width: widths?.[index] })) }),
-      ...rows.map((row) => new TableRow({ children: row.map((text, index) => cell(text, { width: widths?.[index] })) })),
+      new TableRow({
+        tableHeader: true,
+        children: header.map((text, index) => cell(text, { bold: true, width: widths?.[index] })),
+      }),
+      ...rows.map(
+        (row) => new TableRow({ children: row.map((text, index) => cell(text, { width: widths?.[index] })) }),
+      ),
     ],
   });
 }
 
-const para = (text: string, options: { bold?: boolean; size?: number; align?: (typeof AlignmentType)[keyof typeof AlignmentType]; spacingAfter?: number } = {}) =>
+const para = (
+  text: string,
+  options: {
+    bold?: boolean;
+    size?: number;
+    align?: (typeof AlignmentType)[keyof typeof AlignmentType];
+    spacingAfter?: number;
+  } = {},
+) =>
   new Paragraph({
     alignment: options.align,
     spacing: { after: options.spacingAfter ?? 120 },
@@ -381,12 +418,24 @@ export async function buildProtocolDocx(results: SessionResults, meta: ReportMet
             [
               ['Fan', session.subject.name],
               ['Sinf(lar)', classNames],
-              ['Sana', `${formatDate(session.startsAt)}, ${formatTime(session.startsAt)}–${formatTime(session.endsAt)}`],
+              [
+                'Sana',
+                `${formatDate(session.startsAt)}, ${formatTime(session.startsAt)}–${formatTime(session.endsAt)}`,
+              ],
               ['Mas’ul o‘qituvchi', session.conductor.fullName],
-              ['Nazorat ishi', `${session.testTitle} (test v${session.testVersionNo}, baholash v${session.gradingVersion})`],
+              [
+                'Nazorat ishi',
+                `${session.testTitle} (test v${session.testVersionNo}, baholash v${session.gradingVersion})`,
+              ],
               ['Maksimal ball', formatPoints(session.totalPoints)],
-              ['Tayinlanganlar / qatnashganlar', `${metrics.assigned} / ${metrics.participation.numerator} (${formatPercent(metrics.participation.percent)})`],
-              ['O‘rtacha / mediana (umumiy foiz)', `${formatPercent(metrics.overall.meanPercent)} / ${formatPercent(metrics.overall.medianPercent)}`],
+              [
+                'Tayinlanganlar / qatnashganlar',
+                `${metrics.assigned} / ${metrics.participation.numerator} (${formatPercent(metrics.participation.percent)})`,
+              ],
+              [
+                'O‘rtacha / mediana (umumiy foiz)',
+                `${formatPercent(metrics.overall.meanPercent)} / ${formatPercent(metrics.overall.medianPercent)}`,
+              ],
             ],
             [35, 65],
           ),
@@ -410,7 +459,12 @@ export async function buildProtocolDocx(results: SessionResults, meta: ReportMet
           para(''),
           para('Kategoriyalar bo‘yicha xulosa', { bold: true }),
           table(
-            ['Kategoriya', 'O‘zlashtirish', `Mezonga (${formatPoints(metrics.thresholdPercent)}%) yetganlar`, 'Tayinlanganlarga nisbatan'],
+            [
+              'Kategoriya',
+              'O‘zlashtirish',
+              `Mezonga (${formatPoints(metrics.thresholdPercent)}%) yetganlar`,
+              'Tayinlanganlarga nisbatan',
+            ],
             categories.map((item) => {
               const mastery = metrics.categoryMastery[item.category];
               const reach = metrics.thresholdReach[item.category];
@@ -428,7 +482,9 @@ export async function buildProtocolDocx(results: SessionResults, meta: ReportMet
             const flagged = results.questionStats.filter((stats) => stats.needsReview);
             if (!flagged.length) return [para('Tekshirish tavsiya etilgan savol yo‘q.')];
             return flagged.map((stats) =>
-              para(`${stats.number}-savol: to‘g‘ri javob ulushi ${formatPercent(stats.correctRate.percent)}. ${stats.reviewReasons.join('; ')}.`),
+              para(
+                `${stats.number}-savol: to‘g‘ri javob ulushi ${formatPercent(stats.correctRate.percent)}. ${stats.reviewReasons.join('; ')}.`,
+              ),
             );
           })(),
           para(''),

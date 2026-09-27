@@ -152,7 +152,10 @@ export async function createTest(
     if (response.status !== 201) throw new Error(JSON.stringify(response.body));
     body = response.body;
   }
-  return body as { id: string; version: { questions: { testQuestionId: string; questionId: string; correctOptionId: string }[] } };
+  return body as {
+    id: string;
+    version: { questions: { testQuestionId: string; questionId: string; correctOptionId: string }[] };
+  };
 }
 
 export async function createSession(
@@ -188,6 +191,8 @@ export async function startAttempt(agent: Agent, sessionId: string, code: string
 export function binaryParser(res: unknown, callback: (error: Error | null, body: Buffer) => void) {
   const stream = res as NodeJS.ReadableStream;
   const chunks: Buffer[] = [];
-  stream.on('data', (chunk: Buffer | string) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, 'binary')));
+  stream.on('data', (chunk: Buffer | string) =>
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, 'binary')),
+  );
   stream.on('end', () => callback(null, Buffer.concat(chunks)));
 }

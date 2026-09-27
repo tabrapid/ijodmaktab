@@ -163,7 +163,10 @@ export class TestsService {
   }
 
   private async recalcDraft(tx: Tx, draftId: string) {
-    const questions = await tx.testQuestion.findMany({ where: { testVersionId: draftId }, orderBy: { position: 'asc' } });
+    const questions = await tx.testQuestion.findMany({
+      where: { testVersionId: draftId },
+      orderBy: { position: 'asc' },
+    });
     // Tartib raqamlarini 0..n-1 ko‘rinishida saqlaymiz.
     for (const [index, question] of questions.entries()) {
       if (question.position !== index) {
@@ -230,7 +233,10 @@ export class TestsService {
       this.prisma.user.findUniqueOrThrow({ where: { id: template.ownerId } }),
       this.prisma.user.findUniqueOrThrow({ where: { id: template.originalAuthorId } }),
       template.copiedFromId
-        ? this.prisma.testTemplate.findUnique({ where: { id: template.copiedFromId }, select: { id: true, title: true } })
+        ? this.prisma.testTemplate.findUnique({
+            where: { id: template.copiedFromId },
+            select: { id: true, title: true },
+          })
         : null,
       this.prisma.testVersion.findMany({
         where: { templateId: id, status: 'FROZEN' },
@@ -349,7 +355,7 @@ export class TestsService {
         owner: { id: template.owner.id, fullName: fullName(template.owner) },
         permission: (template.ownerId === viewer.id
           ? 'OWNER'
-          : template.shares[0]?.permission ?? 'COPY') as TestPermission,
+          : (template.shares[0]?.permission ?? 'COPY')) as TestPermission,
         questionCount: version?._count.questions ?? 0,
         totalPoints: num(version?.totalPoints) ?? 0,
         hasDraftChanges: version?.status === 'DRAFT' && version.versionNo > 1,
@@ -381,7 +387,8 @@ export class TestsService {
           topic: input.topic,
           goal: input.goal,
           language: input.language,
-          academicYearId: input.academicYearId ?? (await tx.academicYear.findFirst({ where: { isCurrent: true } }))?.id ?? null,
+          academicYearId:
+            input.academicYearId ?? (await tx.academicYear.findFirst({ where: { isCurrent: true } }))?.id ?? null,
           tags: input.tags,
           folder: input.folder,
           instructions: input.instructions,
@@ -491,7 +498,12 @@ export class TestsService {
         }
         const version = question.versions[0]!;
         await tx.testQuestion.create({
-          data: { testVersionId: draft.id, questionVersionId: version.id, position: position++, points: version.points },
+          data: {
+            testVersionId: draft.id,
+            questionVersionId: version.id,
+            position: position++,
+            points: version.points,
+          },
         });
         present.add(questionId);
       }
@@ -540,7 +552,12 @@ export class TestsService {
     return this.get(viewer, id);
   }
 
-  async updateQuestion(viewer: AuthUser, id: string, testQuestionId: string, input: Out<typeof updateTestQuestionSchema>) {
+  async updateQuestion(
+    viewer: AuthUser,
+    id: string,
+    testQuestionId: string,
+    input: Out<typeof updateTestQuestionSchema>,
+  ) {
     const { template } = await this.load(viewer, id, 'edit');
     await this.prisma.$transaction(async (tx) => {
       const draft = await this.ensureDraft(tx, template);
@@ -602,7 +619,10 @@ export class TestsService {
       for (const questionId of testQuestionIds) resolved.push(await this.resolveDraftQuestion(tx, draft, questionId));
       const total = await tx.testQuestion.count({ where: { testVersionId: draft.id } });
       if (new Set(resolved.map((item) => item.id)).size !== total) {
-        throw badRequest('INVALID_ORDER', 'Tartib ro‘yxati testdagi barcha savollarni bir martadan o‘z ichiga olishi kerak.');
+        throw badRequest(
+          'INVALID_ORDER',
+          'Tartib ro‘yxati testdagi barcha savollarni bir martadan o‘z ichiga olishi kerak.',
+        );
       }
       for (const [index, item] of resolved.entries()) {
         await tx.testQuestion.update({ where: { id: item.id }, data: { position: index } });
@@ -755,7 +775,8 @@ export class TestsService {
     if (!canEdit(permission) && !hasRole(viewer, 'DEPUTY', 'SUPER_ADMIN')) {
       throw forbidden('Bu test asosida sessiya yaratish uchun testni tahrirlash huquqi yoki nusxasi kerak.');
     }
-    if (template.status === 'ARCHIVED') throw conflict('TEST_ARCHIVED', 'Arxivlangan test asosida sessiya yaratib bo‘lmaydi.');
+    if (template.status === 'ARCHIVED')
+      throw conflict('TEST_ARCHIVED', 'Arxivlangan test asosida sessiya yaratib bo‘lmaydi.');
     return template;
   }
 }

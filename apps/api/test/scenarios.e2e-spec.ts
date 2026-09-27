@@ -102,17 +102,25 @@ describe('2. Boshqa sinf o‘quvchisi kodni bilsa ham kira olmaydi', () => {
       data: { studentId: guesser.id, classId: fx.classA.id, academicYearId: year.id, startsOn: year.startsOn },
     });
     const { session } = await openSession();
-    await prisma.enrollment.updateMany({ where: { studentId: guesser.id }, data: { endsOn: new Date(), endReason: 'LEFT' } });
+    await prisma.enrollment.updateMany({
+      where: { studentId: guesser.id },
+      data: { endsOn: new Date(), endReason: 'LEFT' },
+    });
 
     const student = await login(app, guesser.login);
     const statuses: number[] = [];
     for (let index = 0; index < 11; index += 1) {
-      statuses.push((await student.post(`/api/me/sessions/${session.id}/start`).send({ code: 'ZZZZZZ', clientId: clientId() })).status);
+      statuses.push(
+        (await student.post(`/api/me/sessions/${session.id}/start`).send({ code: 'ZZZZZZ', clientId: clientId() }))
+          .status,
+      );
     }
     expect(statuses.slice(0, 10).every((status) => status === 400)).toBe(true);
     expect(statuses[10]).toBe(429);
     // To‘g‘ri kod ham cheklov davomida qabul qilinmaydi.
-    const blocked = await student.post(`/api/me/sessions/${session.id}/start`).send({ code: session.accessCode, clientId: clientId() });
+    const blocked = await student
+      .post(`/api/me/sessions/${session.id}/start`)
+      .send({ code: session.accessCode, clientId: clientId() });
     expect(blocked.status).toBe(429);
   });
 });
@@ -154,7 +162,10 @@ describe('3. Test banki tahriri boshlangan sessiyani o‘zgartirmaydi', () => {
       .put(`/api/attempts/${attemptId}/answers/${target.id}`)
       .send({ clientId: client, optionId: 'a', revision: 1 })
       .expect(200);
-    const submitted = await student.post(`/api/attempts/${attemptId}/submit`).send({ clientId: client, answers: [] }).expect(200);
+    const submitted = await student
+      .post(`/api/attempts/${attemptId}/submit`)
+      .send({ clientId: client, answers: [] })
+      .expect(200);
     expect(submitted.body.result.score.earned).toBe(2);
     expect(submitted.body.result.score.max).toBe(12);
     expect(view.questions).toHaveLength(3);
@@ -185,7 +196,9 @@ describe('4. Server muddati brauzer soatiga bog‘liq emas', () => {
     expect(attempt.submitSource).toBe('TIMEOUT');
     // Oxirgi serverda saqlangan javob baholanadi.
     expect(attempt.answers.find((answer) => answer.testQuestionId === question.id)?.optionId).toBe('a');
-    const audit = await prisma.auditEvent.count({ where: { action: 'attempt.late_answer_rejected', entityId: attemptId } });
+    const audit = await prisma.auditEvent.count({
+      where: { action: 'attempt.late_answer_rejected', entityId: attemptId },
+    });
     expect(audit).toBe(1);
   });
 
@@ -216,7 +229,9 @@ describe('5. Qayta yuborilgan so‘rov qo‘shimcha urinish yaratmaydi', () => {
     const attemptId = [...ids][0] as string;
 
     const submits = await Promise.all(
-      Array.from({ length: 3 }, () => student.post(`/api/attempts/${attemptId}/submit`).send({ clientId: client, answers: [] })),
+      Array.from({ length: 3 }, () =>
+        student.post(`/api/attempts/${attemptId}/submit`).send({ clientId: client, answers: [] }),
+      ),
     );
     for (const response of submits) {
       expect(response.status).toBe(200);
@@ -224,7 +239,9 @@ describe('5. Qayta yuborilgan so‘rov qo‘shimcha urinish yaratmaydi', () => {
     }
     expect(await prisma.attempt.count({ where: { sessionId: session.id, studentId: fx.studentsA[0]!.id } })).toBe(1);
     // Urinishlar tugagach yangisini boshlab bo‘lmaydi.
-    const again = await student.post(`/api/me/sessions/${session.id}/start`).send({ code: session.accessCode, clientId: client });
+    const again = await student
+      .post(`/api/me/sessions/${session.id}/start`)
+      .send({ code: session.accessCode, clientId: client });
     expect(again.status).toBe(409);
     expect(again.body.code).toBe('NO_ATTEMPTS_LEFT');
   });
@@ -236,8 +253,14 @@ describe('6. Internet uzilishi va qayta kirish javoblarni yo‘qotmaydi', () => 
     const first = await login(app, fx.studentsA[1]!.login);
     const { attemptId, client, view } = await startAttempt(first, session.id, session.accessCode);
     const [q1, q2] = view.questions;
-    await first.put(`/api/attempts/${attemptId}/answers/${q1.id}`).send({ clientId: client, optionId: 'b', revision: 3 }).expect(200);
-    await first.put(`/api/attempts/${attemptId}/answers/${q2.id}`).send({ clientId: client, optionId: 'c', revision: 1 }).expect(200);
+    await first
+      .put(`/api/attempts/${attemptId}/answers/${q1.id}`)
+      .send({ clientId: client, optionId: 'b', revision: 3 })
+      .expect(200);
+    await first
+      .put(`/api/attempts/${attemptId}/answers/${q2.id}`)
+      .send({ clientId: client, optionId: 'c', revision: 1 })
+      .expect(200);
     // Tarmoq kechikishi: eski revision keyin yetib keladi.
     const stale = await first
       .put(`/api/attempts/${attemptId}/answers/${q1.id}`)
@@ -249,19 +272,27 @@ describe('6. Internet uzilishi va qayta kirish javoblarni yo‘qotmaydi', () => 
     const second = await login(app, fx.studentsA[1]!.login);
     const restored = await second.get(`/api/attempts/${attemptId}`).query({ clientId: client }).expect(200);
     const answers = Object.fromEntries(
-      restored.body.questions.map((question: { id: string; answer: { optionId: string } | null }) => [question.id, question.answer?.optionId]),
+      restored.body.questions.map((question: { id: string; answer: { optionId: string } | null }) => [
+        question.id,
+        question.answer?.optionId,
+      ]),
     );
     expect(answers[q1.id]).toBe('b');
     expect(answers[q2.id]).toBe('c');
 
     // Boshqa qurilma javob yoza olmaydi, faqat ochiq “davom etish” bilan o‘tadi.
     const other = clientId();
-    const conflict = await second.put(`/api/attempts/${attemptId}/answers/${q1.id}`).send({ clientId: other, optionId: 'a', revision: 9 });
+    const conflict = await second
+      .put(`/api/attempts/${attemptId}/answers/${q1.id}`)
+      .send({ clientId: other, optionId: 'a', revision: 9 });
     expect(conflict.status).toBe(409);
     expect(conflict.body.code).toBe('DEVICE_CONFLICT');
     const takeover = await second.post(`/api/attempts/${attemptId}/takeover`).send({ clientId: other }).expect(200);
     expect(takeover.body.deviceConflict).toBe(false);
-    await first.put(`/api/attempts/${attemptId}/answers/${q1.id}`).send({ clientId: client, optionId: 'a', revision: 10 }).expect(409);
+    await first
+      .put(`/api/attempts/${attemptId}/answers/${q1.id}`)
+      .send({ clientId: client, optionId: 'a', revision: 10 })
+      .expect(409);
   });
 });
 
@@ -277,14 +308,21 @@ describe('7 va 8. Holatlar farqlanadi, umumiy foiz to‘g‘ri hisoblanadi', () 
       .post(`/api/attempts/${zeroAttempt.attemptId}/submit`)
       .send({
         clientId: zeroAttempt.client,
-        answers: zeroAttempt.view.questions.map((question: { id: string }) => ({ testQuestionId: question.id, optionId: 'b', revision: 1 })),
+        answers: zeroAttempt.view.questions.map((question: { id: string }) => ({
+          testQuestionId: question.id,
+          optionId: 'b',
+          revision: 1,
+        })),
       })
       .expect(200);
 
     // Bekor qilingan urinish.
     const cancelAgent = await login(app, cancelled!.login);
     const cancelAttempt = await startAttempt(cancelAgent, session.id, session.accessCode);
-    await teacher.post(`/api/attempts/${cancelAttempt.attemptId}/cancel`).send({ reason: 'Texnik nosozlik', allowRetake: false }).expect(200);
+    await teacher
+      .post(`/api/attempts/${cancelAttempt.attemptId}/cancel`)
+      .send({ reason: 'Texnik nosozlik', allowRetake: false })
+      .expect(200);
 
     // Tekshirilayotgan ish (yozma savollar keyingi bosqichda — holatni to‘g‘ridan-to‘g‘ri belgilaymiz).
     const reviewAgent = await login(app, review!.login);
@@ -319,10 +357,16 @@ describe('7 va 8. Holatlar farqlanadi, umumiy foiz to‘g‘ri hisoblanadi', () 
       optionId: question.stem.startsWith('Mulohaza') ? 'b' : 'a',
       revision: 1,
     }));
-    const submitted = await student.post(`/api/attempts/${attemptId}/submit`).send({ clientId: client, answers }).expect(200);
+    const submitted = await student
+      .post(`/api/attempts/${attemptId}/submit`)
+      .send({ clientId: client, answers })
+      .expect(200);
     expect(submitted.body.result.score).toEqual({ earned: 6, max: 12, percent: 50 });
     const categories = Object.fromEntries(
-      submitted.body.result.categories.map((item: { category: string; percent: number }) => [item.category, item.percent]),
+      submitted.body.result.categories.map((item: { category: string; percent: number }) => [
+        item.category,
+        item.percent,
+      ]),
     );
     expect(categories).toEqual({ KNOWLEDGE: 100, APPLICATION: 100, REASONING: 0 });
 
@@ -339,7 +383,10 @@ describe('9. Ruxsat bekor qilingach eski eksport havolasi ishlamaydi', () => {
     await prisma.class.update({ where: { id: fx.classA.id }, data: { homeroomTeacherId: homeroom.id } });
     const agent = await login(app, homeroom.login);
     await agent.get(`/api/sessions/${session.id}/results`).expect(200);
-    const job = await agent.post('/api/exports').send({ kind: 'SESSION_RESULTS_XLSX', sessionId: session.id, filters: {} }).expect(201);
+    const job = await agent
+      .post('/api/exports')
+      .send({ kind: 'SESSION_RESULTS_XLSX', sessionId: session.id, filters: {} })
+      .expect(201);
 
     let status = 'QUEUED';
     for (let tries = 0; tries < 50 && status !== 'READY'; tries += 1) {
@@ -355,7 +402,9 @@ describe('9. Ruxsat bekor qilingach eski eksport havolasi ishlamaydi', () => {
     await prisma.class.update({ where: { id: fx.classA.id }, data: { homeroomTeacherId: fx.teacher.id } });
     const denied = await agent.get(`/api/exports/${job.body.id}/download`);
     expect(denied.status).toBe(404);
-    expect(await prisma.auditEvent.count({ where: { action: 'export.download_denied', entityId: job.body.id } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { action: 'export.download_denied', entityId: job.body.id } })).toBe(
+      1,
+    );
 
     // Boshqa foydalanuvchi birovning eksportini ocha olmaydi.
     const stranger = await login(app, fx.otherTeacher.login);
@@ -378,7 +427,10 @@ describe('10. Sinfga ko‘chirish tarixiy natijalarni o‘zgartirmaydi', () => {
     const results = await teacher.get(`/api/sessions/${session.id}/results`).expect(200);
     const row = results.body.rows.find((item: { studentId: string }) => item.studentId === student.id);
     expect(row.className).toBe(fx.classA.name);
-    const history = await prisma.enrollment.findMany({ where: { studentId: student.id }, orderBy: { createdAt: 'asc' } });
+    const history = await prisma.enrollment.findMany({
+      where: { studentId: student.id },
+      orderBy: { createdAt: 'asc' },
+    });
     expect(history).toHaveLength(2);
     expect(history[0]!.endReason).toBe('TRANSFER');
     expect(history[1]!.endsOn).toBeNull();
@@ -394,11 +446,17 @@ describe('11. Qayta baholash sabab va eski/yangi qiymatni saqlaydi', () => {
     const student = fx.studentsA[1]!;
     const agent = await login(app, student.login);
     const { attemptId, client, view } = await startAttempt(agent, session.id, session.accessCode);
-    const answers = view.questions.map((question: { id: string }) => ({ testQuestionId: question.id, optionId: 'a', revision: 1 }));
+    const answers = view.questions.map((question: { id: string }) => ({
+      testQuestionId: question.id,
+      optionId: 'a',
+      revision: 1,
+    }));
     await agent.post(`/api/attempts/${attemptId}/submit`).send({ clientId: client, answers }).expect(200);
 
     const results = await teacher.get(`/api/sessions/${session.id}/results`).expect(200);
-    const reasoning = results.body.questions.find((question: { category: string }) => question.category === 'REASONING');
+    const reasoning = results.body.questions.find(
+      (question: { category: string }) => question.category === 'REASONING',
+    );
     const regrade = await teacher
       .post(`/api/sessions/${session.id}/regrade`)
       .send({ testQuestionId: reasoning.testQuestionId, mode: 'EXCLUDE', reason: 'Savol shartida xato bor' })

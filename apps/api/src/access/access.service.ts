@@ -98,9 +98,7 @@ export class AccessService {
   /** Sessiyani boshqarish: yaratuvchi, o‘tkazuvchi yoki rahbariyat. */
   canManageSession(viewer: Viewer, session: SessionOwnership): boolean {
     return (
-      session.createdById === viewer.id ||
-      session.conductorId === viewer.id ||
-      hasRole(viewer, 'DEPUTY', 'SUPER_ADMIN')
+      session.createdById === viewer.id || session.conductorId === viewer.id || hasRole(viewer, 'DEPUTY', 'SUPER_ADMIN')
     );
   }
 

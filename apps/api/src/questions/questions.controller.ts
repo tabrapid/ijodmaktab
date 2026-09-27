@@ -1,5 +1,10 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
-import { createQuestionSchema, questionListQuerySchema, updateQuestionSchema } from '@ijod/shared';
+import {
+  createQuestionSchema,
+  questionListQuerySchema,
+  schoolDecisionSchema,
+  updateQuestionSchema,
+} from '@ijod/shared';
 import type { z } from 'zod';
 import type { AuthUser } from '../common/auth-user.js';
 import { CurrentUser, Roles } from '../common/decorators.js';
@@ -64,7 +69,11 @@ export class QuestionsController {
   @Post(':id/reject-school')
   @Roles('DEPUTY', 'SUPER_ADMIN')
   @HttpCode(200)
-  rejectSchool(@CurrentUser() user: AuthUser, @Param('id', Uuid) id: string) {
-    return this.questions.decideSchool(user, id, false);
+  rejectSchool(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Uuid) id: string,
+    @Body(zod(schoolDecisionSchema)) body: z.output<typeof schoolDecisionSchema>,
+  ) {
+    return this.questions.decideSchool(user, id, false, body.reason);
   }
 }

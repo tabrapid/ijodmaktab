@@ -10,9 +10,10 @@ import type { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { hasRole, isLeadership } from '../common/auth-user.js';
-import { badRequest, forbidden, notFound } from '../common/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../common/errors.js';
 import { pageArgs, toPage } from '../common/pagination.js';
 import type { Prisma } from '../generated/prisma/client.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
 import {
   contentChanged,
@@ -37,6 +38,7 @@ export class QuestionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** O‘qituvchi faqat o‘zi dars beradigan fanlar bo‘yicha savol va test yaratadi (rahbariyat — istalgan). */
@@ -47,7 +49,10 @@ export class QuestionsService {
     const count = await this.prisma.teachingAssignment.count({
       where: { teacherId: viewer.id, subjectId, academicYear: { isCurrent: true } },
     });
-    if (!count) throw forbidden(`Siz “${subject.name}” fanidan dars bermaysiz, shuning uchun bu fan bo‘yicha savol yoki test yarata olmaysiz.`);
+    if (!count)
+      throw forbidden(
+        `Siz “${subject.name}” fanidan dars bermaysiz, shuning uchun bu fan bo‘yicha savol yoki test yarata olmaysiz.`,
+      );
     return subject;
   }
 
@@ -198,7 +203,12 @@ export class QuestionsService {
     await this.assertTeachesSubject(viewer, input.subjectId);
     const { question } = await this.prisma.$transaction(async (tx) => {
       const created = await this.createInTx(tx, viewer, input, input.content);
-      await this.audit.log('question.create', { type: 'Question', id: created.question.id }, { subjectId: input.subjectId }, { tx });
+      await this.audit.log(
+        'question.create',
+        { type: 'Question', id: created.question.id },
+        { subjectId: input.subjectId },
+        { tx },
+      );
       return created;
     });
     return this.detail(viewer, question.id);
@@ -242,7 +252,12 @@ export class QuestionsService {
           data: { searchText: questionSearchText({ stem: latest.stem, topic, tags }) },
         });
       }
-      await this.audit.log('question.update', { type: 'Question', id }, { contentChanged: Boolean(input.content) }, { tx });
+      await this.audit.log(
+        'question.update',
+        { type: 'Question', id },
+        { contentChanged: Boolean(input.content) },
+        { tx },
+      );
     });
     return this.detail(viewer, id);
   }
@@ -272,21 +287,57 @@ export class QuestionsService {
       orderBy: { schoolRequestedAt: 'asc' },
       take: 200,
     });
-    return items.map((item) => this.toItem(item, viewer));
+    const usage = await this.usage(items.map((item) => item.id));
+    return items.map((item) => this.toItem(item, viewer, usage.get(item.id)));
   }
 
-  /** Metodik tekshiruvchi (rahbariyat) savolni maktab bankiga chiqaradi yoki rad etadi. */
-  async decideSchool(viewer: AuthUser, id: string, approve: boolean) {
+  /**
+   * Metodik tekshiruvchi (rahbariyat) savolni maktab bankiga chiqaradi yoki rad etadi.
+   * O‘z savolini o‘zi tasdiqlamaydi; qaror muallifga bildirishnoma bilan yetkaziladi.
+   */
+  async decideSchool(viewer: AuthUser, id: string, approve: boolean, reason?: string | null) {
     if (!hasRole(viewer, 'DEPUTY', 'SUPER_ADMIN')) throw forbidden();
-    const question = await this.prisma.question.findUnique({ where: { id } });
+    const question = await this.prisma.question.findUnique({ where: { id }, include: questionInclude });
     if (!question || !question.schoolRequestedAt) throw notFound('So‘rov');
-    await this.prisma.question.update({
-      where: { id },
-      data: approve
-        ? { visibility: 'SCHOOL', schoolApprovedAt: new Date(), schoolApprovedById: viewer.id }
-        : { schoolRequestedAt: null },
+    if (question.visibility !== 'PRIVATE' || question.archivedAt) {
+      throw conflict('NOT_PENDING', 'Bu so‘rov bo‘yicha qaror allaqachon qabul qilingan yoki savol arxivlangan.');
+    }
+    if (question.ownerId === viewer.id) {
+      throw conflict('SELF_REVIEW', 'O‘z savolingiz bo‘yicha qarorni boshqa metodik tekshiruvchi qabul qilishi kerak.');
+    }
+    const stem = question.versions[0]?.stem ?? '';
+    const preview = stem.length > 120 ? `${stem.slice(0, 117)}…` : stem;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.question.update({
+        where: { id },
+        data: approve
+          ? { visibility: 'SCHOOL', schoolApprovedAt: new Date(), schoolApprovedById: viewer.id }
+          : { schoolRequestedAt: null },
+      });
+      await this.notifications.notify(
+        [question.ownerId],
+        approve
+          ? {
+              type: 'QUESTION_SCHOOL_APPROVED',
+              title: 'Savolingiz maktab bankiga qo‘shildi',
+              body: preview,
+              link: '/teacher/questions',
+            }
+          : {
+              type: 'QUESTION_SCHOOL_REJECTED',
+              title: 'Savolingiz maktab bankiga qabul qilinmadi',
+              body: reason ? `${reason} — “${preview}”` : preview,
+              link: '/teacher/questions',
+            },
+        tx,
+      );
+      await this.audit.log(
+        approve ? 'question.school_approved' : 'question.school_rejected',
+        { type: 'Question', id },
+        reason ? { reason } : undefined,
+        { tx },
+      );
     });
-    await this.audit.log(approve ? 'question.school_approved' : 'question.school_rejected', { type: 'Question', id });
     return { ok: true };
   }
 }

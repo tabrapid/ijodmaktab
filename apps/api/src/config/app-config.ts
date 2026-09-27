@@ -10,19 +10,15 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL belgilanmagan'),
   PORT: z.coerce.number().int().default(4000),
   WEB_ORIGIN: z.string().default('http://localhost:3000'),
-  APP_ENCRYPTION_KEY: z
-    .string()
-    .refine((value) => Buffer.from(value, 'base64').length === 32, {
-      message: 'APP_ENCRYPTION_KEY 32 baytlik base64 qiymat bo‘lishi kerak',
-    }),
+  APP_ENCRYPTION_KEY: z.string().refine((value) => Buffer.from(value, 'base64').length === 32, {
+    message: 'APP_ENCRYPTION_KEY 32 baytlik base64 qiymat bo‘lishi kerak',
+  }),
   COOKIE_SECURE: booleanFromEnv,
   SESSION_TTL_HOURS: z.coerce.number().positive().default(12),
   STORAGE_DIR: z.string().default('./storage'),
   ANSWER_GRACE_SECONDS: z.coerce.number().min(0).max(60).default(2),
   /** Sweeper (muddati o‘tgan urinishlarni yakunlash) ishlashi; testlarda o‘chiriladi. */
-  BACKGROUND_JOBS: z
-    .enum(['on', 'off'])
-    .default('on'),
+  BACKGROUND_JOBS: z.enum(['on', 'off']).default('on'),
   TRUST_PROXY: booleanFromEnv,
 });
 
@@ -56,7 +52,9 @@ export class AppConfig {
     this.env = env.NODE_ENV;
     this.databaseUrl = env.DATABASE_URL;
     this.port = env.PORT;
-    this.webOrigins = env.WEB_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean);
+    this.webOrigins = env.WEB_ORIGIN.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
     this.encryptionKey = Buffer.from(env.APP_ENCRYPTION_KEY, 'base64');
     this.cookieSecure = env.COOKIE_SECURE;
     this.sessionTtlMs = env.SESSION_TTL_HOURS * 60 * 60 * 1000;

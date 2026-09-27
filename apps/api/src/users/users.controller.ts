@@ -85,11 +85,7 @@ export class UsersController {
 
   @Get('import/:batchId/errors.xlsx')
   @Roles('ADMIN', 'SUPER_ADMIN')
-  async importErrors(
-    @CurrentUser() user: AuthUser,
-    @Param('batchId', Uuid) batchId: string,
-    @Res() res: Response,
-  ) {
+  async importErrors(@CurrentUser() user: AuthUser, @Param('batchId', Uuid) batchId: string, @Res() res: Response) {
     const file = await this.imports.errorsWorkbook(user, batchId);
     res.setHeader('Content-Type', XLSX_MIME);
     res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);

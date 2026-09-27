@@ -71,13 +71,13 @@ const HEADER_RULES: [ImportField, (header: string) => boolean][] = [
 const ROLE_ALIASES: Record<string, Role> = {
   "o'quvchi": 'STUDENT',
   oquvchi: 'STUDENT',
-  "ўқувчи": 'STUDENT',
+  ўқувчи: 'STUDENT',
   ученик: 'STUDENT',
   учащийся: 'STUDENT',
   student: 'STUDENT',
   "o'qituvchi": 'TEACHER',
   oqituvchi: 'TEACHER',
-  "ўқитувчи": 'TEACHER',
+  ўқитувчи: 'TEACHER',
   учитель: 'TEACHER',
   преподаватель: 'TEACHER',
   teacher: 'TEACHER',
@@ -85,7 +85,10 @@ const ROLE_ALIASES: Record<string, Role> = {
 
 /** “9a”, “9 A”, “9-«А»” → “9-A”. */
 export function normalizeClassName(value: string): string | null {
-  const clean = transliterate(value).toUpperCase().replace(/["«»“”'‘’]/g, '').trim();
+  const clean = transliterate(value)
+    .toUpperCase()
+    .replace(/["«»“”'‘’]/g, '')
+    .trim();
   const match = /^(\d{1,2})\s*[-–—_/ ]?\s*([A-Z0-9]{1,10})$/.exec(clean);
   return match ? `${Number(match[1])}-${match[2]}` : null;
 }
@@ -274,7 +277,9 @@ export class UserImportService {
 
       let login: string | null = value(row, 'login').toLowerCase() || null;
       if (login && !LOGIN_PATTERN.test(login)) {
-        errors.push('Login faqat lotin harflari, raqam, nuqta, chiziqcha va pastki chiziqdan iborat bo‘lishi kerak (3–50 belgi)');
+        errors.push(
+          'Login faqat lotin harflari, raqam, nuqta, chiziqcha va pastki chiziqdan iborat bo‘lishi kerak (3–50 belgi)',
+        );
       }
       if (login) {
         const previous = fileLogins.get(login);
@@ -303,9 +308,9 @@ export class UserImportService {
     // Bazadagi loginlar va shu ismli foydalanuvchilar bilan solishtirish.
     const explicitLogins = result.map((row) => row.resolved.login).filter((login): login is string => Boolean(login));
     const takenLogins = new Set(
-      (
-        await this.prisma.user.findMany({ where: { login: { in: explicitLogins } }, select: { login: true } })
-      ).map((user) => user.login),
+      (await this.prisma.user.findMany({ where: { login: { in: explicitLogins } }, select: { login: true } })).map(
+        (user) => user.login,
+      ),
     );
     // Maktabdagi hisoblar soni bir necha mingdan oshmaydi — ismlarni xotirada solishtiramiz.
     const nameKey = (person: { lastName: string; firstName: string; middleName?: string | null }) =>
@@ -323,7 +328,9 @@ export class UserImportService {
       }
       const namesake = namesakeIds.get(nameKey(row.resolved));
       if (namesake !== undefined) {
-        row.warnings.push(`Tizimda shu ism-familiyali foydalanuvchi bor (ID ${String(namesake).padStart(6, '0')}) — takror emasligini tekshiring`);
+        row.warnings.push(
+          `Tizimda shu ism-familiyali foydalanuvchi bor (ID ${String(namesake).padStart(6, '0')}) — takror emasligini tekshiring`,
+        );
       }
       row.status = skip.has(row.rowNumber)
         ? 'skipped'
@@ -378,8 +385,7 @@ export class UserImportService {
         }[] = [];
         for (const { row, password, hash } of prepared) {
           const { lastName, firstName, middleName, role, classId, className } = row.resolved;
-          const login =
-            row.resolved.login ?? (await this.users.uniqueLogin(firstName, lastName, reserved, tx));
+          const login = row.resolved.login ?? (await this.users.uniqueLogin(firstName, lastName, reserved, tx));
           reserved.add(login);
           const user = await tx.user.create({
             data: {
@@ -460,7 +466,9 @@ export class UserImportService {
       })),
     );
     sheet.addRow([]);
-    sheet.addRow(['Birinchi kirishda vaqtinchalik parolni almashtirish talab qilinadi. Fayl maxfiy — tarqatilgach o‘chirib tashlang.']);
+    sheet.addRow([
+      'Birinchi kirishda vaqtinchalik parolni almashtirish talab qilinadi. Fayl maxfiy — tarqatilgach o‘chirib tashlang.',
+    ]);
 
     return {
       created: created.map(({ temporaryPassword: _password, ...rest }) => rest),
@@ -484,7 +492,11 @@ export class UserImportService {
       'Xato qatorlar',
       [
         { header: 'Qator', key: 'rowNumber', width: 8 },
-        ...batch.headers.map((header, index) => ({ header: header || `Ustun ${index + 1}`, key: `c${index}`, width: 18 })),
+        ...batch.headers.map((header, index) => ({
+          header: header || `Ustun ${index + 1}`,
+          key: `c${index}`,
+          width: 18,
+        })),
         { header: 'Xato sababi', key: 'reason', width: 60 },
       ],
       rows.map((row) => ({

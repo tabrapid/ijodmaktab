@@ -3,7 +3,16 @@ import request from 'supertest';
 import { hotp, totpStep } from '../src/auth/totp.js';
 import { ExcelJS } from '../src/common/xlsx.js';
 import type { PrismaService } from '../src/prisma/prisma.service.js';
-import { PASSWORD, binaryParser, createApp, createFixture, createUser, login, suffix, type Fixture } from './helpers.js';
+import {
+  PASSWORD,
+  binaryParser,
+  createApp,
+  createFixture,
+  createUser,
+  login,
+  suffix,
+  type Fixture,
+} from './helpers.js';
 
 let app: INestApplication;
 let prisma: PrismaService;
@@ -29,7 +38,9 @@ describe('Kirish va hisob xavfsizligi', () => {
     const locked = await http.post('/api/auth/login').send({ login: user.login, password: 'xato-parol' });
     expect(locked.body.code).toBe('ACCOUNT_LOCKED');
     // To‘g‘ri parol ham bloklangan vaqtda ishlamaydi.
-    expect((await http.post('/api/auth/login').send({ login: user.login, password: PASSWORD })).body.code).toBe('ACCOUNT_LOCKED');
+    expect((await http.post('/api/auth/login').send({ login: user.login, password: PASSWORD })).body.code).toBe(
+      'ACCOUNT_LOCKED',
+    );
 
     const admin = await createUser(prisma, ['ADMIN']);
     const adminAgent = await login(app, admin.login);
@@ -50,7 +61,10 @@ describe('Kirish va hisob xavfsizligi', () => {
     expect((await http.post('/api/auth/login').send({ login: root.login, password: PASSWORD })).status).toBe(401);
 
     const agent = request.agent(app.getHttpServer());
-    const signedIn = await agent.post('/api/auth/system/login').send({ login: root.login, password: PASSWORD }).expect(200);
+    const signedIn = await agent
+      .post('/api/auth/system/login')
+      .send({ login: root.login, password: PASSWORD })
+      .expect(200);
     expect(signedIn.body.mfa).toMatchObject({ required: true, enabled: false });
     expect((await agent.get('/api/audit')).body.code).toBe('MFA_SETUP_REQUIRED');
 
@@ -78,11 +92,18 @@ describe('Kirish va hisob xavfsizligi', () => {
     expect(created.body.temporaryPassword).toMatch(/^[a-z]{4}-\d{4}$/);
 
     const agent = request.agent(app.getHttpServer());
-    await agent.post('/api/auth/login').send({ login: created.body.user.login, password: created.body.temporaryPassword }).expect(200);
+    await agent
+      .post('/api/auth/login')
+      .send({ login: created.body.user.login, password: created.body.temporaryPassword })
+      .expect(200);
     expect((await agent.get('/api/me/sessions')).body.code).toBe('PASSWORD_CHANGE_REQUIRED');
     await agent
       .post('/api/auth/change-password')
-      .send({ currentPassword: created.body.temporaryPassword, newPassword: 'YangiParol2026', confirmPassword: 'YangiParol2026' })
+      .send({
+        currentPassword: created.body.temporaryPassword,
+        newPassword: 'YangiParol2026',
+        confirmPassword: 'YangiParol2026',
+      })
       .expect(200);
     await agent.get('/api/me/sessions').expect(200);
   });
@@ -115,7 +136,9 @@ describe('Rollar va ruxsatlar', () => {
     expect(denied.status).toBe(403);
 
     const teacher = await login(app, fx.otherTeacher.login);
-    expect((await teacher.post('/api/users').send({ lastName: 'A', firstName: 'B', roles: ['STUDENT'] })).status).toBe(403);
+    expect((await teacher.post('/api/users').send({ lastName: 'A', firstName: 'B', roles: ['STUDENT'] })).status).toBe(
+      403,
+    );
   });
 
   it('o‘qituvchi faqat biriktirilgan sinflaridagi o‘quvchilarni ko‘radi', async () => {
@@ -168,7 +191,10 @@ describe('Excel orqali hisoblar importi', () => {
 
     const upload = await agent
       .post('/api/users/import')
-      .attach('file', file, { filename: 'royxat.xlsx', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      .attach('file', file, {
+        filename: 'royxat.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
       .expect(200);
     expect(upload.body.mapping).toMatchObject({ fullName: 0, className: 1, role: 2 });
     const statuses = upload.body.rows.map((row: { status: string }) => row.status);
@@ -177,7 +203,11 @@ describe('Excel orqali hisoblar importi', () => {
     expect(upload.body.rows[3].errors.join(' ')).toContain('Sinf topilmadi');
     expect(upload.body.rows[5].errors.join(' ')).toContain('Rol noma’lum');
 
-    const errors = await agent.get(`/api/users/import/${upload.body.batchId}/errors.xlsx`).buffer(true).parse(binaryParser).expect(200);
+    const errors = await agent
+      .get(`/api/users/import/${upload.body.batchId}/errors.xlsx`)
+      .buffer(true)
+      .parse(binaryParser)
+      .expect(200);
     const check = new ExcelJS.Workbook();
     await check.xlsx.load(errors.body as unknown as ArrayBuffer);
     expect(check.worksheets[0]!.rowCount).toBe(4);
@@ -210,5 +240,43 @@ describe('Excel orqali hisoblar importi', () => {
       .attach('file', Buffer.from('ism,familiya\nAli,Valiyev'), { filename: 'royxat.xlsx' });
     expect(response.status).toBe(400);
     expect(response.body.code).toBe('UNSUPPORTED_FILE');
+  });
+});
+
+describe('Administrator ogohlantirishlari va sinf a’zoligi', () => {
+  it('ro‘yxat filtrlari bosh sahifa hisoblari bilan mos; arxivlangan sinfga qo‘shib bo‘lmaydi', async () => {
+    const adminUser = await createUser(prisma, ['ADMIN']);
+    const admin = await login(app, adminUser.login);
+    const loose = await createUser(prisma, ['STUDENT']);
+    const stuck = await createUser(prisma, ['TEACHER']);
+    await prisma.user.update({ where: { id: stuck.id }, data: { lockedUntil: new Date(Date.now() + 10 * 60_000) } });
+
+    const noClass = await admin.get('/api/users').query({ flag: 'noClass', pageSize: 100 }).expect(200);
+    const noClassIds = noClass.body.items.map((item: { id: string }) => item.id);
+    expect(noClassIds).toContain(loose.id);
+    expect(noClassIds).not.toContain(fx.studentsA[0]!.id);
+    const dashboard = await admin.get('/api/dashboard/admin').expect(200);
+    expect(noClass.body.total).toBe(dashboard.body.studentsWithoutClass);
+
+    const locked = await admin.get('/api/users').query({ flag: 'locked' }).expect(200);
+    expect(locked.body.items.map((item: { id: string }) => item.id)).toContain(stuck.id);
+    expect(locked.body.total).toBe(dashboard.body.users.locked);
+
+    // O‘qituvchi uchun filtr e’tiborsiz qoladi (hisob ma’lumotlari ko‘rinmaydi).
+    const teacher = await login(app, fx.teacher.login);
+    const teacherView = await teacher.get('/api/users').query({ flag: 'locked' }).expect(200);
+    expect(teacherView.body.items.map((item: { id: string }) => item.id)).not.toContain(stuck.id);
+
+    // Arxivlangan sinf: o‘quvchi qo‘shish va ko‘chirish rad etiladi, sabab aniq.
+    await admin.post(`/api/classes/${fx.classB.id}/archive`).expect(200);
+    const enroll = await admin.post(`/api/classes/${fx.classB.id}/students`).send({ studentIds: [loose.id] });
+    expect(enroll.status).toBe(409);
+    expect(enroll.body.code).toBe('CLASS_ARCHIVED');
+    const detail = await admin.get(`/api/classes/${fx.classB.id}`).expect(200);
+    expect(detail.body.archivedAt).not.toBeNull();
+    await admin.post(`/api/classes/${fx.classB.id}/unarchive`).expect(200);
+
+    // O‘qituvchini “ko‘chirib” bo‘lmaydi.
+    await admin.post(`/api/students/${stuck.id}/transfer`).send({ toClassId: fx.classA.id }).expect(404);
   });
 });

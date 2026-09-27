@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
-import { createExportSchema, csvList, PARTICIPATION_STATUSES } from '@ijod/shared';
+import { CATEGORIES, createExportSchema, csvList, PARTICIPATION_STATUSES } from '@ijod/shared';
 import type { Response } from 'express';
 import { z } from 'zod';
 import type { AuthUser } from '../common/auth-user.js';
@@ -15,6 +15,10 @@ const resultsQuerySchema = z.object({
   classIds: csvList(z.uuid()).optional(),
   minPercent: z.coerce.number().min(0).max(100).optional(),
   maxPercent: z.coerce.number().min(0).max(100).optional(),
+  category: z.enum(CATEGORIES).optional(),
+  categoryMinPercent: z.coerce.number().min(0).max(100).optional(),
+  categoryMaxPercent: z.coerce.number().min(0).max(100).optional(),
+  studentIds: csvList(z.uuid()).optional(),
   q: z.string().trim().max(100).optional(),
 });
 
@@ -35,14 +39,25 @@ export class ResultsController {
     return this.results.sessionResults(user, id, query);
   }
 
+  @Get('students/:id/results')
+  studentResults(@CurrentUser() user: AuthUser, @Param('id', Uuid) id: string) {
+    return this.results.studentResults(user, id);
+  }
+
   @Post('exports/preview')
   @HttpCode(200)
-  previewExport(@CurrentUser() user: AuthUser, @Body(zod(createExportSchema)) body: z.output<typeof createExportSchema>) {
+  previewExport(
+    @CurrentUser() user: AuthUser,
+    @Body(zod(createExportSchema)) body: z.output<typeof createExportSchema>,
+  ) {
     return this.exports.previewCount(user, body);
   }
 
   @Post('exports')
-  createExport(@CurrentUser() user: AuthUser, @Body(zod(createExportSchema)) body: z.output<typeof createExportSchema>) {
+  createExport(
+    @CurrentUser() user: AuthUser,
+    @Body(zod(createExportSchema)) body: z.output<typeof createExportSchema>,
+  ) {
     return this.exports.create(user, body);
   }
 

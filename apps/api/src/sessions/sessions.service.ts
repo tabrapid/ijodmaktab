@@ -347,7 +347,8 @@ export class SessionsService {
       }),
     ]);
     const classes = new Map<string, string>();
-    for (const assignment of full.assignments) if (assignment.class) classes.set(assignment.class.id, assignment.class.name);
+    for (const assignment of full.assignments)
+      if (assignment.class) classes.set(assignment.class.id, assignment.class.name);
     const count = counts.get(id);
     return {
       id: full.id,
@@ -419,7 +420,11 @@ export class SessionsService {
     const startsAt = input.startsAt ? new Date(input.startsAt) : session.startsAt;
     const endsAt = input.endsAt ? new Date(input.endsAt) : session.endsAt;
     const entryClosesAt =
-      input.entryClosesAt === undefined ? session.entryClosesAt : input.entryClosesAt ? new Date(input.entryClosesAt) : null;
+      input.entryClosesAt === undefined
+        ? session.entryClosesAt
+        : input.entryClosesAt
+          ? new Date(input.entryClosesAt)
+          : null;
     if (endsAt <= startsAt) throw badRequest('INVALID_TIMING', 'Yopilish vaqti boshlanishidan keyin bo‘lishi kerak.');
     if (entryClosesAt && (entryClosesAt <= startsAt || entryClosesAt > endsAt)) {
       throw badRequest('INVALID_TIMING', 'Kirish muddati sessiya vaqti ichida bo‘lishi kerak.');
@@ -438,7 +443,10 @@ export class SessionsService {
       if (endsAt.getTime() !== session.endsAt.getTime()) {
         await this.adjustDeadlines(tx, id, session, endsAt, now);
       }
-      const students = await tx.sessionAssignment.findMany({ where: { sessionId: id, removedAt: null }, select: { studentId: true } });
+      const students = await tx.sessionAssignment.findMany({
+        where: { sessionId: id, removedAt: null },
+        select: { studentId: true },
+      });
       await this.notifications.notify(
         students.map((item) => item.studentId),
         {
@@ -453,7 +461,12 @@ export class SessionsService {
         'session.timing_changed',
         { type: 'AssessmentSession', id },
         {
-          before: { startsAt: session.startsAt, endsAt: session.endsAt, entryClosesAt: session.entryClosesAt, durationMinutes: session.durationMinutes },
+          before: {
+            startsAt: session.startsAt,
+            endsAt: session.endsAt,
+            entryClosesAt: session.entryClosesAt,
+            durationMinutes: session.durationMinutes,
+          },
           after: { startsAt, endsAt, entryClosesAt, durationMinutes: input.durationMinutes ?? session.durationMinutes },
           reason: input.reason,
         },
@@ -502,7 +515,8 @@ export class SessionsService {
 
   async startNow(viewer: AuthUser, id: string) {
     const session = await this.loadManaged(viewer, id);
-    if (stateOf(session) !== 'SCHEDULED') throw conflict('NOT_SCHEDULED', 'Sessiya allaqachon boshlangan yoki yopilgan.');
+    if (stateOf(session) !== 'SCHEDULED')
+      throw conflict('NOT_SCHEDULED', 'Sessiya allaqachon boshlangan yoki yopilgan.');
     const now = new Date();
     if (session.endsAt <= now) throw conflict('INVALID_TIMING', 'Sessiya yopilish vaqti o‘tib ketgan.');
     await this.prisma.assessmentSession.update({ where: { id }, data: { startsAt: now } });
@@ -518,7 +532,10 @@ export class SessionsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.assessmentSession.update({
         where: { id },
-        data: { endsAt: now, entryClosesAt: session.entryClosesAt && session.entryClosesAt < now ? session.entryClosesAt : now },
+        data: {
+          endsAt: now,
+          entryClosesAt: session.entryClosesAt && session.entryClosesAt < now ? session.entryClosesAt : now,
+        },
       });
       await tx.attempt.updateMany({
         where: { sessionId: id, status: 'IN_PROGRESS', deadlineAt: { gt: now } },
@@ -540,7 +557,10 @@ export class SessionsService {
         where: { sessionId: id, status: 'IN_PROGRESS' },
         data: { status: 'CANCELLED', cancelledAt: now, cancelledById: viewer.id, cancelReason: reason },
       });
-      const students = await tx.sessionAssignment.findMany({ where: { sessionId: id, removedAt: null }, select: { studentId: true } });
+      const students = await tx.sessionAssignment.findMany({
+        where: { sessionId: id, removedAt: null },
+        select: { studentId: true },
+      });
       await this.notifications.notify(
         students.map((item) => item.studentId),
         { type: 'TEST_CANCELLED', title: `Test bekor qilindi: ${session.title}`, body: reason, link: '/student' },
@@ -555,7 +575,8 @@ export class SessionsService {
   async rotateCode(viewer: AuthUser, id: string) {
     const session = await this.loadManaged(viewer, id);
     const state = stateOf(session);
-    if (state === 'CLOSED' || state === 'CANCELLED') throw conflict('SESSION_FINISHED', 'Yopilgan sessiya kodini almashtirib bo‘lmaydi.');
+    if (state === 'CLOSED' || state === 'CANCELLED')
+      throw conflict('SESSION_FINISHED', 'Yopilgan sessiya kodini almashtirib bo‘lmaydi.');
     await this.prisma.$transaction(async (tx) => {
       await tx.assessmentSession.update({
         where: { id },
@@ -575,7 +596,10 @@ export class SessionsService {
     if (session.cancelledAt) throw conflict('SESSION_CANCELLED', 'Bekor qilingan sessiya natijalari e’lon qilinmaydi.');
     const inProgress = await this.prisma.attempt.count({ where: { sessionId: id, status: 'IN_PROGRESS' } });
     if (inProgress > 0) {
-      throw conflict('STILL_IN_PROGRESS', `Hali ${inProgress} nafar o‘quvchi testni ishlamoqda. Natijalarni ular yakunlagach e’lon qiling.`);
+      throw conflict(
+        'STILL_IN_PROGRESS',
+        `Hali ${inProgress} nafar o‘quvchi testni ishlamoqda. Natijalarni ular yakunlagach e’lon qiling.`,
+      );
     }
     await this.grading.publishResults(id, viewer);
     return this.detail(viewer, id);
@@ -596,6 +620,10 @@ export class SessionsService {
   async changeAssignments(viewer: AuthUser, id: string, input: Out<typeof assignmentChangeSchema>) {
     const session = await this.loadManaged(viewer, id);
     if (session.cancelledAt) throw conflict('SESSION_CANCELLED', 'Bekor qilingan sessiya.');
+    // Yopilgandan keyin ro‘yxatni o‘zgartirish qatnashish ko‘rsatkichlarini orqaga qarab o‘zgartirib yuboradi.
+    if (stateOf(session) === 'CLOSED') {
+      throw conflict('SESSION_FINISHED', 'Yopilgan sessiyada o‘quvchilar ro‘yxatini o‘zgartirib bo‘lmaydi.');
+    }
     const now = new Date();
     if (input.addStudentIds.length) {
       const { students } = await this.resolveAudience(viewer, session.subjectId, [], input.addStudentIds);
@@ -616,18 +644,25 @@ export class SessionsService {
     for (const studentId of input.removeStudentIds) {
       const started = await this.prisma.attempt.count({ where: { sessionId: id, studentId } });
       if (started) {
-        throw conflict('HAS_ATTEMPT', 'Testni boshlagan o‘quvchini ro‘yxatdan olib bo‘lmaydi — kerak bo‘lsa urinishini bekor qiling.');
+        throw conflict(
+          'HAS_ATTEMPT',
+          'Testni boshlagan o‘quvchini ro‘yxatdan olib bo‘lmaydi — kerak bo‘lsa urinishini bekor qiling.',
+        );
       }
       await this.prisma.sessionAssignment.updateMany({
         where: { sessionId: id, studentId, removedAt: null },
         data: { removedAt: now, removedById: viewer.id, removeReason: input.reason },
       });
     }
-    await this.audit.log('session.assignments_changed', { type: 'AssessmentSession', id }, {
-      added: input.addStudentIds,
-      removed: input.removeStudentIds,
-      reason: input.reason,
-    });
+    await this.audit.log(
+      'session.assignments_changed',
+      { type: 'AssessmentSession', id },
+      {
+        added: input.addStudentIds,
+        removed: input.removeStudentIds,
+        reason: input.reason,
+      },
+    );
     return this.live(viewer, id);
   }
 
@@ -654,7 +689,7 @@ export class SessionsService {
         {
           type: 'TEST_TIME_CHANGED',
           title: `Sizga qo‘shimcha ${minutes} daqiqa berildi: ${session.title}`,
-          link: attempt ? `/student/attempts/${attempt.id}` : `/student/sessions/${id}`,
+          link: attempt ? `/attempt/${attempt.id}` : `/student/sessions/${id}`,
         },
         tx,
       );
@@ -730,7 +765,8 @@ export class SessionsService {
         const latest = assignment.attempts[0] ?? null;
         const status: AttemptStatus | 'NOT_STARTED' = latest ? (latest.status as AttemptStatus) : 'NOT_STARTED';
         const lastSignal = latest ? (latest.lastSeenAt ?? latest.startedAt).getTime() : null;
-        const connectionIssue = status === 'IN_PROGRESS' && lastSignal !== null && now - lastSignal > CONNECTION_ISSUE_MS;
+        const connectionIssue =
+          status === 'IN_PROGRESS' && lastSignal !== null && now - lastSignal > CONNECTION_ISSUE_MS;
         counts.assigned += 1;
         if (status === 'NOT_STARTED') counts.notStarted += 1;
         else if (status === 'IN_PROGRESS') counts.inProgress += 1;
@@ -785,7 +821,10 @@ export class SessionsService {
       include: { questionVersion: true },
     });
     if (!testQuestion) throw notFound('Savol');
-    if (input.mode === 'CHANGE_KEY' && !optionsOf(testQuestion.questionVersion).some((option) => option.id === input.correctOptionId)) {
+    if (
+      input.mode === 'CHANGE_KEY' &&
+      !optionsOf(testQuestion.questionVersion).some((option) => option.id === input.correctOptionId)
+    ) {
       throw badRequest('INVALID_OPTION', 'Yangi to‘g‘ri javob savol variantlaridan biri bo‘lishi kerak.');
     }
     const inProgress = await this.prisma.attempt.count({ where: { sessionId: id, status: 'IN_PROGRESS' } });
@@ -793,9 +832,8 @@ export class SessionsService {
       throw conflict('STILL_IN_PROGRESS', 'Qayta baholash uchun barcha o‘quvchilar testni yakunlashi kerak.');
     }
 
-    const override: GradingOverride = input.mode === 'CHANGE_KEY'
-      ? { mode: input.mode, correctOptionId: input.correctOptionId }
-      : { mode: input.mode };
+    const override: GradingOverride =
+      input.mode === 'CHANGE_KEY' ? { mode: input.mode, correctOptionId: input.correctOptionId } : { mode: input.mode };
     const affectedStudents: string[] = [];
 
     const revision = await this.prisma.$transaction(
@@ -814,13 +852,20 @@ export class SessionsService {
         });
         const items: { attemptId: string; before: Prisma.InputJsonValue; after: Prisma.InputJsonValue }[] = [];
         for (const attempt of attempts) {
-          const answers = Object.fromEntries(attempt.answers.map((answer) => [answer.testQuestionId, { optionId: answer.optionId }]));
+          const answers = Object.fromEntries(
+            attempt.answers.map((answer) => [answer.testQuestionId, { optionId: answer.optionId }]),
+          );
           const grade = gradeAttempt(questions, answers, overrides);
-          const before = { score: num(attempt.score), maxScore: num(attempt.maxScore), categories: attempt.categoryScores };
+          const before = {
+            score: num(attempt.score),
+            maxScore: num(attempt.maxScore),
+            categories: attempt.categoryScores,
+          };
           const after = { score: grade.total.earned, maxScore: grade.total.max, categories: grade.categories };
           await this.grading.writeGrade(tx, attempt.id, grade, version);
           items.push({ attemptId: attempt.id, before: toJson(before), after: toJson(after) });
-          if (before.score !== after.score || before.maxScore !== after.maxScore) affectedStudents.push(attempt.studentId);
+          if (before.score !== after.score || before.maxScore !== after.maxScore)
+            affectedStudents.push(attempt.studentId);
         }
         const created = await tx.gradeRevision.create({
           data: {
@@ -836,7 +881,13 @@ export class SessionsService {
         await this.audit.log(
           'grades.revised',
           { type: 'AssessmentSession', id },
-          { version, testQuestionId: input.testQuestionId, mode: input.mode, reason: input.reason, affected: affectedStudents.length },
+          {
+            version,
+            testQuestionId: input.testQuestionId,
+            mode: input.mode,
+            reason: input.reason,
+            affected: affectedStudents.length,
+          },
           { tx },
         );
         return created;
@@ -864,7 +915,10 @@ export class SessionsService {
         items: {
           include: {
             attempt: {
-              select: { id: true, student: { select: { id: true, internalId: true, lastName: true, firstName: true, middleName: true } } },
+              select: {
+                id: true,
+                student: { select: { id: true, internalId: true, lastName: true, firstName: true, middleName: true } },
+              },
             },
           },
         },
@@ -879,7 +933,11 @@ export class SessionsService {
       createdAt: revision.createdAt,
       items: revision.items.map((item) => ({
         attemptId: item.attemptId,
-        student: { id: item.attempt.student.id, internalId: item.attempt.student.internalId, fullName: fullName(item.attempt.student) },
+        student: {
+          id: item.attempt.student.id,
+          internalId: item.attempt.student.internalId,
+          fullName: fullName(item.attempt.student),
+        },
         before: item.before,
         after: item.after,
       })),

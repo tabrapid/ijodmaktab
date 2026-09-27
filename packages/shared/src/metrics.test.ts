@@ -50,10 +50,9 @@ describe('reja 9-bo‘lim namunalari', () => {
   });
 
   it('boshlamaganlar 0 ball sifatida o‘rtachaga qo‘shilmaydi, 0 olgan esa qo‘shiladi', () => {
-    const withZero = computeClassMetrics(
-      [finished(10, 20, 30), finished(0, 0, 0), { status: 'NOT_STARTED' }],
-      { thresholdPercent: 60 },
-    );
+    const withZero = computeClassMetrics([finished(10, 20, 30), finished(0, 0, 0), { status: 'NOT_STARTED' }], {
+      thresholdPercent: 60,
+    });
     expect(withZero.graded).toBe(2);
     expect(withZero.overall.meanPercent).toBe(50);
     expect(withZero.overall.minPercent).toBe(0);
@@ -62,12 +61,7 @@ describe('reja 9-bo‘lim namunalari', () => {
 
   it('tekshirilayotgan va bekor qilingan ishlar yakuniy hisobdan alohida turadi', () => {
     const metrics = computeClassMetrics(
-      [
-        finished(10, 20, 30),
-        { status: 'UNDER_REVIEW' },
-        { status: 'CANCELLED' },
-        { status: 'IN_PROGRESS' },
-      ],
+      [finished(10, 20, 30), { status: 'UNDER_REVIEW' }, { status: 'CANCELLED' }, { status: 'IN_PROGRESS' }],
       { thresholdPercent: 60 },
     );
     expect(metrics.graded).toBe(1);

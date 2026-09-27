@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   FINAL_ATTEMPT_STATUSES,
+  categoryEntries,
   computeAttemptDeadline,
   entryDeadline,
   isEntryOpen,
@@ -45,8 +46,7 @@ const timeUp = () =>
 
 const finished = () => new AppError(HttpStatus.CONFLICT, 'ATTEMPT_FINISHED', 'Bu urinish allaqachon yakunlangan.');
 
-const invalidCode = () =>
-  badRequest('INVALID_CODE', 'Kod noto‘g‘ri, muddati o‘tgan yoki bu test sizga tayinlanmagan.');
+const invalidCode = () => badRequest('INVALID_CODE', 'Kod noto‘g‘ri, muddati o‘tgan yoki bu test sizga tayinlanmagan.');
 
 function sameCode(a: string, b: string) {
   const left = Buffer.from(a.toUpperCase());
@@ -419,7 +419,8 @@ export class AttemptsService {
   /** Yakunlangan urinish natijasi — sessiyaning natija siyosatiga qarab. */
   private async resultFor(attempt: Attempt, session: AssessmentSession) {
     const now = new Date();
-    const scoreVisible = (FINAL_ATTEMPT_STATUSES as readonly string[]).includes(attempt.status) && scoresReleased(session, now);
+    const scoreVisible =
+      (FINAL_ATTEMPT_STATUSES as readonly string[]).includes(attempt.status) && scoresReleased(session, now);
     const base = {
       status: attempt.status as AttemptStatus,
       submittedAt: attempt.submittedAt,
@@ -438,7 +439,7 @@ export class AttemptsService {
     const result = {
       ...base,
       score: { earned: total.earned, max: total.max, percent: pairPercent(total) },
-      categories: (Object.entries(categories) as [Category, { earned: number; max: number }][]).map(
+      categories: categoryEntries(categories as Partial<Record<Category, { earned: number; max: number }>>).map(
         ([category, pair]) => ({
           category,
           earned: pair.earned,
@@ -484,7 +485,7 @@ export class AttemptsService {
           selectedOptionId: answer?.optionId ?? null,
           correctOptionId,
           earned: num(answer?.pointsAwarded) ?? 0,
-          max: override?.mode === 'EXCLUDE' ? 0 : num(question.points) ?? 0,
+          max: override?.mode === 'EXCLUDE' ? 0 : (num(question.points) ?? 0),
           excluded: override?.mode === 'EXCLUDE',
           explanation: question.questionVersion.explanation,
         };
@@ -496,7 +497,8 @@ export class AttemptsService {
     if (status === 'CANCELLED') return 'Urinish bekor qilingan.';
     if (status === 'UNDER_REVIEW') return 'Ishingiz tekshirilmoqda.';
     if (scoreVisible) return null;
-    if (session.scoreVisibility === 'MANUAL') return 'Javoblaringiz qabul qilindi. Natija o‘qituvchi e’lon qilgach ko‘rinadi.';
+    if (session.scoreVisibility === 'MANUAL')
+      return 'Javoblaringiz qabul qilindi. Natija o‘qituvchi e’lon qilgach ko‘rinadi.';
     return 'Javoblaringiz qabul qilindi. Natija barcha ishtirokchilar yakunlagach yoki test yopilgach e’lon qilinadi.';
   }
 
@@ -572,7 +574,13 @@ export class AttemptsService {
    * Javobni saqlaydi. Revision raqami tufayli kechikib kelgan eski so‘rov yangi javobni
    * bosib ketmaydi; qayta yuborilgan so‘rov natijani o‘zgartirmaydi.
    */
-  private async upsertAnswer(tx: Tx, attemptId: string, testQuestionId: string, optionId: string | null, revision: number) {
+  private async upsertAnswer(
+    tx: Tx,
+    attemptId: string,
+    testQuestionId: string,
+    optionId: string | null,
+    revision: number,
+  ) {
     const existing = await tx.answer.findUnique({
       where: { attemptId_testQuestionId: { attemptId, testQuestionId } },
     });
@@ -702,7 +710,11 @@ export class AttemptsService {
 
     if (finalized) {
       if (late && input.answers.length) {
-        await this.audit.log('attempt.late_answer_rejected', { type: 'Attempt', id: attemptId }, { count: input.answers.length });
+        await this.audit.log(
+          'attempt.late_answer_rejected',
+          { type: 'Attempt', id: attemptId },
+          { count: input.answers.length },
+        );
       }
       await this.audit.log('attempt.submit', { type: 'Attempt', id: attemptId }, { late });
       await this.grading.afterFinalize(attempt.sessionId);

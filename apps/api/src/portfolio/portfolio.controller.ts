@@ -20,7 +20,10 @@ export class PortfolioController {
   constructor(private readonly portfolio: PortfolioService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query(zod(portfolioListQuerySchema)) query: Out<typeof portfolioListQuerySchema>) {
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query(zod(portfolioListQuerySchema)) query: Out<typeof portfolioListQuerySchema>,
+  ) {
     return this.portfolio.list(user, query);
   }
 
@@ -32,7 +35,10 @@ export class PortfolioController {
 
   @Get('school')
   @Roles('DEPUTY', 'SUPER_ADMIN')
-  school(@CurrentUser() user: AuthUser, @Query(zod(portfolioListQuerySchema)) query: Out<typeof portfolioListQuerySchema>) {
+  school(
+    @CurrentUser() user: AuthUser,
+    @Query(zod(portfolioListQuerySchema)) query: Out<typeof portfolioListQuerySchema>,
+  ) {
     return this.portfolio.schoolList(user, query);
   }
 

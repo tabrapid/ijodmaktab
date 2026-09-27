@@ -3,13 +3,7 @@
  * Qat’iy xatolar nashrni to‘xtatadi, tavsiyaviy ogohlantirishlar tushuntiriladi.
  * Bir xil funksiya brauzerda (darhol ko‘rsatish) va serverda (nashr oldidan) ishlatiladi.
  */
-import {
-  CATEGORIES,
-  CATEGORY_LABELS,
-  ENABLED_QUESTION_TYPES,
-  type Category,
-  type QuestionType,
-} from './enums.js';
+import { CATEGORIES, CATEGORY_LABELS, ENABLED_QUESTION_TYPES, type Category, type QuestionType } from './enums.js';
 import { formatPoints } from './format.js';
 import { hasAtMostTwoDecimals, sumPoints } from './scoring.js';
 import { normalizeForSearch } from './text.js';

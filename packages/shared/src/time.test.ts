@@ -32,9 +32,7 @@ describe('sessiya holati va urinish muddati', () => {
     expect(sessionState(session, new Date('2026-09-27T03:59:59Z'))).toBe('SCHEDULED');
     expect(sessionState(session, new Date('2026-09-27T04:00:00Z'))).toBe('OPEN');
     expect(sessionState(session, new Date('2026-09-27T05:00:00Z'))).toBe('CLOSED');
-    expect(sessionState({ ...session, cancelledAt: new Date() }, new Date('2026-09-27T04:30:00Z'))).toBe(
-      'CANCELLED',
-    );
+    expect(sessionState({ ...session, cancelledAt: new Date() }, new Date('2026-09-27T04:30:00Z'))).toBe('CANCELLED');
   });
 
   it('kirish muddati o‘tgach yangi urinish boshlanmaydi', () => {

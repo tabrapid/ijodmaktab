@@ -40,6 +40,18 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   REASONING: 'Mulohaza',
 };
 
+/**
+ * Kategoriyalar bo‘yicha qiymatlarni doimiy tartibda qaytaradi (bilish → qo‘llash → mulohaza).
+ * JSON/JSONB kalitlari tartibiga tayanilmaydi.
+ */
+export function categoryEntries<T>(record: Partial<Record<Category, T>> | null | undefined): [Category, T][] {
+  if (!record) return [];
+  return CATEGORIES.filter((category) => record[category] !== undefined).map((category) => [
+    category,
+    record[category] as T,
+  ]);
+}
+
 export const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 
@@ -49,13 +61,7 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   HARD: 'Qiyin',
 };
 
-export const QUESTION_TYPES = [
-  'SINGLE_CHOICE',
-  'MULTIPLE_CHOICE',
-  'SHORT_ANSWER',
-  'MATCHING',
-  'ESSAY',
-] as const;
+export const QUESTION_TYPES = ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'SHORT_ANSWER', 'MATCHING', 'ESSAY'] as const;
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
@@ -141,13 +147,7 @@ export const REVIEW_VISIBILITY_LABELS: Record<ReviewVisibility, string> = {
 
 // ---------------------------------------------------------------- Urinishlar
 
-export const ATTEMPT_STATUSES = [
-  'IN_PROGRESS',
-  'SUBMITTED',
-  'EXPIRED',
-  'UNDER_REVIEW',
-  'CANCELLED',
-] as const;
+export const ATTEMPT_STATUSES = ['IN_PROGRESS', 'SUBMITTED', 'EXPIRED', 'UNDER_REVIEW', 'CANCELLED'] as const;
 export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
 
 /** Natijalar jadvalidagi holat: urinish holatlari + “boshlamagan”. */
@@ -245,13 +245,7 @@ export const CREATIVE_PORTFOLIO_TYPES: readonly PortfolioItemType[] = [
   'BOOK_PUBLICATION',
 ];
 
-export const ACHIEVEMENT_LEVELS = [
-  'SCHOOL',
-  'DISTRICT',
-  'REGION',
-  'NATIONAL',
-  'INTERNATIONAL',
-] as const;
+export const ACHIEVEMENT_LEVELS = ['SCHOOL', 'DISTRICT', 'REGION', 'NATIONAL', 'INTERNATIONAL'] as const;
 export type AchievementLevel = (typeof ACHIEVEMENT_LEVELS)[number];
 
 export const ACHIEVEMENT_LEVEL_LABELS: Record<AchievementLevel, string> = {
@@ -313,5 +307,7 @@ export const NOTIFICATION_TYPES = [
   'EXPORT_READY',
   'GRADES_REVISED',
   'ATTEMPT_CANCELLED',
+  'QUESTION_SCHOOL_APPROVED',
+  'QUESTION_SCHOOL_REJECTED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

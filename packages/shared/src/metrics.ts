@@ -132,9 +132,7 @@ export function median(values: readonly number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[middle]!
-    : (sorted[middle - 1]! + sorted[middle]!) / 2;
+  return sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
 }
 
 export function mean(values: readonly number[]): number | null {
@@ -211,10 +209,7 @@ export function computeClassMetrics(
     thresholdReach,
     thresholdPercent: options.thresholdPercent,
     overall: {
-      mastery: ratio(
-        sumPoints(totals.map((total) => total.earned)),
-        sumPoints(totals.map((total) => total.max)),
-      ),
+      mastery: ratio(sumPoints(totals.map((total) => total.earned)), sumPoints(totals.map((total) => total.max))),
       meanPercent: mean(percents),
       medianPercent: median(percents),
       minPercent: percents.length ? Math.min(...percents) : null,
@@ -268,10 +263,7 @@ export function computeQuestionStats(
 ): QuestionStats[] {
   return questions.map((question) => {
     const own = responses.filter((response) => response.questionId === question.questionId);
-    const optionCounts = Object.fromEntries(question.optionIds.map((id) => [id, 0])) as Record<
-      string,
-      number
-    >;
+    const optionCounts = Object.fromEntries(question.optionIds.map((id) => [id, 0])) as Record<string, number>;
     let correct = 0;
     let wrong = 0;
     let blank = 0;
@@ -318,9 +310,7 @@ export function computeQuestionStats(
     const reviewReasons: string[] = [];
     if (total >= QUESTION_REVIEW_MIN_RESPONSES) {
       if ((correctRate.percent ?? 100) <= QUESTION_REVIEW_LOW_CORRECT_PERCENT) {
-        reviewReasons.push(
-          `To‘g‘ri javob ulushi past (${QUESTION_REVIEW_LOW_CORRECT_PERCENT}% yoki kamroq)`,
-        );
+        reviewReasons.push(`To‘g‘ri javob ulushi past (${QUESTION_REVIEW_LOW_CORRECT_PERCENT}% yoki kamroq)`);
       }
       const correctPicks = optionCounts[question.correctOptionId] ?? 0;
       const popularDistractor = Object.entries(optionCounts).some(

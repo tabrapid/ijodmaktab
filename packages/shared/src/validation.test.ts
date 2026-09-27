@@ -45,7 +45,14 @@ describe('validateTestDraft', () => {
     );
     const codes = issues.filter((issue) => issue.level === 'error').map((issue) => issue.code);
     expect(codes).toEqual(
-      expect.arrayContaining(['EMPTY_STEM', 'NO_KEY', 'INVALID_KEY', 'INVALID_POINTS', 'TOO_FEW_OPTIONS', 'DUPLICATE_QUESTION']),
+      expect.arrayContaining([
+        'EMPTY_STEM',
+        'NO_KEY',
+        'INVALID_KEY',
+        'INVALID_POINTS',
+        'TOO_FEW_OPTIONS',
+        'DUPLICATE_QUESTION',
+      ]),
     );
     expect(hasBlockingIssues(issues)).toBe(true);
   });

@@ -11,7 +11,10 @@ export class AuditController {
 
   @Get()
   @Roles('DEPUTY', 'ADMIN', 'SUPER_ADMIN')
-  list(@CurrentUser() user: AuthUser, @Query(zod(auditListQuerySchema)) query: ReturnType<typeof auditListQuerySchema.parse>) {
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query(zod(auditListQuerySchema)) query: ReturnType<typeof auditListQuerySchema.parse>,
+  ) {
     return this.audit.list(user, query);
   }
 }

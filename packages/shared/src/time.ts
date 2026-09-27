@@ -42,9 +42,7 @@ const partsFormatter = new Intl.DateTimeFormat('en-GB', {
 });
 
 export function toSchoolWallClock(date: Date | string): WallClock {
-  const parts = Object.fromEntries(
-    partsFormatter.formatToParts(new Date(date)).map((part) => [part.type, part.value]),
-  );
+  const parts = Object.fromEntries(partsFormatter.formatToParts(new Date(date)).map((part) => [part.type, part.value]));
   return {
     year: Number(parts.year),
     month: Number(parts.month),
@@ -101,6 +99,13 @@ export function dateToSchoolInput(date: Date | string): string {
 export function schoolToday(now: Date = new Date()): string {
   const c = toSchoolWallClock(now);
   return `${c.year}-${pad(c.month)}-${pad(c.day)}`;
+}
+
+/** “2026-09” → “sentabr 2026”; `withYear: false` → “sentabr” (oylik ko‘rsatkichlar uchun). */
+export function formatMonth(value: string, withYear = true): string {
+  const [year, month] = value.split('-').map(Number);
+  if (!year || !month || month < 1 || month > 12) return value;
+  return withYear ? `${MONTHS[month - 1]} ${year}` : MONTHS[month - 1]!;
 }
 
 /** Soniyalarni “1:05:09” yoki “05:09” ko‘rinishiga keltiradi. */

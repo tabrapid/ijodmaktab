@@ -42,7 +42,6 @@ export function computeAttemptDeadline(input: {
   extraMinutes?: number;
   sessionEndsAt: Date | string;
 }): Date {
-  const byDuration =
-    input.startedAt.getTime() + (input.durationMinutes + (input.extraMinutes ?? 0)) * 60_000;
+  const byDuration = input.startedAt.getTime() + (input.durationMinutes + (input.extraMinutes ?? 0)) * 60_000;
   return new Date(Math.min(byDuration, time(input.sessionEndsAt)));
 }

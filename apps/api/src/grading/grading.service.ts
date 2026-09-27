@@ -117,7 +117,10 @@ export class GradingService {
   async finalize(attemptId: string, source: SubmitSource) {
     const done = await this.prisma.$transaction((tx) => this.finalizeInTx(tx, attemptId, source));
     if (done) {
-      const attempt = await this.prisma.attempt.findUniqueOrThrow({ where: { id: attemptId }, select: { sessionId: true } });
+      const attempt = await this.prisma.attempt.findUniqueOrThrow({
+        where: { id: attemptId },
+        select: { sessionId: true },
+      });
       await this.afterFinalize(attempt.sessionId);
     }
     return done;

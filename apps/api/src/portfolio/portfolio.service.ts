@@ -27,7 +27,17 @@ type Out<T extends z.ZodType> = z.output<T>;
 type ItemInput = Out<typeof portfolioItemSchema>;
 
 /** O‘zgarsa qayta tasdiqlash talab qilinadigan “muhim” maydonlar. */
-const KEY_FIELDS = ['type', 'title', 'subjectId', 'organization', 'date', 'level', 'result', 'evidenceFileId', 'evidenceUrl'] as const;
+const KEY_FIELDS = [
+  'type',
+  'title',
+  'subjectId',
+  'organization',
+  'date',
+  'level',
+  'result',
+  'evidenceFileId',
+  'evidenceUrl',
+] as const;
 
 const itemInclude = {
   owner: {
@@ -38,7 +48,11 @@ const itemInclude = {
       firstName: true,
       middleName: true,
       roles: { select: { role: true } },
-      enrollments: { where: { endsOn: null, academicYear: { isCurrent: true } }, select: { class: { select: { id: true, name: true } } }, take: 1 },
+      enrollments: {
+        where: { endsOn: null, academicYear: { isCurrent: true } },
+        select: { class: { select: { id: true, name: true } } },
+        take: 1,
+      },
     },
   },
   reviewer: { select: { id: true, lastName: true, firstName: true, middleName: true } },
@@ -76,6 +90,19 @@ export class PortfolioService {
     const homeroom = await this.access.homeroomClassIds(viewer.id);
     const classId = item.owner.enrollments[0]?.class.id;
     return Boolean(classId && homeroom.includes(classId));
+  }
+
+  /** `canReview` ning egaga bog‘liq qismi (yozuvdan qat’i nazar). */
+  private async canReviewOwner(viewer: AuthUser, ownerId: string, ownerIsStudent: boolean) {
+    if (ownerId === viewer.id) return false;
+    if (hasRole(viewer, 'DEPUTY', 'SUPER_ADMIN')) return true;
+    if (!ownerIsStudent || !hasRole(viewer, 'TEACHER')) return false;
+    const homeroom = await this.access.homeroomClassIds(viewer.id);
+    if (homeroom.length === 0) return false;
+    const enrollment = await this.prisma.enrollment.count({
+      where: { studentId: ownerId, endsOn: null, classId: { in: homeroom }, academicYear: { isCurrent: true } },
+    });
+    return enrollment > 0;
   }
 
   private async canView(viewer: AuthUser, item: ItemWithRelations) {
@@ -132,16 +159,25 @@ export class PortfolioService {
 
   async list(viewer: AuthUser, query: Out<typeof portfolioListQuerySchema>) {
     const ownerId = query.ownerId ?? viewer.id;
+    const base: Prisma.PortfolioItemWhereInput = { ownerId };
     if (ownerId !== viewer.id) {
       const owner = await this.prisma.user.findUnique({ where: { id: ownerId }, include: { roles: true } });
       if (!owner) throw notFound('Foydalanuvchi');
       const ownerIsStudent = owner.roles.some((role) => role.role === 'STUDENT');
       const allowed = ownerIsStudent ? await this.access.canViewStudent(viewer, ownerId) : isStaff(viewer);
       if (!allowed) throw notFound('Foydalanuvchi');
+      // Tekshiruvchi bo‘lmagan xodim faqat “maktab xodimlari” ko‘rinishidagi yozuvlarni ko‘radi —
+      // jami son va sahifalash ham shunga mos bo‘lishi uchun filtr so‘rovning o‘zida.
+      if (!(await this.canReviewOwner(viewer, ownerId, ownerIsStudent))) base.visibility = 'STAFF';
     }
-    const where = this.filters(query, { ownerId });
+    const where = this.filters(query, base);
     const [items, total] = await Promise.all([
-      this.prisma.portfolioItem.findMany({ where, include: itemInclude, orderBy: this.order(query), ...pageArgs(query) }),
+      this.prisma.portfolioItem.findMany({
+        where,
+        include: itemInclude,
+        orderBy: this.order(query),
+        ...pageArgs(query),
+      }),
       this.prisma.portfolioItem.count({ where }),
     ]);
     const visible = [];
@@ -174,7 +210,12 @@ export class PortfolioService {
     if (!hasRole(viewer, 'DEPUTY', 'SUPER_ADMIN')) throw forbidden();
     const where = this.filters(query, {});
     const [items, total] = await Promise.all([
-      this.prisma.portfolioItem.findMany({ where, include: itemInclude, orderBy: this.order(query), ...pageArgs(query) }),
+      this.prisma.portfolioItem.findMany({
+        where,
+        include: itemInclude,
+        orderBy: this.order(query),
+        ...pageArgs(query),
+      }),
       this.prisma.portfolioItem.count({ where }),
     ]);
     return toPage(await Promise.all(items.map((item) => this.view(viewer, item))), total, query);
@@ -187,7 +228,10 @@ export class PortfolioService {
     if (query.status) where.status = query.status;
     if (query.subjectId) where.subjectId = query.subjectId;
     if (query.from || query.to) {
-      where.date = { gte: query.from ? dateOnly(query.from) : undefined, lte: query.to ? dateOnly(query.to) : undefined };
+      where.date = {
+        gte: query.from ? dateOnly(query.from) : undefined,
+        lte: query.to ? dateOnly(query.to) : undefined,
+      };
     }
     if (query.q) where.searchText = { contains: normalizeForSearch(query.q) };
     return where;
@@ -251,7 +295,9 @@ export class PortfolioService {
       evidenceUrl: input.evidenceUrl ?? null,
       evidenceFileId: input.evidenceFileId ?? null,
       visibility: input.visibility,
-      searchText: normalizeForSearch([input.title, input.direction, input.organization, input.result].filter(Boolean).join(' ')),
+      searchText: normalizeForSearch(
+        [input.title, input.direction, input.organization, input.result].filter(Boolean).join(' '),
+      ),
     };
   }
 
@@ -268,12 +314,12 @@ export class PortfolioService {
     await this.validateInput(viewer, input);
     const next = this.data(input);
     const keyChanged = KEY_FIELDS.some((field) => {
-      const after = next[field] instanceof Date ? (next[field] as Date).toISOString().slice(0, 10) : (next[field] ?? null);
+      const after =
+        next[field] instanceof Date ? (next[field] as Date).toISOString().slice(0, 10) : (next[field] ?? null);
       return comparable(item, field) !== after;
     });
     // Tasdiqlangan yozuvning muhim maydoni o‘zgarsa — qayta tasdiqlash kerak; yuborilgan yozuv tahrirlansa — qoralamaga qaytadi.
-    const status =
-      item.status === 'SUBMITTED' || (item.status === 'APPROVED' && keyChanged) ? 'DRAFT' : item.status;
+    const status = item.status === 'SUBMITTED' || (item.status === 'APPROVED' && keyChanged) ? 'DRAFT' : item.status;
     await this.prisma.portfolioItem.update({
       where: { id },
       data: {
@@ -282,7 +328,11 @@ export class PortfolioService {
         ...(status === 'DRAFT' && item.status === 'APPROVED' ? { reviewerId: null, reviewedAt: null } : {}),
       },
     });
-    await this.audit.log('portfolio.update', { type: 'PortfolioItem', id }, { keyChanged, statusBefore: item.status, statusAfter: status });
+    await this.audit.log(
+      'portfolio.update',
+      { type: 'PortfolioItem', id },
+      { keyChanged, statusBefore: item.status, statusAfter: status },
+    );
     return this.get(viewer, id);
   }
 
@@ -290,7 +340,10 @@ export class PortfolioService {
     const item = await this.prisma.portfolioItem.findUnique({ where: { id } });
     if (!item || item.ownerId !== viewer.id) throw notFound('Portfolio yozuvi');
     if (item.status === 'APPROVED') {
-      throw conflict('APPROVED_ITEM', 'Tasdiqlangan yozuvni o‘chirib bo‘lmaydi. Kerak bo‘lsa, rahbariyatga murojaat qiling.');
+      throw conflict(
+        'APPROVED_ITEM',
+        'Tasdiqlangan yozuvni o‘chirib bo‘lmaydi. Kerak bo‘lsa, rahbariyatga murojaat qiling.',
+      );
     }
     await this.prisma.portfolioItem.delete({ where: { id } });
     await this.audit.log('portfolio.delete', { type: 'PortfolioItem', id }, { title: item.title });
@@ -325,7 +378,10 @@ export class PortfolioService {
     const ids = new Set<string>();
     const classId = item.owner.enrollments[0]?.class.id;
     if (classId && this.ownerRoles(item).includes('STUDENT')) {
-      const target = await this.prisma.class.findUnique({ where: { id: classId }, select: { homeroomTeacherId: true } });
+      const target = await this.prisma.class.findUnique({
+        where: { id: classId },
+        select: { homeroomTeacherId: true },
+      });
       if (target?.homeroomTeacherId) ids.add(target.homeroomTeacherId);
     }
     if (ids.size === 0) {
@@ -386,7 +442,12 @@ export class PortfolioService {
         },
         tx,
       );
-      await this.audit.log(approved ? 'portfolio.approved' : 'portfolio.returned', { type: 'PortfolioItem', id }, { reason: input.reason }, { tx });
+      await this.audit.log(
+        approved ? 'portfolio.approved' : 'portfolio.returned',
+        { type: 'PortfolioItem', id },
+        { reason: input.reason },
+        { tx },
+      );
     });
     return this.get(viewer, id);
   }
@@ -396,6 +457,7 @@ export class PortfolioService {
     const owner = await this.prisma.user.findUnique({
       where: { id: ownerId },
       include: {
+        roles: { select: { role: true } },
         enrollments: { where: { endsOn: null, academicYear: { isCurrent: true } }, include: { class: true } },
       },
     });
@@ -412,7 +474,13 @@ export class PortfolioService {
     await this.audit.log('portfolio.printed', { type: 'User', id: ownerId }, { count: visible.length });
     return {
       school: school?.name ?? 'Ijod maktabi',
-      owner: { id: owner.id, internalId: owner.internalId, fullName: fullName(owner), className: owner.enrollments[0]?.class.name ?? null },
+      owner: {
+        id: owner.id,
+        internalId: owner.internalId,
+        fullName: fullName(owner),
+        className: owner.enrollments[0]?.class.name ?? null,
+        roles: owner.roles.map((entry) => entry.role as Role),
+      },
       approved: visible.filter((item) => item.status === 'APPROVED'),
       unapproved: visible.filter((item) => item.status !== 'APPROVED'),
       generatedAt: new Date(),

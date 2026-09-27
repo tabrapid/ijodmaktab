@@ -44,8 +44,7 @@ export const id = () => z.uuid({ error: 'Noto‘g‘ri identifikator' });
 
 export const isoDate = () => z.iso.date({ error: 'Sana YYYY-MM-DD ko‘rinishida bo‘lishi kerak' });
 
-export const isoDateTime = () =>
-  z.iso.datetime({ offset: true, error: 'Sana va vaqt noto‘g‘ri kiritilgan' });
+export const isoDateTime = () => z.iso.datetime({ offset: true, error: 'Sana va vaqt noto‘g‘ri kiritilgan' });
 
 export const points = () =>
   z
@@ -54,14 +53,10 @@ export const points = () =>
     .max(MAX_QUESTION_POINTS, `Ball ${MAX_QUESTION_POINTS} dan oshmasligi kerak`)
     .refine(hasAtMostTwoDecimals, 'Ball ko‘pi bilan 2 xonali kasr bo‘lishi mumkin');
 
-export const percentValue = () =>
-  z.number().min(0, 'Foiz 0 dan kichik bo‘lmaydi').max(100, 'Foiz 100 dan oshmaydi');
+export const percentValue = () => z.number().min(0, 'Foiz 0 dan kichik bo‘lmaydi').max(100, 'Foiz 100 dan oshmaydi');
 
 /** Qurilmani (brauzer oynasini) aniqlovchi tasodifiy identifikator. */
-export const clientId = () =>
-  z
-    .string()
-    .regex(/^[A-Za-z0-9_-]{8,64}$/, 'Noto‘g‘ri qurilma identifikatori');
+export const clientId = () => z.string().regex(/^[A-Za-z0-9_-]{8,64}$/, 'Noto‘g‘ri qurilma identifikatori');
 
 const paging = {
   page: z.coerce.number().int().min(1).default(1),
@@ -73,7 +68,10 @@ export const csvList = <T extends z.ZodType>(item: T) =>
   z.preprocess(
     (value) =>
       typeof value === 'string'
-        ? value.split(',').map((part) => part.trim()).filter(Boolean)
+        ? value
+            .split(',')
+            .map((part) => part.trim())
+            .filter(Boolean)
         : value,
     z.array(item),
   );
@@ -130,7 +128,10 @@ export const loginValue = () =>
     .string()
     .trim()
     .toLowerCase()
-    .regex(/^[a-z0-9._-]{3,50}$/, 'Login 3–50 ta lotin harfi, raqam, nuqta, chiziqcha yoki pastki chiziqdan iborat bo‘lishi kerak');
+    .regex(
+      /^[a-z0-9._-]{3,50}$/,
+      'Login 3–50 ta lotin harfi, raqam, nuqta, chiziqcha yoki pastki chiziqdan iborat bo‘lishi kerak',
+    );
 
 export const createUserSchema = z
   .object({
@@ -163,11 +164,15 @@ export const setUserStatusSchema = z.object({
   reason: optionalText(300),
 });
 
+export const USER_LIST_FLAGS = ['locked', 'mustChangePassword', 'noClass'] as const;
+
 export const userListQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
   role: z.enum(ROLES).optional(),
   status: z.enum(USER_STATUSES).optional(),
   classId: id().optional(),
+  /** Administrator ogohlantirishlari: bloklangan, parolni almashtirmagan, joriy yilda sinfsiz o‘quvchi. */
+  flag: z.enum(USER_LIST_FLAGS).optional(),
   sort: z.enum(['name', 'internalId', 'lastActive', 'createdAt']).default('name'),
   order: z.enum(['asc', 'desc']).default('asc'),
   ...paging,
@@ -175,15 +180,7 @@ export const userListQuerySchema = z.object({
 export type UserListQuery = z.input<typeof userListQuerySchema>;
 
 /** Excel importida moslashtiriladigan maydonlar. */
-export const IMPORT_FIELDS = [
-  'fullName',
-  'lastName',
-  'firstName',
-  'middleName',
-  'role',
-  'className',
-  'login',
-] as const;
+export const IMPORT_FIELDS = ['fullName', 'lastName', 'firstName', 'middleName', 'role', 'className', 'login'] as const;
 export type ImportField = (typeof IMPORT_FIELDS)[number];
 
 export const IMPORT_FIELD_LABELS: Record<ImportField, string> = {
@@ -369,11 +366,7 @@ export type TestPassportInput = z.input<typeof testPassportSchema>;
 
 export const blueprintEntrySchema = z.object({
   count: z.number().int().min(0).max(200),
-  pointsEach: z
-    .number()
-    .min(0)
-    .max(MAX_QUESTION_POINTS)
-    .refine(hasAtMostTwoDecimals, 'Ko‘pi bilan 2 xonali kasr'),
+  pointsEach: z.number().min(0).max(MAX_QUESTION_POINTS).refine(hasAtMostTwoDecimals, 'Ko‘pi bilan 2 xonali kasr'),
 });
 
 export const blueprintSchema = z.object({
@@ -457,11 +450,15 @@ export const sessionSettingsShape = {
   retakeRule: optionalText(500),
 };
 
-const timingRefinements = <T extends z.ZodType<{
-  startsAt?: string;
-  endsAt?: string;
-  entryClosesAt?: string | null;
-}>>(schema: T) =>
+const timingRefinements = <
+  T extends z.ZodType<{
+    startsAt?: string;
+    endsAt?: string;
+    entryClosesAt?: string | null;
+  }>,
+>(
+  schema: T,
+) =>
   schema
     .refine((data) => !data.startsAt || !data.endsAt || data.endsAt > data.startsAt, {
       path: ['endsAt'],
@@ -489,9 +486,7 @@ export const createSessionSchema = timingRefinements(
         message: 'Kamida bitta sinf yoki o‘quvchini tanlang',
       }),
     /** O‘quvchi → maxsus qo‘shimcha vaqt (daqiqa). */
-    extraTime: z
-      .array(z.object({ studentId: id(), minutes: z.number().int().min(1).max(240) }))
-      .default([]),
+    extraTime: z.array(z.object({ studentId: id(), minutes: z.number().int().min(1).max(240) })).default([]),
     ...sessionTimingShape,
     ...sessionSettingsShape,
   }),
@@ -564,6 +559,12 @@ export const resultFiltersSchema = z.object({
   classIds: z.array(id()).optional(),
   minPercent: percentValue().optional(),
   maxPercent: percentValue().optional(),
+  /** Kategoriya foizi bo‘yicha filtr (masalan, mulohaza < 50%). */
+  category: z.enum(CATEGORIES).optional(),
+  categoryMinPercent: percentValue().optional(),
+  categoryMaxPercent: percentValue().optional(),
+  /** Faqat tanlangan qatorlar (jadvalda belgilangan o‘quvchilar). */
+  studentIds: z.array(id()).max(2000).optional(),
   q: z.string().trim().max(100).optional(),
 });
 export type ResultFilters = z.input<typeof resultFiltersSchema>;
@@ -631,6 +632,11 @@ export const advanceSchema = z.object({
 });
 
 // ---------------------------------------------------------------- Portfolio
+
+/** Maktab banki so‘rovini rad etish: sabab muallifga bildirishnomada yuboriladi. */
+export const schoolDecisionSchema = z.object({
+  reason: optionalText(500),
+});
 
 export const portfolioItemSchema = z.object({
   type: z.enum(PORTFOLIO_ITEM_TYPES, { error: 'Turini tanlang' }),

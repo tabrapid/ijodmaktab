@@ -1,11 +1,4 @@
-import {
-  Catch,
-  HttpException,
-  HttpStatus,
-  Logger,
-  type ArgumentsHost,
-  type ExceptionFilter,
-} from '@nestjs/common';
+import { Catch, HttpException, HttpStatus, Logger, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '../generated/prisma/client.js';

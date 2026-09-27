@@ -189,7 +189,15 @@ export class StructureService {
           where: { endsOn: null },
           include: {
             student: {
-              select: { id: true, internalId: true, lastName: true, firstName: true, middleName: true, status: true, lastActiveAt: true },
+              select: {
+                id: true,
+                internalId: true,
+                lastName: true,
+                firstName: true,
+                middleName: true,
+                status: true,
+                lastActiveAt: true,
+              },
             },
           },
         },
@@ -222,6 +230,7 @@ export class StructureService {
       gradeLevel: item.gradeLevel,
       section: item.section,
       academicYear: { id: item.academicYear.id, name: item.academicYear.name, isCurrent: item.academicYear.isCurrent },
+      archivedAt: item.archivedAt,
       homeroomTeacher: item.homeroomTeacher
         ? { id: item.homeroomTeacher.id, fullName: fullName(item.homeroomTeacher) }
         : null,
@@ -254,7 +263,11 @@ export class StructureService {
         homeroomTeacherId: input.homeroomTeacherId ?? null,
       },
     });
-    await this.audit.log('class.create', { type: 'Class', id: created.id }, { name, homeroomTeacherId: input.homeroomTeacherId ?? null });
+    await this.audit.log(
+      'class.create',
+      { type: 'Class', id: created.id },
+      { name, homeroomTeacherId: input.homeroomTeacherId ?? null },
+    );
     return created;
   }
 
@@ -271,10 +284,14 @@ export class StructureService {
         homeroomTeacherId: input.homeroomTeacherId === undefined ? current.homeroomTeacherId : input.homeroomTeacherId,
       },
     });
-    await this.audit.log('class.update', { type: 'Class', id }, {
-      before: { name: current.name, homeroomTeacherId: current.homeroomTeacherId },
-      after: { name: updated.name, homeroomTeacherId: updated.homeroomTeacherId },
-    });
+    await this.audit.log(
+      'class.update',
+      { type: 'Class', id },
+      {
+        before: { name: current.name, homeroomTeacherId: current.homeroomTeacherId },
+        after: { name: updated.name, homeroomTeacherId: updated.homeroomTeacherId },
+      },
+    );
     return updated;
   }
 
@@ -291,16 +308,17 @@ export class StructureService {
 
   async enrollStudents(classId: string, input: Out<typeof enrollStudentsSchema>) {
     const target = await this.prisma.class.findUnique({ where: { id: classId }, include: { academicYear: true } });
-    if (!target || target.archivedAt) throw notFound('Sinf');
+    if (!target) throw notFound('Sinf');
+    if (target.archivedAt) throw conflict('CLASS_ARCHIVED', 'Sinf arxivlangan — avval uni arxivdan chiqaring.');
 
     const students = await this.prisma.user.findMany({
-      where: { id: { in: input.studentIds }, roles: { some: { role: 'STUDENT' } } },
+      where: { id: { in: input.studentIds }, roles: { some: { role: 'STUDENT' } }, status: 'ACTIVE' },
       include: {
         enrollments: { where: { academicYearId: target.academicYearId, endsOn: null }, include: { class: true } },
       },
     });
     if (students.length !== new Set(input.studentIds).size) {
-      throw badRequest('NOT_STUDENTS', 'Ro‘yxatdagi ba’zi foydalanuvchilar o‘quvchi emas yoki topilmadi.');
+      throw badRequest('NOT_STUDENTS', 'Ro‘yxatdagi ba’zi foydalanuvchilar faol o‘quvchi emas yoki topilmadi.');
     }
     const alreadyEnrolled = students.filter((student) => student.enrollments.length > 0);
     if (alreadyEnrolled.length) {
@@ -331,8 +349,16 @@ export class StructureService {
    * sessiyaga tayinlangan paytdagi sinf bilan qoladi — tarix qayta yozilmaydi.
    */
   async transferStudent(studentId: string, input: Out<typeof transferStudentSchema>) {
+    const student = await this.prisma.user.findFirst({
+      where: { id: studentId, roles: { some: { role: 'STUDENT' } } },
+      select: { id: true, status: true },
+    });
+    if (!student) throw notFound('O‘quvchi');
+    if (student.status !== 'ACTIVE')
+      throw conflict('NOT_ACTIVE', 'Faol bo‘lmagan o‘quvchini boshqa sinfga ko‘chirib bo‘lmaydi.');
     const target = await this.prisma.class.findUnique({ where: { id: input.toClassId } });
-    if (!target || target.archivedAt) throw notFound('Sinf');
+    if (!target) throw notFound('Sinf');
+    if (target.archivedAt) throw conflict('CLASS_ARCHIVED', 'Sinf arxivlangan — avval uni arxivdan chiqaring.');
     const current = await this.prisma.enrollment.findFirst({
       where: { studentId, academicYearId: target.academicYearId, endsOn: null },
       include: { class: true },
@@ -368,10 +394,14 @@ export class StructureService {
       where: { id: enrollmentId },
       data: { endsOn: dateOnly(input.date), endReason: input.reason },
     });
-    await this.audit.log('enrollment.end', { type: 'User', id: enrollment.studentId }, {
-      classId: enrollment.classId,
-      reason: input.reason,
-    });
+    await this.audit.log(
+      'enrollment.end',
+      { type: 'User', id: enrollment.studentId },
+      {
+        classId: enrollment.classId,
+        reason: input.reason,
+      },
+    );
     return { ok: true };
   }
 
@@ -397,8 +427,14 @@ export class StructureService {
 
   async createTeachingAssignment(input: Out<typeof teachingAssignmentSchema>) {
     await this.assertTeacher(input.teacherId);
-    const target = await this.prisma.class.findUnique({ where: { id: input.classId } });
+    const target = await this.prisma.class.findUnique({
+      where: { id: input.classId },
+      include: { academicYear: true },
+    });
     if (!target) throw notFound('Sinf');
+    if (target.archivedAt) throw conflict('CLASS_ARCHIVED', 'Arxivlangan sinfga o‘qituvchi biriktirib bo‘lmaydi.');
+    if (!target.academicYear.isCurrent)
+      throw conflict('NOT_CURRENT_YEAR', 'Biriktirish faqat joriy o‘quv yili sinflariga qilinadi.');
     const created = await this.prisma.teachingAssignment.create({
       data: { ...input, academicYearId: target.academicYearId },
     });
@@ -410,11 +446,15 @@ export class StructureService {
     const existing = await this.prisma.teachingAssignment.findUnique({ where: { id } });
     if (!existing) throw notFound('Biriktiruv');
     await this.prisma.teachingAssignment.delete({ where: { id } });
-    await this.audit.log('teaching_assignment.delete', { type: 'TeachingAssignment', id }, {
-      teacherId: existing.teacherId,
-      subjectId: existing.subjectId,
-      classId: existing.classId,
-    });
+    await this.audit.log(
+      'teaching_assignment.delete',
+      { type: 'TeachingAssignment', id },
+      {
+        teacherId: existing.teacherId,
+        subjectId: existing.subjectId,
+        classId: existing.classId,
+      },
+    );
     return { ok: true };
   }
 }

@@ -79,11 +79,15 @@ export class ExportsService {
         params: { filters: input.filters } as Prisma.InputJsonValue,
       },
     });
-    await this.audit.log('export.requested', { type: 'ExportJob', id: job.id }, {
-      kind: input.kind,
-      sessionId: input.sessionId,
-      filters: input.filters,
-    });
+    await this.audit.log(
+      'export.requested',
+      { type: 'ExportJob', id: job.id },
+      {
+        kind: input.kind,
+        sessionId: input.sessionId,
+        filters: input.filters,
+      },
+    );
     setImmediate(() => void this.process(job.id));
     return this.view(job);
   }
@@ -112,10 +116,16 @@ export class ExportsService {
         const filters = (job.params as { filters?: Record<string, unknown> }).filters ?? {};
         const data = await this.results.build(session.id, filters, limit);
         const school = await this.prisma.school.findUnique({ where: { id: 1 } });
-        const meta = { schoolName: school?.name ?? 'Ijod maktabi', generatedBy: requester.fullName, generatedAt: new Date() };
+        const meta = {
+          schoolName: school?.name ?? 'Ijod maktabi',
+          generatedBy: requester.fullName,
+          generatedAt: new Date(),
+        };
         const format = FORMATS[job.kind];
         const buffer =
-          job.kind === 'SESSION_RESULTS_XLSX' ? await buildResultsWorkbook(data, meta) : await buildProtocolDocx(data, meta);
+          job.kind === 'SESSION_RESULTS_XLSX'
+            ? await buildResultsWorkbook(data, meta)
+            : await buildProtocolDocx(data, meta);
         const key = `${job.id}.${format.extension}`;
         await this.storage.write('exports', key, buffer);
         const date = new Date().toISOString().slice(0, 10);
@@ -143,7 +153,10 @@ export class ExportsService {
           data: {
             status: 'FAILED',
             finishedAt: new Date(),
-            error: error instanceof Error && 'getResponse' in error ? 'Ruxsat yo‘q yoki sessiya topilmadi.' : 'Faylni tayyorlashda xatolik yuz berdi.',
+            error:
+              error instanceof Error && 'getResponse' in error
+                ? 'Ruxsat yo‘q yoki sessiya topilmadi.'
+                : 'Faylni tayyorlashda xatolik yuz berdi.',
           },
         });
       }
@@ -183,12 +196,16 @@ export class ExportsService {
     }
     if (!(await this.storage.exists('exports', job.fileKey))) throw notFound('Fayl');
     await this.prisma.exportJob.update({ where: { id }, data: { downloadCount: { increment: 1 } } });
-    await this.audit.log('export.downloaded', { type: 'ExportJob', id }, {
-      kind: job.kind,
-      sessionId: job.sessionId,
-      params: job.params,
-      rowCount: job.rowCount,
-    });
+    await this.audit.log(
+      'export.downloaded',
+      { type: 'ExportJob', id },
+      {
+        kind: job.kind,
+        sessionId: job.sessionId,
+        params: job.params,
+        rowCount: job.rowCount,
+      },
+    );
     const format = FORMATS[job.kind];
     res.setHeader('Content-Type', format.mime);
     res.setHeader(

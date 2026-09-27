@@ -19,8 +19,7 @@ export interface AuthUser {
 export const hasRole = (user: Pick<AuthUser, 'roles'>, ...roles: Role[]) =>
   roles.some((role) => user.roles.includes(role));
 
-export const isStaff = (user: Pick<AuthUser, 'roles'>) =>
-  hasRole(user, 'TEACHER', 'DEPUTY', 'ADMIN', 'SUPER_ADMIN');
+export const isStaff = (user: Pick<AuthUser, 'roles'>) => hasRole(user, 'TEACHER', 'DEPUTY', 'ADMIN', 'SUPER_ADMIN');
 
 /** Rahbariyat (direktor o‘rinbosari) yoki super admin: butun maktab bo‘yicha pedagogik ko‘rinish. */
 export const isLeadership = (user: Pick<AuthUser, 'roles'>) => hasRole(user, 'DEPUTY', 'SUPER_ADMIN');

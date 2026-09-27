@@ -3,12 +3,7 @@ import { Reflector } from '@nestjs/core';
 import type { Role } from '@ijod/shared';
 import type { Request } from 'express';
 import type { AuthUser } from '../common/auth-user.js';
-import {
-  ALLOW_MFA_PENDING,
-  ALLOW_PASSWORD_CHANGE_PENDING,
-  IS_PUBLIC,
-  ROLES,
-} from '../common/decorators.js';
+import { ALLOW_MFA_PENDING, ALLOW_PASSWORD_CHANGE_PENDING, IS_PUBLIC, ROLES } from '../common/decorators.js';
 import { forbidden, unauthorized } from '../common/errors.js';
 import { requestContext } from '../common/request-context.js';
 import { AuthService } from './auth.service.js';

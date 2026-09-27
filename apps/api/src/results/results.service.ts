@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import {
   CATEGORIES,
   FINAL_ATTEMPT_STATUSES,
+  categoryEntries,
   computeClassMetrics,
   computeQuestionStats,
   fullName,
   normalizeForSearch,
   pairPercent,
+  ratio as ratioOf,
   reachesThreshold,
   selectCountedAttempt,
   type Category,
@@ -79,6 +81,127 @@ export class ResultsService {
     return this.build(sessionId, filters, limitToClasses);
   }
 
+  /**
+   * O‘quvchining natijalar tarixi (xodim uchun). Faqat ko‘rish huquqi bor sessiyalar kiradi:
+   * boshqaradigan sessiyalar va sinf rahbari uchun — o‘quvchi o‘z sinfida qatnashgan sessiyalar
+   * (ko‘chirilgan o‘quvchining eski sinfdagi natijalari yangi sinf rahbariga o‘tmaydi).
+   */
+  async studentResults(viewer: AuthUser, studentId: string) {
+    if (!(await this.access.canViewStudent(viewer, studentId))) throw notFound('O‘quvchi');
+    const student = await this.prisma.user.findUnique({
+      where: { id: studentId },
+      include: {
+        roles: { select: { role: true } },
+        enrollments: {
+          where: { endsOn: null, academicYear: { isCurrent: true } },
+          select: { class: { select: { id: true, name: true } } },
+          take: 1,
+        },
+      },
+    });
+    if (!student || !student.roles.some((entry) => entry.role === 'STUDENT')) throw notFound('O‘quvchi');
+    if (hasRole(viewer, 'SUPER_ADMIN')) {
+      await this.audit.log('results.student_view', { type: 'User', id: studentId });
+    }
+
+    const [assignments, homeroom] = await Promise.all([
+      this.prisma.sessionAssignment.findMany({
+        where: { studentId, removedAt: null, session: { cancelledAt: null } },
+        include: {
+          class: { select: { id: true, name: true } },
+          session: {
+            include: { subject: { select: { id: true, name: true } }, testVersion: { select: { title: true } } },
+          },
+          attempts: { orderBy: { attemptNo: 'asc' } },
+        },
+        orderBy: { session: { startsAt: 'desc' } },
+        take: 300,
+      }),
+      this.access.homeroomClassIds(viewer.id),
+    ]);
+    const now = new Date();
+    const results = assignments
+      .filter(
+        (assignment) =>
+          this.access.canManageSession(viewer, assignment.session) ||
+          (assignment.classId !== null && homeroom.includes(assignment.classId)),
+      )
+      .map((assignment) => {
+        const { session } = assignment;
+        const attempts = assignment.attempts.map((attempt) => ({
+          ...attempt,
+          total:
+            attempt.maxScore === null
+              ? null
+              : ({ earned: num(attempt.score) ?? 0, max: num(attempt.maxScore) ?? 0 } as ScorePair),
+        }));
+        const counted = selectCountedAttempt(attempts, session.attemptPolicy);
+        const isFinal = Boolean(counted && (FINAL_ATTEMPT_STATUSES as readonly string[]).includes(counted.status));
+        const total = isFinal ? counted!.total : null;
+        const threshold = num(session.categoryThresholdPercent) ?? 60;
+        const categoryScores = (isFinal ? counted!.categoryScores : null) as CategoryScores | null;
+        return {
+          sessionId: session.id,
+          title: session.title,
+          testTitle: session.testVersion.title,
+          subject: session.subject,
+          state: stateOf(session, now),
+          startsAt: session.startsAt,
+          endsAt: session.endsAt,
+          className: assignment.class?.name ?? null,
+          status: (counted ? counted.status : 'NOT_STARTED') as ParticipationStatus,
+          attemptsCount: attempts.length,
+          score: total?.earned ?? null,
+          maxScore: total?.max ?? null,
+          percent: total ? pairPercent(total) : null,
+          categories: Object.fromEntries(
+            categoryEntries(categoryScores).map(([category, pair]) => [
+              category,
+              { ...pair, percent: pairPercent(pair), reached: reachesThreshold(pair, threshold) },
+            ]),
+          ) as Partial<Record<Category, { earned: number; max: number; percent: number | null; reached: boolean }>>,
+          submittedAt: isFinal ? counted!.submittedAt : null,
+          canManage: this.access.canManageSession(viewer, session),
+        };
+      });
+
+    // Umumiy ko‘rsatkichlar yakunlangan (yopilgan) sessiyalar bo‘yicha: Σ olingan / Σ maksimal.
+    const closed = results.filter((item) => item.state === 'CLOSED');
+    const graded = results.filter((item) => item.score !== null && item.maxScore !== null);
+    const sum = (values: number[]) => values.reduce((total, value) => total + Math.round(value * 100), 0) / 100;
+    const categoryTotals = CATEGORIES.map((category) => {
+      const pairs = graded.map((item) => item.categories[category]).filter((pair) => pair !== undefined);
+      return {
+        category,
+        ...ratioOf(sum(pairs.map((pair) => pair.earned)), sum(pairs.map((pair) => pair.max))),
+        count: pairs.length,
+      };
+    }).filter((item) => item.count > 0);
+
+    return {
+      student: {
+        id: student.id,
+        internalId: student.internalId,
+        fullName: fullName(student),
+        className: student.enrollments[0]?.class.name ?? null,
+        classId: student.enrollments[0]?.class.id ?? null,
+        status: student.status,
+        lastActiveAt: student.lastActiveAt,
+      },
+      summary: {
+        participation: ratioOf(closed.filter((item) => item.score !== null).length, closed.length),
+        mastery: ratioOf(sum(graded.map((item) => item.score!)), sum(graded.map((item) => item.maxScore!))),
+        categories: categoryTotals.map(({ category, numerator, denominator, percent }) => ({
+          category,
+          numerator,
+          denominator,
+          percent,
+        })),
+      },
+      results,
+    };
+  }
+
   /** Sinf rahbari (sessiyani boshqarmaydigan) faqat o‘z sinfi natijalarini ko‘radi. */
   async viewerClassLimit(viewer: Viewer, session: { id: string; createdById: string; conductorId: string }) {
     if (this.access.canManageSession(viewer, session)) return null;
@@ -128,7 +251,7 @@ export class ResultsService {
         testQuestionId: item.id,
         number: index + 1,
         category: item.questionVersion.category as Category,
-        points: override?.mode === 'EXCLUDE' ? 0 : num(item.points) ?? 0,
+        points: override?.mode === 'EXCLUDE' ? 0 : (num(item.points) ?? 0),
         originalPoints: num(item.points) ?? 0,
         stem: item.questionVersion.stem,
         options: optionsOf(item.questionVersion).map((option, optionIndex) => ({
@@ -150,14 +273,22 @@ export class ResultsService {
       };
     }).filter((item) => item.count > 0);
 
-    const matrix: Record<string, Record<string, { outcome: QuestionOutcome; earned: number; selectedOptionId: string | null }>> = {};
-    const responsesByStudent = new Map<string, { questionId: string; outcome: QuestionOutcome; selectedOptionId: string | null }[]>();
+    const matrix: Record<
+      string,
+      Record<string, { outcome: QuestionOutcome; earned: number; selectedOptionId: string | null }>
+    > = {};
+    const responsesByStudent = new Map<
+      string,
+      { questionId: string; outcome: QuestionOutcome; selectedOptionId: string | null }[]
+    >();
 
     let rows: ResultRow[] = assignments.map((assignment) => {
       const attempts = assignment.attempts.map((attempt) => ({
         ...attempt,
         total:
-          attempt.maxScore === null ? null : ({ earned: num(attempt.score) ?? 0, max: num(attempt.maxScore) ?? 0 } as ScorePair),
+          attempt.maxScore === null
+            ? null
+            : ({ earned: num(attempt.score) ?? 0, max: num(attempt.maxScore) ?? 0 } as ScorePair),
       }));
       const counted = selectCountedAttempt(attempts, session.attemptPolicy);
       const status: ParticipationStatus = counted ? (counted.status as ParticipationStatus) : 'NOT_STARTED';
@@ -206,7 +337,7 @@ export class ResultsService {
         maxScore: total?.max ?? null,
         percent: total ? pairPercent(total) : null,
         categories: Object.fromEntries(
-          Object.entries(categoryScores ?? {}).map(([category, pair]) => [
+          categoryEntries(categoryScores).map(([category, pair]) => [
             category,
             { ...pair, percent: pairPercent(pair), reached: reachesThreshold(pair, threshold) },
           ]),
@@ -215,12 +346,19 @@ export class ResultsService {
         startedAt,
         submittedAt,
         durationSeconds:
-          startedAt && submittedAt ? Math.max(0, Math.round((submittedAt.getTime() - startedAt.getTime()) / 1000)) : null,
+          startedAt && submittedAt
+            ? Math.max(0, Math.round((submittedAt.getTime() - startedAt.getTime()) / 1000))
+            : null,
         submitSource: counted?.submitSource ?? null,
       };
     });
 
-    rows.sort((a, b) => (a.className ?? '').localeCompare(b.className ?? '', 'uz') || a.fullName.localeCompare(b.fullName, 'uz') || a.internalId - b.internalId);
+    rows.sort(
+      (a, b) =>
+        (a.className ?? '').localeCompare(b.className ?? '', 'uz') ||
+        a.fullName.localeCompare(b.fullName, 'uz') ||
+        a.internalId - b.internalId,
+    );
     rows = applyFilters(rows, filters);
 
     const metricInput = (subset: ResultRow[]) =>
@@ -228,7 +366,10 @@ export class ResultsService {
         status: row.status,
         total: row.score !== null && row.maxScore !== null ? { earned: row.score, max: row.maxScore } : null,
         categories: Object.fromEntries(
-          Object.entries(row.categories).map(([category, value]) => [category, { earned: value.earned, max: value.max }]),
+          Object.entries(row.categories).map(([category, value]) => [
+            category,
+            { earned: value.earned, max: value.max },
+          ]),
         ) as CategoryScores,
       }));
     const metrics = computeClassMetrics(metricInput(rows), { thresholdPercent: threshold, passPercent });
@@ -296,6 +437,14 @@ export function applyFilters(rows: ResultRow[], filters: ResultFilters): ResultR
     if (filters.classIds?.length && (!row.classId || !filters.classIds.includes(row.classId))) return false;
     if (filters.minPercent !== undefined && (row.percent === null || row.percent < filters.minPercent)) return false;
     if (filters.maxPercent !== undefined && (row.percent === null || row.percent > filters.maxPercent)) return false;
+    if (filters.studentIds?.length && !filters.studentIds.includes(row.studentId)) return false;
+    if (filters.category && (filters.categoryMinPercent !== undefined || filters.categoryMaxPercent !== undefined)) {
+      // Kategoriya foizi faqat yakuniy bahosi bor ishlarda mavjud; boshqalar bu filtrga tushmaydi.
+      const value = row.score === null ? null : (row.categories[filters.category]?.percent ?? null);
+      if (value === null) return false;
+      if (filters.categoryMinPercent !== undefined && value < filters.categoryMinPercent) return false;
+      if (filters.categoryMaxPercent !== undefined && value > filters.categoryMaxPercent) return false;
+    }
     if (q && !normalizeForSearch(`${row.fullName} ${row.internalId}`).includes(q)) return false;
     return true;
   });
