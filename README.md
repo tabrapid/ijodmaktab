@@ -37,22 +37,76 @@ docs            Reja, joylashtirish va zaxira qo‘llanmalari
 
 ## Mahalliy ishga tushirish
 
-Talablar: Node.js ≥ 22.12, pnpm 10 (`corepack enable`), Docker (yoki o‘rnatilgan PostgreSQL 16).
+Kerak bo‘ladi:
+
+- **Node.js 22 LTS** (≥ 22.12) — https://nodejs.org
+- **pnpm 10** — `corepack enable` (Windows’da administrator sifatida) yoki `npm install -g pnpm@10`
+- **Git**
+- **PostgreSQL 16** — eng osoni **Docker Desktop** orqali (quyida). Docker bo‘lmasa, PostgreSQL 16 ni
+  o‘rnating va “Dockersiz” bo‘limidagi SQL ni bajaring.
+
+Buyruqlar macOS/Linux terminalida ham, Windows PowerShell’da ham bir xil ishlaydi:
 
 ```bash
-pnpm install
-docker compose up -d                       # PostgreSQL + test uchun ijod_test bazasi
+git clone -b claude/confident-sagan-g9fdfs https://github.com/tabrapid/ijodmaktab.git
+cd ijodmaktab
+pnpm install                               # Prisma klienti ham avtomatik yaratiladi
+
+docker compose up -d                       # PostgreSQL 16 + test uchun ijod_test bazasi
 
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
-# apps/api/.env dagi APP_ENCRYPTION_KEY ni almashtiring:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+# ↑ chiqqan qiymatni apps/api/.env dagi APP_ENCRYPTION_KEY="..." ga qo‘ying
 
 pnpm --filter @ijod/shared build
-pnpm db:deploy                             # migratsiyalar
+pnpm db:deploy                             # jadvallar (migratsiyalar)
 pnpm db:seed                               # demo maktab (faqat mahalliy!)
 pnpm dev                                   # veb: http://localhost:3000, API: http://localhost:4000/api
 ```
+
+`pnpm dev` ishga tushgach brauzerda **http://localhost:3000** ni oching. To‘xtatish — terminalda `Ctrl+C`,
+bazani to‘xtatish — `docker compose down`.
+
+### Dockersiz (o‘rnatilgan PostgreSQL 16)
+
+`psql` yoki pgAdmin’da superuser sifatida:
+
+```sql
+CREATE USER ijod WITH PASSWORD 'ijod' CREATEDB;
+CREATE DATABASE ijod OWNER ijod;
+CREATE DATABASE ijod_test OWNER ijod;
+```
+
+So‘ng yuqoridagi qadamlarni `docker compose up -d` siz davom ettiring.
+
+### Tez-tez uchraydigan muammolar
+
+| Belgi | Yechim |
+|---|---|
+| `port 5432 is already allocated` | Kompyuterda boshqa PostgreSQL ishlayapti: uni to‘xtating yoki `docker-compose.yml` da `'5433:5432'` qiling va `apps/api/.env` dagi manzilni `localhost:5433` ga o‘zgartiring |
+| `APP_ENCRYPTION_KEY 32 baytlik base64 qiymat bo‘lishi kerak` | Kalitni yuqoridagi `node -e ...` buyrug‘i bilan yarating |
+| `Cannot find module .../generated/prisma/client.js` | `pnpm --filter @ijod/api db:generate` |
+| 3000 yoki 4000 port band | Band qilgan dasturni yoping. Aks holda: veb porti — `apps/web/package.json` (`--port`) va `apps/api/.env` dagi `WEB_ORIGIN`; API porti — `apps/api/.env` dagi `PORT` va `apps/web/.env` dagi `API_URL` |
+| Kirishda “So‘rov ruxsat etilmagan manbadan yuborilgan” xatosi | Brauzerdagi manzil `apps/api/.env` dagi `WEB_ORIGIN` bilan bir xil bo‘lsin (`http://localhost:3000`, `127.0.0.1` emas) |
+| Demo ma’lumotlarni boshidan tiklash | `pnpm db:reset` (mahalliy bazani tozalab, qayta to‘ldiradi) |
+
+### Sinab ko‘rish ssenariysi
+
+Ikki xil rolni bir vaqtda sinash uchun ikkinchi foydalanuvchini **boshqa brauzerda yoki inkognito oynada**
+oching (bir brauzerda faqat bitta kirish sessiyasi saqlanadi).
+
+1. **O‘qituvchi** `d.karimova` → *Sessiyalar* → “Algebra … 9-A” (ochiq) → *Jonli kuzatuv*.
+2. **O‘quvchi** `ali.aliyev` (inkognito) → *Kodni kiritish*: **KV2026** → qoidalarga rozilik → *Testni boshlash*.
+   Javob belgilang — o‘qituvchi ekranida javoblar soni yangilanadi. Internetni vaqtincha o‘chirib ko‘ring:
+   javoblar navbatda saqlanadi va aloqa tiklanganda yuboriladi.
+3. O‘quvchi *Topshirish* → natija va kategoriyalar ko‘rinadi.
+4. O‘qituvchi → *Natijalar* → filtrlar, taqsimot grafigi (*Jadval* tugmasi), *Excel* / *Word hisobot*;
+   *Savollar tahlili* → *Qayta baholash*; yopilgan “9-B” sessiyasida to‘liq natijalar bor.
+5. O‘qituvchi → *Testlar* → *Yangi test* — 10 bosqichli usta orqali o‘z testingizni yarating va sessiya belgilang.
+6. **Rahbariyat** `b.yusupov` → ko‘rsatkichlar paneli; **administrator** `admin` → foydalanuvchilar, Excel import.
+7. **Super admin** `superadmin` → http://localhost:3000/system/login (telefonda Google Authenticator yoki shunga
+   o‘xshash TOTP ilova kerak — birinchi kirishda QR kod skanerlanadi).
 
 ### Demo hisoblar
 
