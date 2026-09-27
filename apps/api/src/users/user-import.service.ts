@@ -86,7 +86,7 @@ const ROLE_ALIASES: Record<string, Role> = {
 /** “9a”, “9 A”, “9-«А»” → “9-A”. */
 export function normalizeClassName(value: string): string | null {
   const clean = transliterate(value).toUpperCase().replace(/["«»“”'‘’]/g, '').trim();
-  const match = /^(\d{1,2})\s*[-–—_/ ]?\s*([A-Z]{1,3}|\d{1,2})$/.exec(clean);
+  const match = /^(\d{1,2})\s*[-–—_/ ]?\s*([A-Z0-9]{1,10})$/.exec(clean);
   return match ? `${Number(match[1])}-${match[2]}` : null;
 }
 

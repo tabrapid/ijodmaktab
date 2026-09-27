@@ -30,7 +30,7 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { PrismaService, type Tx } from '../prisma/prisma.service.js';
 import { optionsOf } from '../questions/question-content.js';
 import { TestsService } from '../tests/tests.service.js';
-import { randomAccessCode, stateOf } from './session-rules.js';
+import { randomAccessCode, scoresReleased, stateOf } from './session-rules.js';
 
 type Out<T extends z.ZodType> = z.output<T>;
 
@@ -844,7 +844,8 @@ export class SessionsService {
       { timeout: 60_000 },
     );
 
-    if (session.resultsPublishedAt && affectedStudents.length) {
+    // Natijasini ko‘ra oladigan o‘quvchilarga qayta hisoblash haqida xabar beriladi.
+    if (scoresReleased(session) && affectedStudents.length) {
       await this.notifications.notify(affectedStudents, {
         type: 'GRADES_REVISED',
         title: `Natijangiz qayta hisoblandi: ${session.title}`,

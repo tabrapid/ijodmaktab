@@ -6,6 +6,7 @@ export default defineConfig({
     root: './',
     include: ['test/**/*.e2e-spec.ts'],
     globalSetup: ['./test/global-setup.ts'],
+    setupFiles: ['./test/setup-env.ts'],
     // Barcha fayllar bitta test bazasidan foydalanadi.
     fileParallelism: false,
     testTimeout: 30_000,
