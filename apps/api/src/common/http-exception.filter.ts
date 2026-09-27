@@ -6,7 +6,7 @@ import {
   type ArgumentsHost,
   type ExceptionFilter,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '../generated/prisma/client.js';
 import type { ErrorBody } from './errors.js';
@@ -26,6 +26,17 @@ const GENERIC_MESSAGES: Record<number, { code: string; message: string }> = {
   },
 };
 
+interface ServerErrorRecord {
+  at: string;
+  method: string;
+  path: string;
+  message: string;
+}
+
+/** So‘nggi server xatoliklari (xotirada, super admin paneli uchun). */
+const recentErrors: ServerErrorRecord[] = [];
+export const recentServerErrors = () => [...recentErrors].reverse();
+
 /**
  * Barcha xatoliklarni yagona ko‘rinishga keltiradi: { statusCode, code, message, details }.
  * Ichki tafsilotlar (SQL, stack) foydalanuvchiga ko‘rsatilmaydi, faqat jurnalga yoziladi.
@@ -36,9 +47,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost) {
     const response = host.switchToHttp().getResponse<Response>();
+    const request = host.switchToHttp().getRequest<Request>();
     const body = this.toBody(exception);
     if (body.statusCode >= 500) {
       this.logger.error(exception instanceof Error ? exception.stack : String(exception));
+      recentErrors.push({
+        at: new Date().toISOString(),
+        method: request.method,
+        path: request.originalUrl?.split('?')[0] ?? '',
+        message: exception instanceof Error ? exception.message.slice(0, 300) : String(exception).slice(0, 300),
+      });
+      if (recentErrors.length > 50) recentErrors.shift();
     }
     if (!response.headersSent) response.status(body.statusCode).json(body);
   }

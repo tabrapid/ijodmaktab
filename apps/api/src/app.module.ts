@@ -10,8 +10,10 @@ import { AuthModule } from './auth/auth.module.js';
 import { StorageModule } from './common/storage.module.js';
 import { UserThrottlerGuard } from './common/throttler.guard.js';
 import { ConfigModule } from './config/config.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
 import { HealthController } from './health/health.controller.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { PortfolioModule } from './portfolio/portfolio.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { QuestionsModule } from './questions/questions.module.js';
 import { StructureModule } from './structure/structure.module.js';
@@ -34,6 +36,8 @@ import { UsersModule } from './users/users.module.js';
     QuestionsModule,
     TestsModule,
     AssessmentModule,
+    PortfolioModule,
+    DashboardModule,
   ],
   controllers: [HealthController],
   providers: [
