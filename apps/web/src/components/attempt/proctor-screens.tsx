@@ -35,16 +35,14 @@ function Panel({
   icon,
   titleId,
   children,
-  role,
 }: {
   tone: 'brand' | 'red' | 'emerald';
   icon: ReactNode;
   titleId: string;
   children: ReactNode;
-  role?: 'alert';
 }) {
   return (
-    <section className="mx-auto max-w-2xl px-4 py-6 sm:py-10" aria-labelledby={titleId} role={role}>
+    <section className="mx-auto max-w-2xl px-4 py-6 sm:py-10" aria-labelledby={titleId}>
       <div
         className={cn(
           'rounded-2xl border bg-surface p-5 shadow-sm sm:p-8',
@@ -92,7 +90,7 @@ export function FullscreenGate({ onStart, failed }: { onStart: () => void; faile
       <ul className="mt-5 space-y-3 text-sm text-slate-700">
         <Rule icon={<MonitorX className="size-4" />}>
           To‘liq ekrandan chiqsangiz (Esc yoki F11 tugmasi), boshqa oyna, tab yoki ilovaga o‘tsangiz, sahifani
-          yangilasangiz yoki yopsangiz — test <strong>avtomatik to‘xtatiladi</strong>.
+          yangilasangiz, yopsangiz yoki qurilma ekranini o‘chirsangiz — test <strong>avtomatik to‘xtatiladi</strong>.
         </Rule>
         <Rule icon={<ShieldCheck className="size-4" />}>
           To‘xtatilgan test faqat o‘qituvchi ruxsati bilan davom etadi.
@@ -139,7 +137,7 @@ export function LockedScreen({
     heading.current?.focus();
   }, []);
   return (
-    <Panel tone="red" icon={<ShieldAlert className="size-6" />} titleId="locked-title" role="alert">
+    <Panel tone="red" icon={<ShieldAlert className="size-6" />} titleId="locked-title">
       <h1
         id="locked-title"
         ref={heading}
@@ -148,7 +146,10 @@ export function LockedScreen({
       >
         Test to‘xtatildi
       </h1>
-      <p className="mt-2 text-base leading-relaxed text-slate-800">{LOCK_MESSAGE[reason]}</p>
+      {/* Faqat xabar e’lon qilinadi: har soniyada o‘zgaruvchi qolgan vaqt jonli hududga kirmaydi. */}
+      <p className="mt-2 text-base leading-relaxed text-slate-800" role="alert">
+        {LOCK_MESSAGE[reason]}
+      </p>
       <dl className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-3">
         <div>
           <dt className="text-xs text-slate-500">Sabab</dt>

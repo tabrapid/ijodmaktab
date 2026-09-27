@@ -4,6 +4,7 @@ import {
   portfolioEvidenceExportQuerySchema,
   portfolioExportSchema,
   portfolioItemSchema,
+  portfolioItemUpdateSchema,
   portfolioListQuerySchema,
   portfolioReviewQueueQuerySchema,
   portfolioReviewSchema,
@@ -135,11 +136,12 @@ export class PortfolioController {
     return this.portfolio.create(user, body);
   }
 
+  /** Avvalgi shakldagi (details’siz) olimpiada yozuvi details’siz ham tahrirlanadi — tekshiruv serviceda. */
   @Put(':id')
   update(
     @CurrentUser() user: AuthUser,
     @Param('id', Uuid) id: string,
-    @Body(zod(portfolioItemSchema)) body: Out<typeof portfolioItemSchema>,
+    @Body(zod(portfolioItemUpdateSchema)) body: Out<typeof portfolioItemUpdateSchema>,
   ) {
     return this.portfolio.update(user, id, body);
   }

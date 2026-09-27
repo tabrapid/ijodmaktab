@@ -141,8 +141,9 @@ export function Menu({
   );
 }
 
+// Fokus halqasi globals.css dagi umumiy `:focus-visible` qoidasidan keladi (bu yerda faqat ichkariga suriladi).
 const itemClass =
-  'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-slate-700 transition-colors outline-none hover:bg-slate-100 hover:text-slate-900 focus-visible:bg-slate-100 focus-visible:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-0';
+  'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:bg-slate-100 focus-visible:text-slate-900 focus-visible:-outline-offset-2';
 
 export function MenuItem({
   icon: Icon,

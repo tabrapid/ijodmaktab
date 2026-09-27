@@ -29,7 +29,16 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { ROLE_LABELS, type Role } from '@ijod/shared';
 import { api } from '@/lib/api';
 import { hasRole, homeFor, useMe } from '@/lib/auth';
@@ -61,6 +70,11 @@ export function navFor(me: Pick<Me, 'roles' | 'homeroomClassIds'>): NavSection[]
   const sections: NavSection[] = [];
   const homeroom = me.homeroomClassIds.length > 0;
   const teacher = hasRole(me, 'TEACHER');
+  const leader = hasRole(me, 'DEPUTY', 'SUPER_ADMIN');
+  const reviewer = teacher && homeroom && !hasRole(me, 'DEPUTY');
+  // Boshqa o‘quvchining portfoliosi “Portfoliom” emas: rahbarda — “Portfoliolar”, sinf rahbarida —
+  // “Portfolio tasdiqlash”, boshqa o‘qituvchida — “Sinflarim” bandi ostida.
+  const studentPortfolios = ['/portfolio/students'];
 
   if (hasRole(me, 'STUDENT')) {
     sections.push({
@@ -78,12 +92,17 @@ export function navFor(me: Pick<Me, 'roles' | 'homeroomClassIds'>): NavSection[]
       items: [{ href: '/system', label: 'Tizim holati', icon: ShieldCheck }],
     });
   }
-  if (hasRole(me, 'DEPUTY', 'SUPER_ADMIN')) {
+  if (leader) {
     sections.push({
       title: 'Rahbariyat',
       items: [
         { href: '/management', label: 'Ko‘rsatkichlar', icon: BarChart3 },
-        { href: '/management/portfolio', label: 'Portfoliolar', icon: Trophy, match: ['/portfolio/students'] },
+        {
+          href: '/management/portfolio',
+          label: 'Portfoliolar',
+          icon: Trophy,
+          match: [...studentPortfolios, '/portfolio/review'],
+        },
         // O‘qituvchi bo‘lmagan rahbar sessiyani o‘qituvchi sahifalari orqali yaratadi.
         {
           href: '/management/sessions',
@@ -112,9 +131,21 @@ export function navFor(me: Pick<Me, 'roles' | 'homeroomClassIds'>): NavSection[]
         { href: '/teacher/tests', label: 'Testlar va bank', icon: FileText },
         { href: '/teacher/questions', label: 'Savollar banki', icon: Library },
         { href: '/teacher/sessions', label: 'Sessiyalar', icon: CalendarClock },
-        { href: '/teacher/classes', label: 'Sinflarim', icon: Users },
-        ...(homeroom && !hasRole(me, 'DEPUTY')
-          ? [{ href: '/portfolio/review', label: 'Portfolio tasdiqlash', icon: BadgeCheck }]
+        {
+          href: '/teacher/classes',
+          label: 'Sinflarim',
+          icon: Users,
+          match: ['/teacher/students', ...(leader || reviewer ? [] : studentPortfolios)],
+        },
+        ...(reviewer
+          ? [
+              {
+                href: '/portfolio/review',
+                label: 'Portfolio tasdiqlash',
+                icon: BadgeCheck,
+                match: leader ? undefined : studentPortfolios,
+              },
+            ]
           : []),
         { href: '/portfolio', label: 'Portfoliom', icon: FolderHeart },
         { href: '/exports', label: 'Eksportlar', icon: Download },
@@ -145,10 +176,13 @@ export function navFor(me: Pick<Me, 'roles' | 'homeroomClassIds'>): NavSection[]
     .filter((section) => section.items.length > 0);
 }
 
-function matchLength(pathname: string, item: NavItem) {
+/** Moslik bahosi: uzunroq boshlanish yutadi, teng bo‘lsa — bandning o‘z manzili qo‘shimcha `match` dan ustun. */
+function matchScore(pathname: string, item: NavItem) {
   let best = -1;
   for (const prefix of [item.href, ...(item.match ?? [])]) {
-    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) best = Math.max(best, prefix.length);
+    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
+      best = Math.max(best, prefix.length * 2 + (prefix === item.href ? 1 : 0));
+    }
   }
   return best;
 }
@@ -158,13 +192,29 @@ export function activeNavItem(pathname: string, items: NavItem[]): NavItem | und
   let active: NavItem | undefined;
   let best = -1;
   for (const item of items) {
-    const length = matchLength(pathname, item);
-    if (length > best) {
-      best = length;
+    const score = matchScore(pathname, item);
+    if (score > best) {
+      best = score;
       active = item;
     }
   }
   return active;
+}
+
+const NavOverrideContext = createContext<((href: string | null) => void) | null>(null);
+
+/**
+ * Manzildan aniqlab bo‘lmaydigan sahifa menyudagi faol bandni o‘zi ko‘rsatadi. Masalan, `/portfolio/<id>`
+ * boshqa o‘quvchining yutug‘i bo‘lsa — `useActiveNav('/management/portfolio')`. `null` — odatdagi qoida.
+ * Menyuda shu manzilli band bo‘lmasa, e’tiborsiz qoladi.
+ */
+export function useActiveNav(href: string | null | undefined) {
+  const setOverride = useContext(NavOverrideContext);
+  useEffect(() => {
+    if (!setOverride || !href) return;
+    setOverride(href);
+    return () => setOverride(null);
+  }, [setOverride, href]);
 }
 
 /** Menyuda yo‘q umumiy sahifalar nomi (sarlavhadagi joylashuv uchun). */
@@ -173,11 +223,7 @@ const PAGE_TITLES: [string, string][] = [
   ['/notifications', 'Bildirishnomalar'],
 ];
 
-function pageContext(pathname: string, sections: NavSection[]) {
-  const active = activeNavItem(
-    pathname,
-    sections.flatMap((section) => section.items),
-  );
+function pageContext(pathname: string, sections: NavSection[], active: NavItem | undefined) {
   if (active) {
     const section = sections.find((candidate) => candidate.items.includes(active));
     return { section: section?.title, label: active.label };
@@ -226,7 +272,7 @@ function AvatarWithBadge({ me }: { me: Me }) {
   );
 }
 
-function UserMenu({ me, onLogout, loggingOut }: { me: Me; onLogout: () => void; loggingOut: boolean }) {
+function UserMenu({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const [avatarOpen, setAvatarOpen] = useState(false);
   return (
     <>
@@ -263,7 +309,7 @@ function UserMenu({ me, onLogout, loggingOut }: { me: Me; onLogout: () => void; 
         <ThemeToggle variant="menu" />
         <MenuSeparator />
         <MenuItem icon={LogOut} tone="danger" onSelect={onLogout}>
-          {loggingOut ? 'Chiqilmoqda…' : 'Chiqish'}
+          Chiqish
         </MenuItem>
       </Menu>
       <AvatarUploadDialog open={avatarOpen} onClose={() => setAvatarOpen(false)} />
@@ -271,13 +317,15 @@ function UserMenu({ me, onLogout, loggingOut }: { me: Me; onLogout: () => void; 
   );
 }
 
-function Sidebar({ me, onNavigate, onClose }: { me: Me; onNavigate?: () => void; onClose?: () => void }) {
-  const pathname = usePathname();
-  const sections = navFor(me);
-  const active = activeNavItem(
-    pathname,
-    sections.flatMap((section) => section.items),
-  );
+interface SidebarProps {
+  me: Me;
+  sections: NavSection[];
+  active: NavItem | undefined;
+  onNavigate?: () => void;
+  onClose?: () => void;
+}
+
+function Sidebar({ me, sections, active, onNavigate, onClose }: SidebarProps) {
   return (
     <div className="relative isolate flex h-full flex-col overflow-hidden bg-ink-900 text-ink-100 [--focus-ring:var(--color-accent-400)]">
       {/* Bezak: logotip ortidan taralayotgan nurlar */}
@@ -382,24 +430,65 @@ function Sidebar({ me, onNavigate, onClose }: { me: Me; onNavigate?: () => void;
   );
 }
 
-/** Telefon uchun yon menyu: Esc bilan yopiladi, ochilganda fokus ichkariga o‘tadi. */
-function MobileDrawer({ me, onClose }: { me: Me; onClose: () => void }) {
+/** Doimiy yon menyu ko‘rinadigan kenglik (Tailwind `lg`). */
+const DESKTOP_QUERY = '(min-width: 64rem)';
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Tab / Shift+Tab panel ichida aylanadi (oxiridan boshiga va aksincha). */
+function keepTabInside(event: KeyboardEvent, panel: HTMLElement) {
+  const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (!first || !last) return;
+  const current = document.activeElement;
+  const outside = !panel.contains(current);
+  if (event.shiftKey && (outside || current === first)) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (outside || current === last)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+/**
+ * Telefon uchun yon menyu: fokus joriy bandga o‘tadi va panel ichida aylanadi, Esc bilan yopiladi.
+ * Ekran `lg` kengligiga yetsa (planshetni burish), o‘zi yopiladi — sahifa aylantirish qulfda qolmaydi.
+ */
+function MobileDrawer({
+  onClose,
+  returnFocus,
+  ...sidebar
+}: Omit<SidebarProps, 'onNavigate' | 'onClose'> & {
+  onClose: () => void;
+  /** Yopilganda fokus qaytadigan tugma (ochiq paytda sarlavha `inert`, shuning uchun oldindan olinadi). */
+  returnFocus: RefObject<HTMLElement | null>;
+}) {
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    panelRef.current?.querySelector<HTMLElement>('a[aria-current="page"], a')?.focus();
+    const panel = panelRef.current;
+    (panel?.querySelector<HTMLElement>('a[aria-current="page"]') ?? panel?.querySelector<HTMLElement>('a'))?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
+      else if (event.key === 'Tab' && panel) keepTabInside(event, panel);
     };
     document.addEventListener('keydown', onKeyDown);
+    const desktop = window.matchMedia(DESKTOP_QUERY);
+    const onViewport = () => {
+      if (desktop.matches) onClose();
+    };
+    desktop.addEventListener('change', onViewport);
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKeyDown);
+      desktop.removeEventListener('change', onViewport);
       document.body.style.overflow = overflow;
-      previous?.focus();
+      returnFocus.current?.focus();
     };
-  }, [onClose]);
+  }, [onClose, returnFocus]);
   return (
     <div className="fixed inset-0 z-40 lg:hidden print:hidden" role="dialog" aria-modal="true" aria-label="Menyu">
       <button
@@ -410,7 +499,7 @@ function MobileDrawer({ me, onClose }: { me: Me; onClose: () => void }) {
         onClick={onClose}
       />
       <div ref={panelRef} className="absolute inset-y-0 left-0 w-80 max-w-[88%] shadow-2xl">
-        <Sidebar me={me} onNavigate={onClose} onClose={onClose} />
+        <Sidebar {...sidebar} onNavigate={onClose} onClose={onClose} />
       </div>
     </div>
   );
@@ -418,10 +507,15 @@ function MobileDrawer({ me, onClose }: { me: Me; onClose: () => void }) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { data: me, isPending, error } = useMe();
-  const [open, setOpen] = useState(false);
-  const closeDrawer = useCallback(() => setOpen(false), []);
   const router = useRouter();
   const pathname = usePathname();
+  // Menyu qaysi sahifada ochilgan bo‘lsa, faqat o‘sha yerda ochiq: boshqa sahifaga o‘tilsa (orqaga tugmasi ham) yopiladi.
+  const [drawerPath, setDrawerPath] = useState<string | null>(null);
+  if (drawerPath !== null && drawerPath !== pathname) setDrawerPath(null);
+  const open = drawerPath === pathname;
+  const closeDrawer = useCallback(() => setDrawerPath(null), []);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const [navOverride, setNavOverride] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const logout = useMutation({
     mutationFn: () => api.post('/auth/logout'),
@@ -438,24 +532,37 @@ export function AppShell({ children }: { children: ReactNode }) {
     else if (me.mustChangePassword) router.replace('/change-password');
   }, [me, router]);
 
+  // Chiqish bir marta yuboriladi; javob kelguncha qobiq o‘rnida holat ko‘rinadi.
+  if (logout.isPending) return <PageLoader label="Chiqilmoqda…" />;
+
   if (isPending || !me || (me.mfa.required && !me.mfa.verified) || me.mustChangePassword) {
     return <PageLoader label={error ? 'Kirish sahifasiga yo‘naltirilmoqda…' : 'Yuklanmoqda…'} />;
   }
 
-  const context = pageContext(pathname, navFor(me));
+  const sections = navFor(me);
+  const items = sections.flatMap((section) => section.items);
+  const active = items.find((item) => item.href === navOverride) ?? activeNavItem(pathname, items);
+  const context = pageContext(pathname, sections, active);
 
   return (
     <div className="min-h-dvh lg:pl-68">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-68 lg:block dark:border-r dark:border-white/[0.06] print:hidden">
-        <Sidebar me={me} />
+        <Sidebar me={me} sections={sections} active={active} />
       </aside>
 
-      {open && <MobileDrawer me={me} onClose={closeDrawer} />}
+      {open && (
+        <MobileDrawer me={me} sections={sections} active={active} onClose={closeDrawer} returnFocus={menuButtonRef} />
+      )}
 
-      <header className="sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-slate-200/80 bg-surface/85 px-3 backdrop-blur-md sm:gap-3 sm:px-6 lg:px-8 print:hidden">
+      {/* Ochiq menyu ortidagi qism ekran o‘qigich va klaviatura uchun yopiq (inert). */}
+      <header
+        inert={open}
+        className="sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-slate-200/80 bg-surface/85 px-3 backdrop-blur-md sm:gap-3 sm:px-6 lg:px-8 print:hidden"
+      >
         <button
+          ref={menuButtonRef}
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => setDrawerPath(pathname)}
           className="inline-flex size-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 lg:hidden"
           aria-label="Menyuni ochish"
           aria-expanded={open}
@@ -491,11 +598,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           <ThemeToggle className="hidden sm:inline-flex" />
           <NotificationsLink />
           <span aria-hidden className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
-          <UserMenu me={me} onLogout={() => logout.mutate()} loggingOut={logout.isPending} />
+          <UserMenu
+            me={me}
+            onLogout={() => {
+              if (!logout.isPending) logout.mutate();
+            }}
+          />
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+      <main inert={open} className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <NavOverrideContext.Provider value={setNavOverride}>{children}</NavOverrideContext.Provider>
+      </main>
     </div>
   );
 }

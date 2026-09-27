@@ -182,6 +182,24 @@ function ago(ms: number) {
   return `${Math.round(minutes / 60)} soat oldin`;
 }
 
+/** Davomiylik: “40 soniyadan beri”, “3 daqiqadan beri”, “1 soat 5 daqiqadan beri”. */
+function since(ms: number) {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  if (seconds < 60) return `${seconds} soniyadan beri`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} daqiqadan beri`;
+  const rest = minutes % 60;
+  return rest ? `${Math.floor(minutes / 60)} soat ${rest} daqiqadan beri` : `${minutes / 60} soatdan beri`;
+}
+
+/**
+ * “Oynadan chiqish” belgisi. Nazoratli sessiyada har bir chetlatish ham shu songa qo‘shiladi, shuning
+ * uchun belgi faqat undan ortiq chiqishlar bo‘lsa ko‘rsatiladi (savollar yopiq paytdagi chiqishlar).
+ */
+function showsFocusLoss(row: LiveRow, requireFullscreen: boolean) {
+  return requireFullscreen ? row.focusLossCount > row.lockCount : row.focusLossCount > 0;
+}
+
 function CountTile({
   label,
   value,
@@ -267,6 +285,8 @@ function UnlockDialog({
   const valid = minutes.trim() !== '' && Number.isInteger(value) && value >= 0 && value <= 60;
   const lockedFor = row.lockedAt ? Math.max(0, serverNow - new Date(row.lockedAt).getTime()) : 0;
   const lockedMinutes = Math.min(60, Math.ceil(lockedFor / 60_000));
+  // Har bir chetlatish oynadan chiqishlar soniga ham qo‘shiladi — ortig‘i savollar yopiq paytdagi chiqishlar.
+  const extraLeaves = Math.max(0, row.focusLossCount - row.lockCount);
   return (
     <Dialog
       open
@@ -290,7 +310,7 @@ function UnlockDialog({
       }
     >
       <div className="space-y-4">
-        <dl className="grid gap-3 rounded-lg bg-slate-50 p-3 text-sm sm:grid-cols-3">
+        <dl className="grid gap-3 rounded-lg bg-slate-50 p-3 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-xs text-slate-500">Sabab</dt>
             <dd className="font-medium text-slate-900">
@@ -307,7 +327,17 @@ function UnlockDialog({
             <dt className="text-xs text-slate-500">Chetlatishlar soni</dt>
             <dd className="font-medium text-slate-900 tabular">{row.lockCount}</dd>
           </div>
+          <div>
+            <dt className="text-xs text-slate-500">Oynadan chiqishlar (jami)</dt>
+            <dd className="font-medium text-slate-900 tabular">{Math.max(row.focusLossCount, row.lockCount)}</dd>
+          </div>
         </dl>
+        {extraLeaves > 0 && (
+          <Alert tone="warning" title="Savollar yopiq paytda ham sahifadan chiqqan">
+            O‘quvchi savollar yopiq paytda (masalan, test to‘xtatilgach) yana kamida {extraLeaves} marta boshqa tab yoki
+            ilovaga o‘tgan. Ruxsat berishdan oldin u bilan gaplashing.
+          </Alert>
+        )}
         <div className="space-y-1.5">
           <Field
             label="Qo‘shimcha vaqt (daqiqa)"
@@ -630,15 +660,9 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
   const [adding, setAdding] = useState(false);
   const [sound, setSound] = useState(() => (typeof window === 'undefined' ? true : readSoundPreference()));
   // Ogohlantirishlar (useLockAlerts) sessiya sahifasining o‘zida ishlaydi — boshqa bo‘limda ham.
+  // Holat o‘zgarganda sessiya ma’lumotini yangilash ham sessiya sahifasining o‘zida (SessionDetailView).
   const live = useLiveView(session.id, session.state);
   const now = useNow(1000);
-
-  // Sessiya holati o‘zgarsa (masalan, vaqt tugab yopilsa), sarlavhadagi ma’lumot ham yangilanadi.
-  const liveState = live.data?.state;
-  useEffect(() => {
-    if (liveState && liveState !== session.state)
-      void queryClient.invalidateQueries({ queryKey: sessionKey(session.id) });
-  }, [liveState, session.state, session.id, queryClient]);
 
   const offset = live.data ? new Date(live.data.serverNow).getTime() - live.dataUpdatedAt : 0;
   const serverNow = now + offset;
@@ -692,33 +716,23 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
   return (
     <div className="space-y-4">
       {counts.locked > 0 && (
-        <Alert
-          tone="danger"
-          title={`${counts.locked} nafar o‘quvchi testdan chetlatildi`}
-          action={
-            filter !== 'LOCKED' ? (
-              <Button size="sm" variant="outline" onClick={() => setFilter('LOCKED')}>
-                Jadvalda ko‘rsatish
-              </Button>
-            ) : undefined
-          }
-        >
+        <Alert tone="danger" title={`${counts.locked} nafar o‘quvchi testdan chetlatildi`}>
           <p>
             {counts.locked === 1 ? 'O‘quvchi' : 'Ular'} to‘liq ekrandan chiqqan yoki boshqa oyna/ilovaga o‘tgan.
             Vaziyatni tekshirib, “Ruxsat berish” tugmasi bilan testni davom ettiring. Vaqt to‘xtamaydi — kerak bo‘lsa
             qo‘shimcha daqiqa bering.
           </p>
-          <ul className="mt-3 space-y-2">
+          <ul className="mt-3 space-y-3 sm:space-y-2">
             {lockedRows.slice(0, 8).map((row) => (
-              <li key={row.studentId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <li key={row.studentId} className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                 <Avatar name={row.fullName} src={row.avatarUrl} size="xs" />
-                <span className="font-medium">{row.fullName}</span>
+                <span className="min-w-0 font-medium break-words">{row.fullName}</span>
                 <span className="text-xs">
                   {row.lockReason && LOCK_REASON_SHORT[row.lockReason]} · {formatTime(row.lockedAt)}
                 </span>
                 <Button
                   size="sm"
-                  className="ml-auto"
+                  className="w-full sm:ml-auto sm:w-auto"
                   icon={<ShieldCheck className="size-3.5" />}
                   onClick={() => setAction({ kind: 'unlock', row })}
                 >
@@ -727,6 +741,14 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
               </li>
             ))}
           </ul>
+          {lockedRows.length > 8 && (
+            <p className="mt-2 text-xs">Yana {lockedRows.length - 8} nafar o‘quvchi — jadvalda ko‘ring.</p>
+          )}
+          {filter !== 'LOCKED' && (
+            <Button size="sm" variant="outline" className="mt-3 w-full sm:w-auto" onClick={() => setFilter('LOCKED')}>
+              Jadvalda ko‘rsatish
+            </Button>
+          )}
         </Alert>
       )}
       <div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-4', proctored ? 'lg:grid-cols-7' : 'lg:grid-cols-6')}>
@@ -915,7 +937,7 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                       )}
                       {locked && row.lockedAt && (
                         <p className="text-xs font-medium text-red-700">
-                          Ruxsat kutmoqda: {ago(serverNow - new Date(row.lockedAt).getTime())}
+                          Ruxsat kutmoqda: {since(serverNow - new Date(row.lockedAt).getTime())}
                         </p>
                       )}
                       {row.status === 'IN_PROGRESS' && lastSignal && (
@@ -929,7 +951,7 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                         className="inline-flex flex-wrap gap-1"
                         title={
                           session.requireFullscreen
-                            ? '“Chetlatish” — test necha marta avtomatik to‘xtatilgani. Qurilma almashishi faqat signal.'
+                            ? '“Chetlatish” — test necha marta avtomatik to‘xtatilgani. “Oynadan chiqish” chetlatishlardan ko‘p bo‘lsa — o‘quvchi savollar yopiq paytda (masalan, test to‘xtatilganda) ham boshqa tab yoki ilovaga o‘tgan. Qurilma almashishi faqat signal.'
                             : 'Bu belgilar faqat signal — qoidabuzarlik isboti emas.'
                         }
                       >
@@ -939,8 +961,8 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                             Chetlatish: {row.lockCount}
                           </Badge>
                         )}
-                        {!session.requireFullscreen && row.focusLossCount > 0 && (
-                          <Badge tone="gray">
+                        {showsFocusLoss(row, session.requireFullscreen) && (
+                          <Badge tone={session.requireFullscreen ? 'amber' : 'gray'}>
                             <AlertTriangle className="size-3" aria-hidden />
                             Oynadan chiqish: {row.focusLossCount}
                           </Badge>
@@ -952,7 +974,7 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                           </Badge>
                         )}
                         {row.lockCount === 0 &&
-                          (session.requireFullscreen || row.focusLossCount === 0) &&
+                          !showsFocusLoss(row, session.requireFullscreen) &&
                           row.deviceChangeCount === 0 && <span className="text-slate-400">—</span>}
                       </span>
                     </TD>

@@ -856,7 +856,8 @@ export interface PortfolioReviewGroup {
   lastSubmittedAt: string | null;
 }
 
-export type PortfolioSkipReason = 'NOT_FOUND' | 'NOT_ALLOWED' | 'NOT_PENDING';
+/** CHANGED — tekshiruvchi ko‘rgandan keyin egasi tahrirlab, qayta yuborgan. */
+export type PortfolioSkipReason = 'NOT_FOUND' | 'NOT_ALLOWED' | 'NOT_PENDING' | 'CHANGED';
 
 export interface PortfolioBatchResult {
   approved: number;

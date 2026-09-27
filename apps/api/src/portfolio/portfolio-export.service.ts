@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
   ACHIEVEMENT_LEVEL_LABELS,
@@ -200,10 +201,10 @@ export class PortfolioExportService {
     ]);
     info.getColumn(1).font = { bold: true };
 
+    // Fayllar navbat bilan ochiladi: har biri arxivga yozilish navbati kelgandagina (bir vaqtda bitta fayl).
+    const sources = entries.map((entry) => this.lazyFile(entry.storageKey));
     const zip = new JSZip();
-    for (const entry of entries) {
-      zip.file(entry.path, this.storage.stream('files', entry.storageKey), { binary: true });
-    }
+    entries.forEach((entry, index) => zip.file(entry.path, sources[index]!, { binary: true }));
     zip.file('royxat.xlsx', await workbookToBuffer(workbook));
 
     await this.audit.log(
@@ -219,12 +220,45 @@ export class PortfolioExportService {
       `attachment; filename="${asciiName(fileName)}"; filename*=UTF-8''${encodeRfc5987(fileName)}`,
     );
     res.setHeader('Cache-Control', 'private, no-store');
-    const stream = zip.generateNodeStream({ type: 'nodebuffer', streamFiles: true, compression: 'STORE' });
+    const stream = zip.generateNodeStream({
+      type: 'nodebuffer',
+      streamFiles: true,
+      compression: 'STORE',
+    }) as unknown as Readable;
+    // Yuklab olish to‘xtatilsa (mijoz uzilsa) yoki xato bo‘lsa — ochiq fayl va arxiv oqimi yopiladi.
+    const cleanup = () => {
+      for (const source of sources) source.destroy();
+      stream.unpipe(res);
+      stream.destroy();
+    };
+    res.on('close', () => {
+      if (!res.writableFinished) cleanup();
+    });
     stream.on('error', (error: Error) => {
       this.logger.error(`ZIP arxivini yaratib bo‘lmadi: ${error.message}`);
+      cleanup();
       res.destroy(error);
     });
     stream.pipe(res);
+  }
+
+  /**
+   * Faylni o‘qishni birinchi so‘rovgacha kechiktiradigan oqim: arxivga qo‘shilganda fayl ochilmaydi,
+   * faqat JSZip shu faylni yoza boshlaganda ochiladi va oxirida (yoki `destroy`da) yopiladi.
+   */
+  private lazyFile(storageKey: string): Readable {
+    const open = () => this.storage.stream('files', storageKey);
+    return Readable.from(
+      (async function* () {
+        const file = open();
+        try {
+          for await (const chunk of file) yield chunk as Buffer;
+        } finally {
+          file.destroy();
+        }
+      })(),
+      { objectMode: false },
+    );
   }
 }
 

@@ -14,6 +14,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  // `next dev` repozitoriyga AGENTS.md/CLAUDE.md yozmasin.
+  agentRules: false,
   experimental: {
     // proxy.ts ishlatilganda so‘rov tanasi shu hajmgacha buferlanadi. API chegarasidan (10 MB) biroz katta
     // bo‘lishi kerak — aks holda katta fayl kesilib, API aniq “hajm katta” xabari o‘rniga xato qaytaradi.

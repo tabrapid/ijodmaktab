@@ -1,8 +1,10 @@
 'use client';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect } from 'react';
 import { SessionStateBadge } from '@/components/status';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/ui/card';
@@ -14,7 +16,7 @@ import { AnswerMatrix, GradingHistory } from './matrix-history';
 import { QuestionAnalysis } from './question-analysis';
 import { ResultsView } from './results-view';
 import { SessionControls, SessionOverview } from './session-overview';
-import { useSession } from './use-session';
+import { sessionKey, useSession } from './use-session';
 
 type TabId = 'overview' | 'live' | 'results' | 'analysis' | 'matrix' | 'history';
 
@@ -22,16 +24,28 @@ const TAB_IDS: TabId[] = ['overview', 'live', 'results', 'analysis', 'matrix', '
 
 export function SessionDetailView({ id, backHref, backLabel }: { id: string; backHref: string; backLabel: string }) {
   const session = useSession(id);
+  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   // Bildirishnomadagi havola “?tab=live” bilan to‘g‘ridan-to‘g‘ri jonli kuzatuvni ochadi.
   const requested = searchParams.get('tab') as TabId | null;
   // Ochiq sessiyada to‘xtatilgan o‘quvchilar boshqa bo‘limda turganda ham kuzatiladi (jonli kuzatuv
-  // bo‘limi ochiq bo‘lsa, so‘rovni uning o‘zi yuboradi — kesh umumiy).
-  const watching = Boolean(session.data?.canManage && session.data.state === 'OPEN');
-  const live = useLiveView(id, session.data?.state, watching && requested !== 'live');
+  // bo‘limi ochiq bo‘lsa, so‘rovni uning o‘zi yuboradi — kesh umumiy). Rejalashtirilgan sessiya ham
+  // kuzatiladi: boshlanish vaqti kelib ochilganini jonli so‘rov aniqlaydi (sahifadagi holat eskirgan bo‘ladi).
+  const cachedState = session.data?.state;
+  const canManage = Boolean(session.data?.canManage);
+  const upcoming = cachedState === 'SCHEDULED' || cachedState === 'OPEN';
+  const live = useLiveView(id, cachedState, canManage && upcoming && requested !== 'live');
+  const liveState = live.data?.state;
+  const watching = canManage && (liveState ?? cachedState) === 'OPEN';
   useLockAlerts(watching ? live.data : undefined);
+
+  // Sessiya holati o‘zgarsa (ochilsa yoki vaqt tugab yopilsa), sarlavha va bo‘limlar ham yangilanadi.
+  useEffect(() => {
+    if (liveState && cachedState && liveState !== cachedState)
+      void queryClient.invalidateQueries({ queryKey: sessionKey(id) });
+  }, [liveState, cachedState, id, queryClient]);
 
   if (session.isPending) return <PageLoader />;
   if (session.isError) return <ErrorState error={session.error} onRetry={() => session.refetch()} />;

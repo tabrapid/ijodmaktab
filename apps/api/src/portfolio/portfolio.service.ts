@@ -4,7 +4,9 @@ import {
   PORTFOLIO_ITEM_TYPE_LABELS,
   TEACHER_ONLY_PORTFOLIO_TYPES,
   fullName,
+  isLegacyPortfolioDetails,
   normalizeForSearch,
+  parsePortfolioDetails,
   portfolioChangesSince,
   portfolioKeyChanges,
   portfolioStoredFields,
@@ -52,14 +54,43 @@ export interface ReviewInfo {
   lastReturnReason: string | null;
 }
 
-/** Ommaviy qarorda o‘tkazib yuborilgan yozuv sababi. */
-export type SkipReason = 'NOT_FOUND' | 'NOT_ALLOWED' | 'NOT_PENDING';
+/** Ommaviy qarorda o‘tkazib yuborilgan yozuv sababi (CHANGED — tekshiruvchi ko‘rgandan keyin tahrirlangan). */
+export type SkipReason = 'NOT_FOUND' | 'NOT_ALLOWED' | 'NOT_PENDING' | 'CHANGED';
 
 const notPending = () =>
   conflict('NOT_PENDING', 'Yozuv tekshiruvda emas — uni boshqa tasdiqlovchi ko‘rib chiqqan yoki egasi tahrirlagan.');
 
+const changedSinceView = () =>
+  conflict(
+    'CHANGED_SINCE_VIEW',
+    'Yozuv siz ko‘rganingizdan keyin o‘zgartirilgan. Sahifani yangilab, yozuvning yangi holatini ko‘rib chiqing.',
+  );
+
+/** Bir vaqtdagi tranzaksiyalar to‘qnashuvi (Postgres deadlock / serialization) — bir marta qayta urinish mumkin. */
+const isWriteConflict = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+
 /** Bildirishnoma sarlavhasi uchun qisqartirish. */
 const clip = (value: string, max: number) => (value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value);
+
+/** details xatosi — zod tekshiruvidagi kabi `{ path: 'details.<maydon>', message }` ko‘rinishida. */
+function detailsValidationError(input: ItemInput) {
+  const parsed = parsePortfolioDetails(input.type, input.details);
+  const issues = parsed.success ? [] : parsed.issues;
+  return badRequest(
+    'VALIDATION_ERROR',
+    issues[0]?.message ?? 'Ma’lumotlar noto‘g‘ri kiritilgan.',
+    issues.map((issue) => ({ path: ['details', ...issue.path.map(String)].join('.'), message: issue.message })),
+  );
+}
+
+/** Qaror natijasi: qo‘llangan yozuv (snapshot uchun) yoki o‘tkazib yuborilish sababi. */
+type DecisionOutcome =
+  | { fresh: Prisma.PortfolioItemGetPayload<{ include: typeof snapshotInclude }> }
+  | { skipped: SkipReason };
+
+/** Tekshiruvchi ko‘rgan versiya (ISO vaqt) → Date; berilmagan bo‘lsa tekshirilmaydi. */
+const seenVersion = (value: string | undefined) => (value ? new Date(value) : undefined);
 
 @Injectable()
 export class PortfolioService {
@@ -357,7 +388,10 @@ export class PortfolioService {
   async schoolList(viewer: AuthUser, query: Out<typeof portfolioListQuerySchema>) {
     const scope = await this.scope(viewer);
     if (!scope.leadership) throw forbidden();
-    const where = this.filters(query, query.ownerId ? { ownerId: query.ownerId } : {});
+    // Qoralamalar faqat egasiga ko‘rinadi: holat filtri (masalan, status=DRAFT) bu shart bilan birga qo‘llanadi.
+    const base: Prisma.PortfolioItemWhereInput = { AND: [{ status: { not: 'DRAFT' } }] };
+    if (query.ownerId) base.ownerId = query.ownerId;
+    const where = this.filters(query, base);
     const [items, total] = await Promise.all([
       this.prisma.portfolioItem.findMany({
         where,
@@ -441,7 +475,10 @@ export class PortfolioService {
   }
 
   private data(input: ItemInput) {
-    const stored = portfolioStoredFields(input.type, input.details, input.result);
+    // Avvalgi shakldagi olimpiada (faqat tahrirlashda qabul qilinadi): details yo‘q, natija matni saqlanadi.
+    const stored = isLegacyPortfolioDetails(input.type, input.details)
+      ? { details: null, result: input.result ?? null }
+      : portfolioStoredFields(input.type, input.details, input.result);
     return {
       type: input.type,
       title: input.title,
@@ -472,6 +509,14 @@ export class PortfolioService {
   async update(viewer: AuthUser, id: string, input: ItemInput) {
     const item = await this.prisma.portfolioItem.findUnique({ where: { id } });
     if (!item || item.ownerId !== viewer.id) throw notFound('Portfolio yozuvi');
+    // Details’siz saqlash faqat avvalgi shaklda kiritilgan olimpiadaga ruxsat etiladi; boshqa hollarda —
+    // yaratishdagi kabi `details.<maydon>` xatosi.
+    if (
+      isLegacyPortfolioDetails(input.type, input.details) &&
+      !isLegacyPortfolioDetails(item.type as PortfolioItemType, item.details)
+    ) {
+      throw detailsValidationError(input);
+    }
     await this.validateInput(viewer, input);
     const next = this.data(input);
     const changed = portfolioKeyChanges(trackedFieldsOf(item), trackedFieldsOf(this.asItem(item, next)));
@@ -580,8 +625,9 @@ export class PortfolioService {
   }
 
   /**
-   * Qarorni shartli qo‘llaydi: yozuv hali ham tekshiruvda bo‘lsagina (ikki tekshiruvchi bir vaqtda
-   * bossa, ikkinchisi hech narsani o‘zgartirmaydi). Snapshot aynan qaror qabul qilingan holatdan olinadi.
+   * Qarorni shartli qo‘llaydi: yozuv hali ham tekshiruvda bo‘lsa va (berilgan bo‘lsa) tekshiruvchi ko‘rgan
+   * versiyadan keyin o‘zgarmagan bo‘lsagina. Ikki tekshiruvchi bir vaqtda bossa, ikkinchisi hech narsani
+   * o‘zgartirmaydi. Snapshot aynan qaror qabul qilingan holatdan olinadi.
    */
   private async applyDecision(
     tx: Tx,
@@ -589,11 +635,12 @@ export class PortfolioService {
     id: string,
     decision: Decision,
     reason: string | null,
+    seen: Date | undefined,
     extra: Record<string, unknown> = {},
-  ) {
+  ): Promise<DecisionOutcome> {
     const approved = decision === 'APPROVED';
     const { count } = await tx.portfolioItem.updateMany({
-      where: { id, status: 'SUBMITTED' },
+      where: { id, status: 'SUBMITTED', ...(seen ? { updatedAt: seen } : {}) },
       data: {
         status: decision,
         reviewerId: viewer.id,
@@ -601,7 +648,11 @@ export class PortfolioService {
         returnReason: approved ? null : reason,
       },
     });
-    if (count === 0) return null;
+    if (count === 0) {
+      // Nega qo‘llanmadi: yozuv hali tekshiruvda bo‘lsa — demak, ko‘rilgandan keyin tahrirlanib qayta yuborilgan.
+      const current = await tx.portfolioItem.findUnique({ where: { id }, select: { status: true } });
+      return { skipped: current?.status === 'SUBMITTED' ? 'CHANGED' : 'NOT_PENDING' };
+    }
     const fresh = await tx.portfolioItem.findUniqueOrThrow({ where: { id }, include: snapshotInclude });
     await tx.portfolioReview.create({
       data: { itemId: id, reviewerId: viewer.id, decision, reason, snapshot: toJson(snapshotOf(fresh)) },
@@ -612,7 +663,28 @@ export class PortfolioService {
       { reason, ...extra },
       { tx },
     );
-    return fresh;
+    return { fresh };
+  }
+
+  /**
+   * Tranzaksiya bir vaqtdagi boshqa tranzaksiya bilan to‘qnashsa (P2034), u to‘liq bekor qilingan bo‘ladi —
+   * bir marta qayta uriniladi (shartli yangilash takroriy qarorga yo‘l qo‘ymaydi), keyin 409.
+   */
+  private async withConflictRetry<T>(run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      if (!isWriteConflict(error)) throw error;
+    }
+    try {
+      return await run();
+    } catch (error) {
+      if (!isWriteConflict(error)) throw error;
+      throw conflict(
+        'REVIEW_CONFLICT',
+        'Bu yozuvlarni hozir boshqa tekshiruvchi ham ko‘rib chiqmoqda. Sahifani yangilab, qayta urinib ko‘ring.',
+      );
+    }
   }
 
   /** Tasdiqlash yoki sababi bilan tuzatishga qaytarish. Tasdiqlovchi o‘z yozuvini tasdiqlamaydi. */
@@ -622,29 +694,35 @@ export class PortfolioService {
     if (!item || !this.portfolioAccess.canView(scope, item)) throw notFound('Portfolio yozuvi');
     if (!this.portfolioAccess.canReview(scope, item)) throw forbidden('Bu yozuvni tasdiqlash vakolatingiz yo‘q.');
     if (item.status !== 'SUBMITTED') throw notPending();
+    const seen = seenVersion(input.updatedAt);
+    if (seen && seen.getTime() !== item.updatedAt.getTime()) throw changedSinceView();
 
     const approved = input.decision === 'APPROVED';
-    await this.prisma.$transaction(async (tx) => {
-      const fresh = await this.applyDecision(tx, viewer, id, input.decision, input.reason);
-      if (!fresh) throw notPending();
-      await this.notifications.notify(
-        [item.ownerId],
-        {
-          type: approved ? 'PORTFOLIO_APPROVED' : 'PORTFOLIO_RETURNED',
-          title: approved ? `Yozuv tasdiqlandi: ${fresh.title}` : `Yozuv tuzatishga qaytarildi: ${fresh.title}`,
-          body: approved ? null : input.reason,
-          link: `/portfolio/${id}`,
-        },
-        tx,
-      );
-    });
+    await this.withConflictRetry(() =>
+      this.prisma.$transaction(async (tx) => {
+        const outcome = await this.applyDecision(tx, viewer, id, input.decision, input.reason, seen);
+        if ('skipped' in outcome) throw outcome.skipped === 'CHANGED' ? changedSinceView() : notPending();
+        await this.notifications.notify(
+          [item.ownerId],
+          {
+            type: approved ? 'PORTFOLIO_APPROVED' : 'PORTFOLIO_RETURNED',
+            title: approved
+              ? `Yozuv tasdiqlandi: ${outcome.fresh.title}`
+              : `Yozuv tuzatishga qaytarildi: ${outcome.fresh.title}`,
+            body: approved ? null : input.reason,
+            link: `/portfolio/${id}`,
+          },
+          tx,
+        );
+      }),
+    );
     return this.get(viewer, id);
   }
 
   /**
    * Bir nechta yozuvni bitta tranzaksiyada tasdiqlash yoki qaytarish. Har bir yozuv alohida
-   * tekshiriladi; tekshiruvda bo‘lmagan yoki vakolat doirasidan tashqaridagilari o‘tkazib yuboriladi.
-   * Har bir egaga bitta umumlashtirilgan bildirishnoma yuboriladi.
+   * tekshiriladi; tekshiruvda bo‘lmagan, ko‘rilgandan keyin o‘zgartirilgan yoki vakolat doirasidan
+   * tashqaridagilari o‘tkazib yuboriladi. Har bir egaga bitta umumlashtirilgan bildirishnoma yuboriladi.
    */
   async reviewBatch(viewer: AuthUser, input: Out<typeof portfolioBatchReviewSchema>) {
     const scope = await this.scope(viewer);
@@ -655,39 +733,58 @@ export class PortfolioService {
     const candidates: ItemWithRelations[] = [];
     for (const id of ids) {
       const item = byId.get(id);
+      const seen = seenVersion(input.versions?.[id]);
       if (!item || !this.portfolioAccess.canView(scope, item)) skipped.push({ id, reason: 'NOT_FOUND' });
       else if (!this.portfolioAccess.canReview(scope, item)) skipped.push({ id, reason: 'NOT_ALLOWED' });
       else if (item.status !== 'SUBMITTED') skipped.push({ id, reason: 'NOT_PENDING' });
+      else if (seen && seen.getTime() !== item.updatedAt.getTime()) skipped.push({ id, reason: 'CHANGED' });
       else candidates.push(item);
     }
+    // Qatorlar har doim bir xil tartibda (ID bo‘yicha) bloklanadi: ikki tekshiruvchining bir vaqtdagi
+    // ommaviy qarori o‘zaro kutib qolmaydi (deadlock), ikkinchisi shunchaki “o‘tkazib yuborildi” oladi.
+    candidates.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
     const approved = input.decision === 'APPROVED';
-    let handled = 0;
-    if (candidates.length > 0) {
-      await this.prisma.$transaction(
-        async (tx) => {
-          const byOwner = new Map<string, { id: string; title: string }[]>();
-          for (const item of candidates) {
-            const fresh = await this.applyDecision(tx, viewer, item.id, input.decision, input.reason, {
-              batch: true,
-            });
-            if (!fresh) {
-              skipped.push({ id: item.id, reason: 'NOT_PENDING' });
-              continue;
-            }
-            handled += 1;
-            const group = byOwner.get(item.ownerId) ?? [];
-            group.push({ id: item.id, title: fresh.title });
-            byOwner.set(item.ownerId, group);
-          }
-          for (const [ownerId, group] of byOwner) {
-            await this.notifications.notify([ownerId], this.batchNotice(group, approved, input.reason), tx);
-          }
-        },
-        { timeout: 60_000 },
-      );
-    }
-    return { approved: approved ? handled : 0, returned: approved ? 0 : handled, skipped };
+    const outcome =
+      candidates.length === 0
+        ? { handled: 0, late: [] as { id: string; reason: SkipReason }[] }
+        : await this.withConflictRetry(() =>
+            this.prisma.$transaction(
+              async (tx) => {
+                const late: { id: string; reason: SkipReason }[] = [];
+                const byOwner = new Map<string, { id: string; title: string }[]>();
+                for (const item of candidates) {
+                  const result = await this.applyDecision(
+                    tx,
+                    viewer,
+                    item.id,
+                    input.decision,
+                    input.reason,
+                    seenVersion(input.versions?.[item.id]),
+                    { batch: true },
+                  );
+                  if ('skipped' in result) {
+                    late.push({ id: item.id, reason: result.skipped });
+                    continue;
+                  }
+                  const group = byOwner.get(item.ownerId) ?? [];
+                  group.push({ id: item.id, title: result.fresh.title });
+                  byOwner.set(item.ownerId, group);
+                }
+                for (const [ownerId, group] of byOwner) {
+                  await this.notifications.notify([ownerId], this.batchNotice(group, approved, input.reason), tx);
+                }
+                return { handled: candidates.length - late.length, late };
+              },
+              { timeout: 60_000 },
+            ),
+          );
+    skipped.push(...outcome.late);
+    return {
+      approved: approved ? outcome.handled : 0,
+      returned: approved ? 0 : outcome.handled,
+      skipped,
+    };
   }
 
   private batchNotice(group: { id: string; title: string }[], approved: boolean, reason: string | null) {

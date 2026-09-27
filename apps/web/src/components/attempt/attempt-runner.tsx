@@ -291,6 +291,8 @@ export function AttemptRunner({
         enterLocked();
         return;
       }
+      // Topshirish natijasi kutilmoqda: kechiktirilgan qoidabuzarlik belgisi submit() da hal qilinadi.
+      if (deferredViolation.current) return;
       const flag = loadLockFlag(attemptId);
       if (enforce && unconfirmed(flag, state.lockCount)) {
         // Qurilma to‘xtatgan, xabar esa serverga hali yetmagan — test ochilmaydi, xabar qayta yuboriladi.
@@ -344,7 +346,7 @@ export function AttemptRunner({
     try {
       const response = await api.post<ServerState>(`/attempts/${attemptId}/heartbeat`, {
         clientId,
-        focusLossCount: focusLoss.current,
+        focusLossCount: Math.max(0, focusLoss.current),
       });
       applyRef.current(response, true);
     } catch {
@@ -352,28 +354,31 @@ export function AttemptRunner({
     }
   }, [attemptId, clientId]);
 
-  /** Qoidabuzarlik: savollar darhol yopiladi, xabar serverga yuboriladi. */
+  /**
+   * Qoidabuzarlik: savollar darhol yopiladi, xabar serverga yuboriladi. Shu chaqiruv testni
+   * to‘xtatgan (yoki topshirish tugashiga qoldirgan) bo‘lsa — true.
+   */
   const violate = useCallback(
-    (reason: AttemptLockReason) => {
-      if (!enforce || modeRef.current !== 'active') return;
+    (reason: AttemptLockReason): boolean => {
+      if (!enforce || modeRef.current !== 'active') return false;
       // Dasturning o‘zi chiqayotganda (yakunlash, qayta kirish) to‘xtatilmaydi.
-      if (expectedExit.current || finishedRef.current) return;
+      if (expectedExit.current || finishedRef.current) return false;
       // Javob yozish huquqi boshqa oynada — bu oynaning xabarini server baribir qabul qilmaydi.
-      if (conflictRef.current) return;
+      if (conflictRef.current) return false;
       const flag: LockFlag = { reason, epoch: epoch.current, clientId };
       if (submitting.current) {
         // Topshirish kutilmoqda: muvaffaqiyatli bo‘lsa — ahamiyatsiz, bo‘lmasa — darhol to‘xtatiladi.
         // Belgi hozir yoziladi: sahifa shu orada yopilsa ham, qayta ochilganda test to‘xtatilgan bo‘ladi.
-        if (!deferredViolation.current) {
-          deferredViolation.current = reason;
-          saveLockFlag(attemptId, flag);
-        }
-        return;
+        if (deferredViolation.current) return false;
+        deferredViolation.current = reason;
+        saveLockFlag(attemptId, flag);
+        return true;
       }
       saveLockFlag(attemptId, flag);
       setLockInfo({ reason, lockedAt: serverNow() });
       enterLocked();
       void sendLock();
+      return true;
     },
     [attemptId, clientId, enforce, enterLocked, sendLock, serverNow],
   );
@@ -381,11 +386,14 @@ export function AttemptRunner({
   // ------------------------------------------------------------ Javoblarni yuborish navbati
   const flush = useCallback(async (): Promise<void> => {
     if (sending.current || conflictRef.current || finishedRef.current) return;
-    // To‘xtatilgan test: javoblar navbatda qoladi va ruxsat berilgach yuboriladi.
-    if (modeRef.current === 'locked') return;
     const entry = Object.entries(pendingRef.current)[0];
     if (!entry) {
       setSaveState('saved');
+      return;
+    }
+    // To‘xtatilgan test: javoblar navbatda qoladi va ruxsat berilgach yuboriladi.
+    if (modeRef.current === 'locked') {
+      setSaveState('paused');
       return;
     }
     const [questionId, item] = entry;
@@ -443,8 +451,14 @@ export function AttemptRunner({
     }
   }, [attemptId, clientId, enterLocked, finish, goLogin, persist, refreshState, setConflictState, toast]);
 
+  useEffect(() => {
+    flushRef.current = flush;
+  }, [flush]);
+
   const choose = (question: AttemptQuestion, optionId: string | null) => {
     if (conflictRef.current || finishedRef.current || remainingMs <= 0 || modeRef.current !== 'active') return;
+    // Topshirish yuborilgan — javoblar endi o‘zgarmaydi (muvaffaqiyatsiz bo‘lsa, yana ochiladi).
+    if (submitting.current) return;
     const revision = (answersRef.current[question.id]?.revision ?? 0) + 1;
     const next = { ...answersRef.current, [question.id]: { optionId, revision } };
     answersRef.current = next;
@@ -459,6 +473,7 @@ export function AttemptRunner({
     async (automatic: boolean) => {
       if (submitting.current || finishedRef.current) return;
       submitting.current = true;
+      deferredViolation.current = null;
       setFinishing(true);
       setAutoSubmitFailed(false);
       const payload = Object.entries(pendingRef.current).map(([testQuestionId, item]) => ({
@@ -478,6 +493,12 @@ export function AttemptRunner({
             // To‘xtatilgan test topshirilmaydi; vaqt tugagach server o‘zi yakunlaydi.
             submitting.current = false;
             setFinishing(false);
+            // Server allaqachon to‘xtatgan — kutilayotgan qoidabuzarlik belgisi ortiqcha
+            // (aks holda ruxsatdan keyin test yana to‘xtab qolardi).
+            if (deferredViolation.current) {
+              deferredViolation.current = null;
+              clearLockFlag(attemptId);
+            }
             enterLocked();
             void refreshState();
             return;
@@ -495,10 +516,16 @@ export function AttemptRunner({
       }
       submitting.current = false;
       setFinishing(false);
-      // Topshirish kutilayotganda to‘liq ekrandan chiqilgan bo‘lsa — endi hisobga olinadi.
-      if (enforce && modeRef.current === 'active') {
-        if (canFullscreen && !isFullscreen()) violate('FULLSCREEN_EXIT');
-        else if (document.visibilityState === 'hidden') violate('PAGE_HIDDEN');
+      // Topshirish kutilayotganda sahifadan chiqilgan bo‘lsa (hozir qaytgan bo‘lsa ham) — endi
+      // hisobga olinadi. Vaqt tugagan bo‘lsa, test baribir yakunlanadi.
+      const deferred = deferredViolation.current;
+      deferredViolation.current = null;
+      if (enforce && modeRef.current === 'active' && deadlineRef.current > serverNow()) {
+        if (deferred) violate(deferred);
+        else if (canFullscreen && !isFullscreen()) violate('FULLSCREEN_EXIT');
+        else if (document.visibilityState === 'hidden' || !document.hasFocus()) violate('PAGE_HIDDEN');
+      } else if (deferred && !conflictRef.current) {
+        clearLockFlag(attemptId);
       }
       if (automatic) setAutoSubmitFailed(true);
       else toast.error('Topshirib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.');
@@ -512,6 +539,7 @@ export function AttemptRunner({
       finish,
       persist,
       refreshState,
+      serverNow,
       setConflictState,
       toast,
       violate,
@@ -573,6 +601,10 @@ export function AttemptRunner({
     };
   }, [flush]);
 
+  // Telefon/planshet ekrani o‘z-o‘zidan o‘chsa sahifa yashirinadi va test to‘xtab qoladi —
+  // nazoratli testda ekran yakunlanguncha yoqiq ushlab turiladi.
+  useScreenWakeLock(enforce && !ended);
+
   // Yurak urishi: odatda 20 soniyada, to‘xtatilganda — ruxsatni tez sezish uchun 3 soniyada.
   const waiting = mode === 'locked';
   useEffect(() => {
@@ -592,7 +624,9 @@ export function AttemptRunner({
       if (canFullscreen && !isFullscreen()) violate('FULLSCREEN_EXIT');
     };
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') violate('PAGE_HIDDEN');
+      // Testni to‘xtatgan chiqishni server “chetlatish” bilan birga sanaydi — qurilma uni qayta
+      // qo‘shmaydi (aks holda o‘qituvchi ortiqcha “oynadan chiqish”ni ko‘radi).
+      if (document.visibilityState === 'hidden' && violate('PAGE_HIDDEN')) focusLoss.current -= 1;
     };
     // Alt+Tab bilan boshqa ilovaga o‘tganda sahifa “ko‘rinib” qolishi mumkin — fokus tekshiriladi.
     const onBlur = () => {
@@ -767,9 +801,12 @@ export function AttemptRunner({
       ) : (
         <>
           <main className="mx-auto max-w-4xl space-y-4 px-4 py-5">
-            {enforce && !canFullscreen && (
+            {enforce && (!canFullscreen || !canKeepAwake) && (
               <Alert tone="warning" title="To‘liq ekran nazorati">
-                Bu qurilmada to‘liq ekran rejimi yo‘q — boshqa ilova yoki oynaga o‘tsangiz, test to‘xtatiladi.
+                {!canFullscreen &&
+                  'Bu qurilmada to‘liq ekran rejimi yo‘q — boshqa ilova yoki oynaga o‘tsangiz, test to‘xtatiladi. '}
+                {!canKeepAwake &&
+                  'Qurilma ekrani o‘chib qolsa ham test to‘xtatiladi — ekran avtomatik o‘chmasligi uchun unga vaqti-vaqti bilan teging.'}
               </Alert>
             )}
             {current === 0 && initial.session.instructions && (
@@ -803,7 +840,7 @@ export function AttemptRunner({
                           selected
                             ? 'border-brand-500 bg-brand-50'
                             : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50',
-                          (conflict || remainingMs <= 0) && 'cursor-not-allowed opacity-70',
+                          (conflict || finishing || remainingMs <= 0) && 'cursor-not-allowed opacity-70',
                         )}
                       >
                         <input
@@ -812,7 +849,7 @@ export function AttemptRunner({
                           value={option.id}
                           checked={selected}
                           onChange={() => choose(question, option.id)}
-                          disabled={conflict || remainingMs <= 0}
+                          disabled={conflict || finishing || remainingMs <= 0}
                           className="mt-1 size-4 shrink-0 text-brand-600 focus:ring-brand-500"
                         />
                         <span className="flex-1 text-base text-slate-800">
@@ -828,8 +865,8 @@ export function AttemptRunner({
                 <button
                   type="button"
                   onClick={() => choose(question, null)}
-                  className="mt-3 text-sm text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-                  disabled={conflict}
+                  className="mt-3 text-sm text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60"
+                  disabled={conflict || finishing}
                 >
                   Javobni bekor qilish
                 </button>

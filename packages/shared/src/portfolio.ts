@@ -190,6 +190,23 @@ export function parsePortfolioDetails(
     : { success: false, issues: result.error.issues };
 }
 
+/** Details bo‘shmi: yo‘q yoki barcha qiymatlari bo‘sh (forma bo‘sh maydonlarni ham yuboradi). */
+export function portfolioDetailsEmpty(details: unknown): boolean {
+  if (details === undefined || details === null) return true;
+  if (typeof details !== 'object' || Array.isArray(details)) return false;
+  return Object.values(details as Record<string, unknown>).every(
+    (value) => value === undefined || value === null || (typeof value === 'string' && !value.trim()),
+  );
+}
+
+/**
+ * Avvalgi shaklda kiritilgan olimpiada: fan va o‘rin alohida saqlanmagan, natija erkin matn. Bunday yozuvni
+ * tahrirlashda details majburiy emas va natija matni saqlanadi (server buni faqat details’siz saqlangan
+ * olimpiada yozuvi uchun qabul qiladi).
+ */
+export const isLegacyPortfolioDetails = (type: PortfolioItemType, details: unknown) =>
+  type === 'OLYMPIAD' && portfolioDetailsEmpty(details);
+
 // ---------------------------------------------------------------- Ko‘rsatish
 
 const band = (value: number | undefined) => (value === undefined ? null : String(value));

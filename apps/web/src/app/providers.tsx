@@ -4,6 +4,7 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@ta
 import { useState, type ReactNode } from 'react';
 import { ToastProvider } from '@/components/ui/toast';
 import { ApiError } from '@/lib/api';
+import { useThemeSync } from '@/lib/theme';
 
 const PUBLIC_PATHS = ['/login', '/system/login'];
 
@@ -38,6 +39,8 @@ function makeClient() {
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(makeClient);
+  // “Tizim bo‘yicha” mavzu OS o‘zgarishiga har bir sahifada darhol ergashadi.
+  useThemeSync();
   return (
     <QueryClientProvider client={client}>
       <ToastProvider>{children}</ToastProvider>

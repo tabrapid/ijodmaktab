@@ -58,6 +58,9 @@ const SORT_OPTIONS = [
   { value: 'updatedAt:desc', label: 'Oxirgi o‘zgartirilgan' },
 ];
 
+/** Qoralamalar faqat egasiga ko‘rinadi — rahbariyat ro‘yxatida bu holat yo‘q. */
+const REVIEWER_STATUSES = PORTFOLIO_STATUSES.filter((value) => value !== 'DRAFT');
+
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const dateParam = (value: string) => (DATE.test(value) ? value : undefined);
 
@@ -70,7 +73,7 @@ export function SchoolItems() {
   const [search, setSearch] = useSearchDraft(filters.q, (value) => setFilters({ q: value, page: '1' }));
   const subjects = useSubjects();
 
-  const status = pickEnum(filters.status, PORTFOLIO_STATUSES);
+  const status = pickEnum(filters.status, REVIEWER_STATUSES);
   const type = pickEnum(filters.type, PORTFOLIO_ITEM_TYPES);
   const level = pickEnum(filters.level, ACHIEVEMENT_LEVELS);
   const subjectId = isUuid(filters.subjectId) ? filters.subjectId : undefined;
@@ -123,7 +126,7 @@ export function SchoolItems() {
             <Field label="Holat">
               <Select value={status ?? ALL} onChange={(event) => setFilters({ status: event.target.value, page: '1' })}>
                 <option value={ALL}>Barcha holatlar</option>
-                {PORTFOLIO_STATUSES.map((value) => (
+                {REVIEWER_STATUSES.map((value) => (
                   <option key={value} value={value}>
                     {PORTFOLIO_STATUS_LABELS[value]}
                   </option>

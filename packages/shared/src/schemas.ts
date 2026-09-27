@@ -22,7 +22,7 @@ import {
   SHARE_PERMISSIONS,
   USER_STATUSES,
 } from './enums.js';
-import { PORTFOLIO_CATEGORIES, parsePortfolioDetails } from './portfolio.js';
+import { PORTFOLIO_CATEGORIES, isLegacyPortfolioDetails, parsePortfolioDetails } from './portfolio.js';
 import { hasAtMostTwoDecimals } from './scoring.js';
 import { MAX_QUESTION_POINTS } from './validation.js';
 
@@ -692,24 +692,40 @@ export const portfolioItemSchema = z
     details: z.unknown().nullish(),
     visibility: z.enum(PORTFOLIO_VISIBILITIES).default('STAFF'),
   })
-  .superRefine((data, ctx) => {
-    const parsed = parsePortfolioDetails(data.type, data.details);
-    if (!parsed.success) {
-      for (const issue of parsed.issues) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['details', ...issue.path.map((key) => String(key))],
-          message: issue.message,
-        });
-      }
-    }
-  });
+  .superRefine((data, ctx) => addPortfolioDetailsIssues(data, ctx));
 export type PortfolioItemInput = z.input<typeof portfolioItemSchema>;
+
+/** details xatolari `details.<maydon>` yo‘li bilan (forma ichki maydonni belgilashi uchun). */
+function addPortfolioDetailsIssues(
+  data: { type: (typeof PORTFOLIO_ITEM_TYPES)[number]; details?: unknown },
+  ctx: z.RefinementCtx,
+) {
+  const parsed = parsePortfolioDetails(data.type, data.details);
+  if (!parsed.success) {
+    for (const issue of parsed.issues) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['details', ...issue.path.map((key) => String(key))],
+        message: issue.message,
+      });
+    }
+  }
+}
+
+/**
+ * Tahrirlash (PUT): avvalgi shaklda (fan va o‘rinsiz) kiritilgan olimpiada details’siz ham saqlanadi.
+ * Server bunga faqat details’siz saqlangan olimpiada yozuvi uchun ruxsat beradi.
+ */
+export const portfolioItemUpdateSchema = z.object(portfolioItemSchema.shape).superRefine((data, ctx) => {
+  if (!isLegacyPortfolioDetails(data.type, data.details)) addPortfolioDetailsIssues(data, ctx);
+});
 
 export const portfolioReviewSchema = z
   .object({
     decision: z.enum(['APPROVED', 'RETURNED']),
     reason: optionalText(1000),
+    /** Tekshiruvchi ko‘rgan yozuv versiyasi (updatedAt): keyin o‘zgartirilgan bo‘lsa, qaror qo‘llanmaydi. */
+    updatedAt: isoDateTime().optional(),
   })
   .refine((data) => data.decision !== 'RETURNED' || Boolean(data.reason), {
     path: ['reason'],
@@ -766,6 +782,8 @@ export const portfolioBatchReviewSchema = z
     itemIds: z.array(id()).min(1, 'Kamida bitta yozuvni tanlang').max(100),
     decision: z.enum(['APPROVED', 'RETURNED']),
     reason: optionalText(1000),
+    /** Tekshiruvchi ko‘rgan versiyalar: yozuv ID → updatedAt. Keyin o‘zgartirilganlari o‘tkazib yuboriladi. */
+    versions: z.record(id(), isoDateTime()).optional(),
   })
   .refine((data) => data.decision !== 'RETURNED' || Boolean(data.reason), {
     path: ['reason'],

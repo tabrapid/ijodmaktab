@@ -15,6 +15,7 @@ import { AccessService } from '../access/access.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { hasRole } from '../common/auth-user.js';
 import { recentServerErrors } from '../common/http-exception.filter.js';
+import { requestContext } from '../common/request-context.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { stateOf } from '../sessions/session-rules.js';
@@ -284,7 +285,10 @@ export class DashboardService {
           this.prisma.attempt.count({ where: { status: 'IN_PROGRESS' } }),
           this.prisma.attempt.count({ where: { status: 'UNDER_REVIEW' } }),
         ]),
-        this.prisma.portfolioItem.count({ where: { status: 'SUBMITTED' } }),
+        // Tasdiqlash navbati bilan bir xil: rahbarning o‘z yozuvlari unga ko‘rinmaydi (uni boshqa rahbar tasdiqlaydi).
+        this.prisma.portfolioItem.count({
+          where: { status: 'SUBMITTED', ownerId: { not: requestContext.get()?.user?.id } },
+        }),
         this.prisma.question.count({
           where: { visibility: 'PRIVATE', schoolRequestedAt: { not: null }, archivedAt: null },
         }),

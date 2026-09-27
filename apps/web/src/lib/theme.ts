@@ -1,6 +1,6 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
 /**
  * Yorug‘ / qorong‘u rejim tanlovi. Birinchi chizishdan oldingi qo‘llash app/layout.tsx dagi kichik
@@ -110,6 +110,16 @@ function subscribe(listener: () => void) {
 const serverChoice = (): ThemeChoice => 'system';
 const serverResolved = (): ResolvedTheme => 'light';
 const clientResolved = (): ResolvedTheme => (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+
+const noop = () => {};
+
+/**
+ * Tizim mavzusi va boshqa varaqdagi tanlovni doimo kuzatadi — mavzu tugmasi yo‘q sahifalarda ham
+ * (masalan, /attempt). Ildiz provayderda bir marta chaqiriladi; qayta chizishga sabab bo‘lmaydi.
+ */
+export function useThemeSync() {
+  useEffect(() => subscribe(noop), []);
+}
 
 /** Foydalanuvchi tanlovi (“Tizim bo‘yicha” ham) va hozir amaldagi rejim. */
 export function useTheme() {
