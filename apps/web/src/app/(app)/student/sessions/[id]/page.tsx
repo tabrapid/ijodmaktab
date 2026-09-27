@@ -4,7 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowLeft, CalendarClock, Clock, ListChecks, RotateCcw, Timer } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import {
   ATTEMPT_POLICY_LABELS,
   PARTICIPATION_STATUS_LABELS,
@@ -21,7 +21,7 @@ import { api, errorMessage } from '@/lib/api';
 import { forgetAccessCode, recallAccessCode, tabClientId } from '@/lib/attempt-storage';
 import type { SessionPreview } from '@/lib/types';
 
-function Rule({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+function Rule({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
   return (
     <div className="flex items-start gap-3">
       <span className="mt-0.5 text-brand-600">{icon}</span>
