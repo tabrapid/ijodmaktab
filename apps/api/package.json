@@ -13,10 +13,12 @@
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset --force && pnpm db:seed",
     "db:seed": "tsx prisma/seed.ts",
+    "admin:create": "tsx scripts/create-super-admin.ts",
+    "backup:verify": "tsx scripts/verify-backup.ts",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.config.e2e.ts",
     "typecheck": "prisma generate && tsc --noEmit",
-    "lint": "oxlint src test"
+    "lint": "oxlint src test scripts"
   },
   "dependencies": {
     "@ijod/shared": "workspace:*",

@@ -24,3 +24,6 @@ test-results/
 
 .DS_Store
 *.log
+
+# Zaxira nusxalari (scripts/backup.sh standart papkasi)
+backups/
