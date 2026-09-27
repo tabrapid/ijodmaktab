@@ -1,0 +1,861 @@
+// Ijod maktabi — ma’lumotlar modeli (reja, 15-bo‘lim).
+// Barcha vaqtlar UTC da saqlanadi, interfeysda Asia/Tashkent bo‘yicha ko‘rsatiladi.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+  previewFeatures     = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================ Enumlar
+
+enum Role {
+  STUDENT
+  TEACHER
+  DEPUTY
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DEACTIVATED
+  ARCHIVED
+}
+
+enum AuthRealm {
+  SCHOOL
+  SYSTEM
+}
+
+enum Category {
+  KNOWLEDGE
+  APPLICATION
+  REASONING
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  SHORT_ANSWER
+  MATCHING
+  ESSAY
+}
+
+enum QuestionVisibility {
+  PRIVATE
+  SCHOOL
+}
+
+enum TestStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum TestVersionStatus {
+  DRAFT
+  FROZEN
+}
+
+enum SharePermission {
+  VIEW
+  COPY
+  EDIT
+}
+
+enum AttemptPolicy {
+  FIRST
+  LAST
+  BEST
+}
+
+enum ScoreVisibility {
+  AFTER_SUBMIT
+  AFTER_ALL_DONE
+  MANUAL
+}
+
+enum ReviewVisibility {
+  NEVER
+  AFTER_CLOSE
+  MANUAL
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+  UNDER_REVIEW
+  CANCELLED
+}
+
+enum SubmitSource {
+  STUDENT
+  TIMEOUT
+  STAFF
+}
+
+enum PortfolioItemType {
+  POEM
+  STORY
+  ESSAY
+  ARTICLE
+  TRANSLATION
+  BOOK_PUBLICATION
+  CONTEST
+  OLYMPIAD
+  RESEARCH_PROJECT
+  SOFTWARE_PROJECT
+  CERTIFICATE
+  METHODICAL_WORK
+  PROFESSIONAL_DEVELOPMENT
+  OPEN_LESSON
+  PUBLICATION
+  OTHER
+}
+
+enum AchievementLevel {
+  SCHOOL
+  DISTRICT
+  REGION
+  NATIONAL
+  INTERNATIONAL
+}
+
+enum PortfolioStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  RETURNED
+}
+
+enum PortfolioVisibility {
+  PRIVATE
+  STAFF
+}
+
+enum FileStatus {
+  CLEAN
+  QUARANTINED
+}
+
+enum ExportKind {
+  SESSION_RESULTS_XLSX
+  SESSION_REPORT_DOCX
+}
+
+enum ExportStatus {
+  QUEUED
+  RUNNING
+  READY
+  FAILED
+  EXPIRED
+}
+
+enum EnrollmentEndReason {
+  TRANSFER
+  GRADUATED
+  LEFT
+  OTHER
+}
+
+// ============================================================ Maktab va hisoblar
+
+/// Dastlabki faraz: bitta maktab. Jadval maktab sozlamalarini saqlaydi (bitta qator).
+model School {
+  id        Int      @id @default(1)
+  name      String
+  shortName String?
+  timeZone  String   @default("Asia/Tashkent")
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id                 String     @id @default(uuid(7)) @db.Uuid
+  /// O‘zgarmas ichki ID raqami (hujjat raqami yoki JSHSHIR bilan bir xil maydon emas).
+  internalId         Int        @unique @default(autoincrement())
+  login              String     @unique
+  passwordHash       String
+  mustChangePassword Boolean    @default(true)
+  lastName           String
+  firstName          String
+  middleName         String?
+  /// Qidiruv uchun normallashtirilgan matn (apostrof variantlari moslashtirilgan).
+  searchText         String
+  status             UserStatus @default(ACTIVE)
+  statusReason       String?
+  failedLoginCount   Int        @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  lastActiveAt       DateTime?
+  passwordChangedAt  DateTime?
+  /// Ikki bosqichli kirish (TOTP) maxfiy kaliti — shifrlangan holda.
+  totpSecret         String?
+  totpPendingSecret  String?
+  totpEnabledAt      DateTime?
+  /// Oxirgi ishlatilgan TOTP qadami: bitta kodni ikki marta ishlatib bo‘lmaydi.
+  totpLastStep       Int?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  archivedAt         DateTime?
+
+  roles                  RoleAssignment[]    @relation("RoleOwner")
+  grantedRoles           RoleAssignment[]    @relation("RoleGrantor")
+  authSessions           AuthSession[]
+  enrollments            Enrollment[]
+  teachingAssignments    TeachingAssignment[]
+  homeroomClasses        Class[]             @relation("Homeroom")
+  questions              Question[]
+  questionVersions       QuestionVersion[]
+  ownedTests             TestTemplate[]      @relation("TestOwner")
+  authoredTests          TestTemplate[]      @relation("TestAuthor")
+  testShares             TestShare[]         @relation("ShareTarget")
+  createdShares          TestShare[]         @relation("ShareCreator")
+  frozenVersions         TestVersion[]
+  createdSessions        AssessmentSession[] @relation("SessionCreator")
+  conductedSessions      AssessmentSession[] @relation("SessionConductor")
+  sessionAssignments     SessionAssignment[] @relation("AssignmentStudent")
+  assignedAssignments    SessionAssignment[] @relation("AssignmentCreator")
+  removedAssignments     SessionAssignment[] @relation("AssignmentRemover")
+  attempts               Attempt[]           @relation("AttemptStudent")
+  cancelledAttempts      Attempt[]           @relation("AttemptCanceller")
+  gradeRevisions         GradeRevision[]
+  portfolioItems         PortfolioItem[]     @relation("PortfolioOwner")
+  reviewedPortfolioItems PortfolioItem[]     @relation("PortfolioReviewer")
+  portfolioReviews       PortfolioReview[]
+  files                  FileAsset[]
+  notifications          Notification[]
+  exportJobs             ExportJob[]
+  importBatches          ImportBatch[]
+  auditEvents            AuditEvent[]
+
+  @@index([status])
+  @@index([lastName, firstName])
+}
+
+/// Bir odamga zarur bo‘lsa bir nechta rol biriktiriladi.
+model RoleAssignment {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  userId      String   @db.Uuid
+  role        Role
+  grantedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  user      User  @relation("RoleOwner", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("RoleGrantor", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, role])
+  @@index([role])
+}
+
+/// Kirish sessiyasi. Token bazada faqat xesh ko‘rinishida saqlanadi, istalgan payt bekor qilinadi.
+model AuthSession {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  userId        String    @db.Uuid
+  tokenHash     String    @unique
+  realm         AuthRealm @default(SCHOOL)
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  expiresAt     DateTime
+  /// Ikki bosqichli tasdiqdan o‘tgan vaqt (xodimlar uchun).
+  mfaVerifiedAt DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+  ip            String?
+  userAgent     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+}
+
+// ============================================================ Maktab tuzilmasi
+
+model AcademicYear {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String   @unique
+  startsOn  DateTime @db.Date
+  endsOn    DateTime @db.Date
+  isCurrent Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  classes             Class[]
+  enrollments         Enrollment[]
+  teachingAssignments TeachingAssignment[]
+  tests               TestTemplate[]
+  sessions            AssessmentSession[]
+
+  @@unique([isCurrent], where: raw("\"isCurrent\" = true"), map: "AcademicYear_single_current_key")
+}
+
+model Class {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  academicYearId    String    @db.Uuid
+  gradeLevel        Int
+  section           String
+  /// Ko‘rinish nomi, masalan “9-A”.
+  name              String
+  /// Sinf rahbari — alohida hisob turi emas, o‘qituvchiga beriladigan sinf doirasidagi vakolat.
+  homeroomTeacherId String?   @db.Uuid
+  archivedAt        DateTime?
+  createdAt         DateTime  @default(now())
+
+  academicYear        AcademicYear         @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  homeroomTeacher     User?                @relation("Homeroom", fields: [homeroomTeacherId], references: [id], onDelete: SetNull)
+  enrollments         Enrollment[]
+  teachingAssignments TeachingAssignment[]
+  sessionAssignments  SessionAssignment[]
+
+  @@unique([academicYearId, name])
+  @@index([homeroomTeacherId])
+}
+
+model Subject {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String   @unique
+  shortName String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  teachingAssignments TeachingAssignment[]
+  questions           Question[]
+  tests               TestTemplate[]
+  sessions            AssessmentSession[]
+  portfolioItems      PortfolioItem[]
+}
+
+/// Sinfga a’zolik o‘quv yili va amal qilish sanalari bilan yuritiladi.
+/// `endsOn` bo‘sh bo‘lsa — a’zolik faol. O‘quvchi o‘quv yili ichida bitta faol a’zolikka ega.
+model Enrollment {
+  id             String               @id @default(uuid(7)) @db.Uuid
+  studentId      String               @db.Uuid
+  classId        String               @db.Uuid
+  academicYearId String               @db.Uuid
+  startsOn       DateTime             @db.Date
+  endsOn         DateTime?            @db.Date
+  endReason      EnrollmentEndReason?
+  createdAt      DateTime             @default(now())
+
+  student      User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class        Class        @relation(fields: [classId], references: [id], onDelete: Restrict)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, academicYearId], where: raw("\"endsOn\" IS NULL"), map: "Enrollment_single_active_key")
+  @@index([classId, endsOn])
+  @@index([studentId])
+}
+
+/// O‘qituvchi – fan – sinf biriktiruvi.
+model TeachingAssignment {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  teacherId      String   @db.Uuid
+  subjectId      String   @db.Uuid
+  classId        String   @db.Uuid
+  academicYearId String   @db.Uuid
+  createdAt      DateTime @default(now())
+
+  teacher      User         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  class        Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
+  @@unique([teacherId, subjectId, classId])
+  @@index([classId])
+}
+
+// ============================================================ Savollar banki
+
+model Question {
+  id              String             @id @default(uuid(7)) @db.Uuid
+  ownerId         String             @db.Uuid
+  subjectId       String             @db.Uuid
+  gradeLevel      Int?
+  topic           String?
+  tags            String[]
+  visibility      QuestionVisibility @default(PRIVATE)
+  latestVersionNo Int                @default(1)
+  /// Qidiruv uchun: savolning so‘nggi matni va mavzusi (normallashtirilgan).
+  searchText      String             @default("")
+  archivedAt      DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  owner    User              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  subject  Subject           @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  versions QuestionVersion[]
+
+  @@index([ownerId, archivedAt])
+  @@index([subjectId, gradeLevel])
+}
+
+/// Savol versiyasi. Muzlatilgan test versiyasida ishlatilgach (`lockedAt`) o‘zgarmaydi —
+/// tahrir yangi versiya yaratadi.
+model QuestionVersion {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  questionId  String       @db.Uuid
+  versionNo   Int
+  type        QuestionType @default(SINGLE_CHOICE)
+  stem        String
+  /// [{ id, text }]
+  options     Json
+  /// SINGLE_CHOICE: { correctOptionId }
+  answerKey   Json
+  explanation String?
+  /// Bilish / qo‘llash / mulohaza — qiyinlik darajasidan alohida saqlanadi.
+  category    Category
+  difficulty  Difficulty
+  /// Standart maksimal ball (testda boshqacha belgilanishi mumkin).
+  points      Decimal      @db.Decimal(6, 2)
+  lockedAt    DateTime?
+  createdById String       @db.Uuid
+  createdAt   DateTime     @default(now())
+
+  question      Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  testQuestions TestQuestion[]
+
+  @@unique([questionId, versionNo])
+}
+
+// ============================================================ Testlar
+
+/// Test shabloni: savollar to‘plami, ballar, ketma-ketlik va asosiy sozlamalar.
+model TestTemplate {
+  id               String     @id @default(uuid(7)) @db.Uuid
+  ownerId          String     @db.Uuid
+  /// Dastlabki muallif (nusxa olinganda ham saqlanadi).
+  originalAuthorId String     @db.Uuid
+  copiedFromId     String?    @db.Uuid
+  title            String
+  subjectId        String     @db.Uuid
+  gradeLevel       Int
+  topic            String?
+  goal             String?
+  language         String     @default("uz")
+  academicYearId   String?    @db.Uuid
+  tags             String[]
+  folder           String?
+  instructions     String?
+  status           TestStatus @default(DRAFT)
+  searchText       String     @default("")
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  owner          User          @relation("TestOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  originalAuthor User          @relation("TestAuthor", fields: [originalAuthorId], references: [id], onDelete: Restrict)
+  copiedFrom     TestTemplate? @relation("TestCopies", fields: [copiedFromId], references: [id], onDelete: SetNull)
+  copies         TestTemplate[] @relation("TestCopies")
+  subject        Subject       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  academicYear   AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  versions       TestVersion[]
+  shares         TestShare[]
+
+  @@index([ownerId, status])
+  @@index([subjectId, gradeLevel])
+}
+
+/// Test versiyasi. `DRAFT` — tahrirlanadigan ish nusxasi; `FROZEN` — sessiyalar ishlatadigan
+/// muzlatilgan nusxa, keyin hech qachon o‘zgarmaydi.
+model TestVersion {
+  id           String            @id @default(uuid(7)) @db.Uuid
+  templateId   String            @db.Uuid
+  versionNo    Int
+  status       TestVersionStatus @default(DRAFT)
+  /// Muzlatish paytidagi nom va ko‘rsatmalar.
+  title        String
+  instructions String?
+  /// Tuzilma: { KNOWLEDGE: { count, pointsEach }, ... }
+  blueprint    Json              @default("{}")
+  totalPoints  Decimal           @default(0) @db.Decimal(8, 2)
+  frozenAt     DateTime?
+  frozenById   String?           @db.Uuid
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  template  TestTemplate        @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  frozenBy  User?               @relation(fields: [frozenById], references: [id], onDelete: SetNull)
+  questions TestQuestion[]
+  sessions  AssessmentSession[]
+
+  @@unique([templateId, versionNo])
+  @@index([templateId, status])
+}
+
+model TestQuestion {
+  id                String  @id @default(uuid(7)) @db.Uuid
+  testVersionId     String  @db.Uuid
+  questionVersionId String  @db.Uuid
+  position          Int
+  /// Shu testdagi maksimal ball.
+  points            Decimal @db.Decimal(6, 2)
+
+  testVersion     TestVersion     @relation(fields: [testVersionId], references: [id], onDelete: Cascade)
+  questionVersion QuestionVersion @relation(fields: [questionVersionId], references: [id], onDelete: Restrict)
+  answers         Answer[]
+
+  @@unique([testVersionId, questionVersionId])
+  @@index([testVersionId, position])
+}
+
+/// O‘qituvchilar hamkorligi: faqat ko‘rish, nusxa olish yoki birgalikda tahrirlash.
+model TestShare {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  templateId  String          @db.Uuid
+  userId      String          @db.Uuid
+  permission  SharePermission
+  createdById String          @db.Uuid
+  createdAt   DateTime        @default(now())
+
+  template  TestTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  user      User         @relation("ShareTarget", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User         @relation("ShareCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([templateId, userId])
+}
+
+// ============================================================ Test sessiyalari
+
+/// Muayyan sinf/guruh, vaqt, kirish kodi va o‘tkazuvchi biriktirilgan tadbir.
+model AssessmentSession {
+  id                       String           @id @default(uuid(7)) @db.Uuid
+  testVersionId            String           @db.Uuid
+  title                    String
+  subjectId                String           @db.Uuid
+  academicYearId           String?          @db.Uuid
+  createdById              String           @db.Uuid
+  conductorId              String           @db.Uuid
+  startsAt                 DateTime
+  endsAt                   DateTime
+  /// Kirish muddati: undan keyin yangi urinish boshlanmaydi (bo‘sh — sessiya yopilguncha).
+  entryClosesAt            DateTime?
+  durationMinutes          Int
+  maxAttempts              Int              @default(1)
+  attemptPolicy            AttemptPolicy    @default(FIRST)
+  shuffleQuestions         Boolean          @default(false)
+  shuffleOptions           Boolean          @default(false)
+  allowBackNavigation      Boolean          @default(true)
+  scoreVisibility          ScoreVisibility  @default(AFTER_ALL_DONE)
+  reviewVisibility         ReviewVisibility @default(AFTER_CLOSE)
+  passPercent              Decimal?         @db.Decimal(5, 2)
+  categoryThresholdPercent Decimal          @default(60) @db.Decimal(5, 2)
+  retakeRule               String?
+  /// Sessiyaga tegishli tasodifiy va muddatli kirish kodi.
+  accessCode               String
+  accessCodeVersion        Int              @default(1)
+  accessCodeRotatedAt      DateTime?
+  resultsPublishedAt       DateTime?
+  reviewOpenedAt           DateTime?
+  reminderSentAt           DateTime?
+  cancelledAt              DateTime?
+  cancelReason             String?
+  /// Joriy baholash versiyasi (qayta baholashda oshadi).
+  gradingVersion           Int              @default(1)
+  /// Qayta baholash siyosati: { [testQuestionId]: { mode, correctOptionId? } }
+  gradingOverrides         Json             @default("{}")
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  testVersion    TestVersion         @relation(fields: [testVersionId], references: [id], onDelete: Restrict)
+  subject        Subject             @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  academicYear   AcademicYear?       @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  createdBy      User                @relation("SessionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  conductor      User                @relation("SessionConductor", fields: [conductorId], references: [id], onDelete: Restrict)
+  assignments    SessionAssignment[]
+  attempts       Attempt[]
+  gradeRevisions GradeRevision[]
+
+  @@index([startsAt])
+  @@index([conductorId])
+  @@index([createdById])
+}
+
+/// Sessiyaga tayinlangan o‘quvchi. Tayinlash paytidagi sinf saqlanadi: o‘quvchi keyin boshqa
+/// sinfga o‘tsa ham tarixiy natija eski sinf bilan qoladi. Olib tashlash ham qayd etiladi.
+model SessionAssignment {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  sessionId    String    @db.Uuid
+  studentId    String    @db.Uuid
+  classId      String?   @db.Uuid
+  /// Maxsus qo‘shimcha vaqt (daqiqa).
+  extraMinutes Int       @default(0)
+  assignedAt   DateTime  @default(now())
+  assignedById String    @db.Uuid
+  removedAt    DateTime?
+  removedById  String?   @db.Uuid
+  removeReason String?
+
+  session    AssessmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student    User              @relation("AssignmentStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  class      Class?            @relation(fields: [classId], references: [id], onDelete: SetNull)
+  assignedBy User              @relation("AssignmentCreator", fields: [assignedById], references: [id], onDelete: Restrict)
+  removedBy  User?             @relation("AssignmentRemover", fields: [removedById], references: [id], onDelete: SetNull)
+  attempts   Attempt[]
+
+  @@unique([sessionId, studentId])
+  @@index([studentId])
+}
+
+/// Bitta o‘quvchining aynan shu sessiyadagi javoblari, holati va bahosi.
+model Attempt {
+  id                 String        @id @default(uuid(7)) @db.Uuid
+  sessionId          String        @db.Uuid
+  assignmentId       String        @db.Uuid
+  studentId          String        @db.Uuid
+  attemptNo          Int
+  status             AttemptStatus @default(IN_PROGRESS)
+  startedAt          DateTime      @default(now())
+  /// Server hisoblagan yakun vaqti. Brauzer soati bunga ta’sir qilmaydi.
+  deadlineAt         DateTime
+  submittedAt        DateTime?
+  submitSource       SubmitSource?
+  /// Urinish boshlanishida saqlangan savollar tartibi (TestQuestion.id ro‘yxati).
+  questionOrder      String[]
+  /// { [testQuestionId]: [optionId, ...] }
+  optionOrder        Json          @default("{}")
+  /// Ortga qaytish taqiqlanganda o‘quvchi yetib kelgan eng uzoq savol.
+  progressIndex      Int           @default(0)
+  /// Javob yozishga ruxsat berilgan qurilma (bir vaqtda ikki qurilmadan yozishni cheklash).
+  activeClientId     String?
+  deviceChangeCount  Int           @default(0)
+  lastSeenAt         DateTime?
+  focusLossCount     Int           @default(0)
+  score              Decimal?      @db.Decimal(8, 2)
+  maxScore           Decimal?      @db.Decimal(8, 2)
+  /// { KNOWLEDGE: { earned, max }, ... }
+  categoryScores     Json?
+  gradedAt           DateTime?
+  gradingVersion     Int?
+  cancelledAt        DateTime?
+  cancelledById      String?       @db.Uuid
+  cancelReason       String?
+  /// Bekor qilingan urinish urinishlar limitiga kiradimi.
+  countsTowardLimit  Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  session     AssessmentSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  assignment  SessionAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student     User               @relation("AttemptStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  cancelledBy User?              @relation("AttemptCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
+  answers     Answer[]
+  gradeItems  GradeRevisionItem[]
+
+  @@unique([sessionId, studentId, attemptNo])
+  @@index([status, deadlineAt])
+  @@index([studentId])
+}
+
+model Answer {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  attemptId      String    @db.Uuid
+  testQuestionId String    @db.Uuid
+  /// SINGLE_CHOICE: tanlangan variant (bo‘sh — javobsiz).
+  optionId       String?
+  /// Mijozdagi o‘zgarish raqami: eski so‘rov yangisini bosib ketmaydi.
+  revision       Int
+  savedAt        DateTime  @default(now())
+  isCorrect      Boolean?
+  pointsAwarded  Decimal?  @db.Decimal(6, 2)
+
+  attempt      Attempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  testQuestion TestQuestion @relation(fields: [testQuestionId], references: [id], onDelete: Restrict)
+
+  @@unique([attemptId, testQuestionId])
+}
+
+/// Qayta baholash hodisasi: sabab, siyosat va yangi baholash versiyasi.
+model GradeRevision {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  sessionId     String   @db.Uuid
+  version       Int
+  reason        String
+  /// { testQuestionId, mode, correctOptionId? }
+  change        Json
+  affectedCount Int
+  createdById   String   @db.Uuid
+  createdAt     DateTime @default(now())
+
+  session   AssessmentSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdBy User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items     GradeRevisionItem[]
+
+  @@unique([sessionId, version])
+}
+
+/// Qayta baholangan har bir urinishning oldingi va yangi natijasi.
+model GradeRevisionItem {
+  id         String @id @default(uuid(7)) @db.Uuid
+  revisionId String @db.Uuid
+  attemptId  String @db.Uuid
+  before     Json
+  after      Json
+
+  revision GradeRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  attempt  Attempt       @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+}
+
+// ============================================================ Portfolio va fayllar
+
+model PortfolioItem {
+  id             String              @id @default(uuid(7)) @db.Uuid
+  ownerId        String              @db.Uuid
+  type           PortfolioItemType
+  title          String
+  subjectId      String?             @db.Uuid
+  direction      String?
+  description    String?
+  organization   String?
+  date           DateTime?           @db.Date
+  level          AchievementLevel?
+  result         String?
+  evidenceFileId String?             @db.Uuid
+  evidenceUrl    String?
+  visibility     PortfolioVisibility @default(STAFF)
+  status         PortfolioStatus     @default(DRAFT)
+  reviewerId     String?             @db.Uuid
+  reviewedAt     DateTime?
+  returnReason   String?
+  submittedAt    DateTime?
+  searchText     String              @default("")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  owner        User              @relation("PortfolioOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  reviewer     User?             @relation("PortfolioReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  subject      Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  evidenceFile FileAsset?        @relation(fields: [evidenceFileId], references: [id], onDelete: SetNull)
+  reviews      PortfolioReview[]
+
+  @@index([ownerId, status])
+  @@index([status])
+}
+
+model PortfolioReview {
+  id         String          @id @default(uuid(7)) @db.Uuid
+  itemId     String          @db.Uuid
+  reviewerId String          @db.Uuid
+  decision   PortfolioStatus
+  reason     String?
+  /// Tasdiqlash paytidagi yozuv maydonlari.
+  snapshot   Json
+  createdAt  DateTime        @default(now())
+
+  item     PortfolioItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  reviewer User          @relation(fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([itemId])
+}
+
+/// Yopiq fayl ombori: fayllar faqat ruxsat tekshiruvidan keyin server orqali beriladi.
+model FileAsset {
+  id           String     @id @default(uuid(7)) @db.Uuid
+  ownerId      String     @db.Uuid
+  storageKey   String     @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  status       FileStatus @default(CLEAN)
+  createdAt    DateTime   @default(now())
+  deletedAt    DateTime?
+
+  owner          User            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  portfolioItems PortfolioItem[]
+}
+
+// ============================================================ Bildirishnoma, eksport, import, audit
+
+model Notification {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @db.Uuid
+  type      String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+model ExportJob {
+  id            String       @id @default(uuid(7)) @db.Uuid
+  requestedById String       @db.Uuid
+  kind          ExportKind
+  /// Eksport manbai (masalan, sessiya identifikatori).
+  sessionId     String?      @db.Uuid
+  /// Qo‘llangan filtrlar va maydonlar.
+  params        Json         @default("{}")
+  status        ExportStatus @default(QUEUED)
+  rowCount      Int?
+  fileKey       String?
+  fileName      String?
+  error         String?
+  createdAt     DateTime     @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  expiresAt     DateTime?
+  downloadCount Int          @default(0)
+
+  requestedBy User @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([requestedById, createdAt])
+}
+
+/// Excel orqali hisoblar importi: yuklangan qatorlar tasdiqlashgacha shu yerda saqlanadi.
+model ImportBatch {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  createdById String    @db.Uuid
+  fileName    String
+  /// Birinchi qator sarlavhalari.
+  headers     Json
+  /// Qolgan qatorlar (matn ko‘rinishida).
+  rows        Json
+  committedAt DateTime?
+  createdAt   DateTime  @default(now())
+  /// Import natijasi: yaratilganlar soni, xatolar.
+  summary     Json?
+
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Cascade)
+}
+
+/// Muhim amallar jurnali. Faqat qo‘shiladi: UPDATE va DELETE baza triggeri bilan taqiqlangan,
+/// super admin ham odatiy interfeys orqali yozuvlarni o‘chira olmaydi.
+model AuditEvent {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?  @db.Uuid
+  actorRoles Role[]
+  action     String
+  entityType String?
+  entityId   String?
+  data       Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+}
