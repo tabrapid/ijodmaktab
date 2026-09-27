@@ -80,7 +80,7 @@ So‘ng yuqoridagi qadamlarni `docker compose up -d` siz davom ettiring.
 
 | Belgi | Yechim |
 |---|---|
-| `port 5432 is already allocated` | Kompyuterda boshqa PostgreSQL ishlayapti: uni to‘xtating yoki `docker-compose.yml` da `'5433:5432'` qiling va `apps/api/.env` dagi manzilni `localhost:5433` ga o‘zgartiring |
+| `P1010: User was denied access on the database (not available)` yoki `port 5432 is already allocated` | 5432-portni kompyuterdagi boshqa PostgreSQL (Homebrew, Postgres.app) band qilgan va so‘rovlar Docker’dagi bazaga emas, o‘shanga boryapti (u yerda `ijod` foydalanuvchisi yo‘q). Tekshirish: `lsof -nP -iTCP:5432 -sTCP:LISTEN`. Yechim: loyiha ildizida `.env` fayliga `POSTGRES_PORT=5433` yozing, `docker compose up -d`, so‘ng `apps/api/.env` dagi ikkala manzilda `localhost:5432` → `localhost:5433`. Yoki boshqa PostgreSQL’ni to‘xtating (`brew services stop postgresql@16` / Postgres.app’dan chiqish) |
 | `APP_ENCRYPTION_KEY 32 baytlik base64 qiymat bo‘lishi kerak`, veb jurnalida `ECONNREFUSED ...:4000` | `pnpm env:setup` ni bajaring va `pnpm dev` ni qayta ishga tushiring (`.env` o‘zgarishi avtomatik o‘qilmaydi) |
 | `Cannot find module .../generated/prisma/client.js` | `pnpm --filter @ijod/api db:generate` |
 | 3000 yoki 4000 port band | Band qilgan dasturni yoping. Aks holda: veb porti — `apps/web/package.json` (`--port`) va `apps/api/.env` dagi `WEB_ORIGIN`; API porti — `apps/api/.env` dagi `PORT` va `apps/web/.env` dagi `API_URL` |

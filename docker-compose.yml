@@ -1,5 +1,7 @@
 # Mahalliy ishlab chiqish uchun PostgreSQL.
 # Ishga tushirish: docker compose up -d
+# Kompyuterda boshqa PostgreSQL 5432-portni band qilgan bo‘lsa, loyiha ildizidagi .env fayliga
+# POSTGRES_PORT=5433 yozing va apps/api/.env dagi manzillarni localhost:5433 ga o‘zgartiring.
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,7 +12,7 @@ services:
       POSTGRES_DB: ijod
       TZ: UTC
     ports:
-      - '5432:5432'
+      - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
