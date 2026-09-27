@@ -45,20 +45,29 @@ Kerak bo‘ladi:
 - **PostgreSQL 16** — eng osoni **Docker Desktop** orqali (quyida). Docker bo‘lmasa, PostgreSQL 16 ni
   o‘rnating va “Dockersiz” bo‘limidagi SQL ni bajaring.
 
-Buyruqlar macOS/Linux terminalida ham, Windows PowerShell’da ham bir xil ishlaydi:
+Docker Desktop ochiq bo‘lsin. Buyruqlar macOS/Linux terminalida ham, Windows PowerShell’da ham bir xil ishlaydi:
 
 ```bash
 git clone -b claude/confident-sagan-g9fdfs https://github.com/tabrapid/ijodmaktab.git
 cd ijodmaktab
-pnpm install                               # Prisma klienti ham avtomatik yaratiladi
+pnpm install          # bog‘liqliklar (Prisma klienti ham avtomatik yaratiladi)
+pnpm local:setup      # .env va shifrlash kaliti, Docker’da PostgreSQL, migratsiyalar, demo ma’lumotlar
+pnpm dev              # veb: http://localhost:3000, API: http://localhost:4000/api
+```
 
+`pnpm local:setup` 5432-portda kompyuterdagi boshqa PostgreSQL (Homebrew, Postgres.app) javob berayotganini
+o‘zi aniqlaydi: Docker bazasini bo‘sh portga ko‘chiradi (loyiha ildizidagi `.env` → `POSTGRES_PORT`) va
+`apps/api/.env` dagi manzillarni moslaydi. Uni qayta ishga tushirish xavfsiz — tayyor qadamlar o‘zgarmaydi.
+
+Qadamlarni qo‘lda bajarish:
+
+```bash
 docker compose up -d                       # PostgreSQL 16 + test uchun ijod_test bazasi
 pnpm env:setup                             # .env fayllari va shifrlash kaliti (APP_ENCRYPTION_KEY)
-
 pnpm --filter @ijod/shared build
 pnpm db:deploy                             # jadvallar (migratsiyalar)
 pnpm db:seed                               # demo maktab (faqat mahalliy!)
-pnpm dev                                   # veb: http://localhost:3000, API: http://localhost:4000/api
+pnpm dev
 ```
 
 `pnpm dev` ishga tushgach brauzerda **http://localhost:3000** ni oching. To‘xtatish — terminalda `Ctrl+C`,
@@ -80,7 +89,7 @@ So‘ng yuqoridagi qadamlarni `docker compose up -d` siz davom ettiring.
 
 | Belgi | Yechim |
 |---|---|
-| `P1010: User was denied access on the database (not available)` yoki `port 5432 is already allocated` | 5432-portni kompyuterdagi boshqa PostgreSQL (Homebrew, Postgres.app) band qilgan va so‘rovlar Docker’dagi bazaga emas, o‘shanga boryapti (u yerda `ijod` foydalanuvchisi yo‘q). Tekshirish: `lsof -nP -iTCP:5432 -sTCP:LISTEN`. Yechim: loyiha ildizida `.env` fayliga `POSTGRES_PORT=5433` yozing, `docker compose up -d`, so‘ng `apps/api/.env` dagi ikkala manzilda `localhost:5432` → `localhost:5433`. Yoki boshqa PostgreSQL’ni to‘xtating (`brew services stop postgresql@16` / Postgres.app’dan chiqish) |
+| `P1010: User was denied access on the database (not available)` yoki `port 5432 is already allocated` | 5432-portni kompyuterdagi boshqa PostgreSQL (Homebrew, Postgres.app) band qilgan va so‘rovlar Docker’dagi bazaga emas, o‘shanga boryapti (u yerda `ijod` foydalanuvchisi yo‘q). Eng osoni: `pnpm local:setup` (portni o‘zi almashtiradi). Qo‘lda: loyiha ildizida `.env` fayliga `POSTGRES_PORT=5433` yozing, `docker compose up -d`, so‘ng `apps/api/.env` dagi ikkala manzilda `localhost:5432` → `localhost:5433`. Yoki boshqa PostgreSQL’ni to‘xtating (`brew services stop postgresql@16` / Postgres.app’dan chiqish) |
 | `APP_ENCRYPTION_KEY 32 baytlik base64 qiymat bo‘lishi kerak`, veb jurnalida `ECONNREFUSED ...:4000` | `pnpm env:setup` ni bajaring va `pnpm dev` ni qayta ishga tushiring (`.env` o‘zgarishi avtomatik o‘qilmaydi) |
 | `Cannot find module .../generated/prisma/client.js` | `pnpm --filter @ijod/api db:generate` |
 | 3000 yoki 4000 port band | Band qilgan dasturni yoping. Aks holda: veb porti — `apps/web/package.json` (`--port`) va `apps/api/.env` dagi `WEB_ORIGIN`; API porti — `apps/api/.env` dagi `PORT` va `apps/web/.env` dagi `API_URL` |
