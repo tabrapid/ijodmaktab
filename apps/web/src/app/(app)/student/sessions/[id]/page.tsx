@@ -33,7 +33,7 @@ function requestFullscreen() {
 function Rule({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
   return (
     <div className="flex items-start gap-3">
-      <span className="mt-0.5 text-brand-600">{icon}</span>
+      <span className="mt-0.5 text-brand-700">{icon}</span>
       <div>
         <p className="text-xs text-slate-500">{label}</p>
         <p className="text-sm font-medium text-slate-900">{value}</p>

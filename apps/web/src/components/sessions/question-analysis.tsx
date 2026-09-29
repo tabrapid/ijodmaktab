@@ -260,7 +260,7 @@ export function QuestionAnalysis({ session }: { session: SessionDetail }) {
                     ))}
                   </ul>
                 )}
-                <div className="grid gap-4 lg:grid-cols-[1fr_16rem]">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
                   <OptionBars question={question} stats={stats} />
                   <dl className="space-y-1 text-sm">
                     <div className="flex justify-between gap-2">

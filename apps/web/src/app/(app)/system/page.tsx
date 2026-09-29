@@ -77,8 +77,8 @@ function BackupCard({ backup }: { backup: SystemDashboard['backup'] }) {
           <span
             className={
               !backup.configured || ageHours === null || stale
-                ? 'flex size-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600'
-                : 'flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600'
+                ? 'flex size-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-700'
+                : 'flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700'
             }
           >
             <Database className="size-5" aria-hidden />

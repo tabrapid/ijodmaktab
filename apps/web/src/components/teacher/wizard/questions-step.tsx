@@ -294,7 +294,7 @@ function QuestionRow({
               <Pencil className="size-4" />
             </Button>
             <Button size="sm" variant="ghost" onClick={onRemove} aria-label="Testdan olib tashlash">
-              <Trash2 className="size-4 text-red-600" />
+              <Trash2 className="size-4 text-red-700" />
             </Button>
           </div>
         )}

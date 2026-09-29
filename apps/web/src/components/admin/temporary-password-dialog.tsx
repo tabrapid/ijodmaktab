@@ -59,7 +59,7 @@ export function CopyButton({
       onClick={onCopy}
       className={className}
       icon={
-        copied ? <Check className="size-4 text-emerald-600" aria-hidden /> : <Copy className="size-4" aria-hidden />
+        copied ? <Check className="size-4 text-emerald-700" aria-hidden /> : <Copy className="size-4" aria-hidden />
       }
     >
       <span aria-live="polite">{copied ? 'Nusxalandi' : label}</span>

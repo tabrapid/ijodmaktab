@@ -649,10 +649,10 @@ export function PortfolioForm({
                 )}
               >
                 {upload.isPending ? (
-                  <Spinner className="size-5 text-brand-600" label="Fayl yuklanmoqda…" />
+                  <Spinner className="size-5 text-brand-700" label="Fayl yuklanmoqda…" />
                 ) : (
                   <>
-                    <FileUp className="size-6 text-brand-600" aria-hidden />
+                    <FileUp className="size-6 text-brand-700" aria-hidden />
                     <span className="text-sm font-medium text-slate-800">
                       {certificate ? 'Sertifikat faylini tanlash' : 'Fayl tanlash'}
                     </span>

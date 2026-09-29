@@ -3,6 +3,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { FileSpreadsheet, Upload } from 'lucide-react';
 import { useId, useState, type ChangeEvent, type DragEvent } from 'react';
+import { buttonClass } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Alert, Spinner } from '@/components/ui/feedback';
 import { TD, TH, THead, Table } from '@/components/ui/table';
@@ -130,7 +131,7 @@ export function ImportUpload({ onUploaded }: { onUploaded: (preview: ImportPrevi
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
             className={cn(
-              'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-10 text-center transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-500',
+              'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-10 text-center transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-(--focus-ring)',
               dragging
                 ? 'border-brand-400 bg-brand-50'
                 : 'border-slate-300 bg-slate-50 hover:border-brand-300 hover:bg-brand-50/40',
@@ -138,13 +139,13 @@ export function ImportUpload({ onUploaded }: { onUploaded: (preview: ImportPrevi
             )}
           >
             {upload.isPending ? (
-              <Spinner className="size-6 text-brand-600" label="Fayl tekshirilmoqda…" />
+              <Spinner className="size-6 text-brand-700" label="Fayl tekshirilmoqda…" />
             ) : (
               <>
-                <FileSpreadsheet className="size-10 text-emerald-600" aria-hidden />
+                <FileSpreadsheet className="size-10 text-emerald-700" aria-hidden />
                 <span className="font-medium text-slate-900">Excel faylni tanlang</span>
                 <span className="text-xs text-slate-500">yoki shu yerga sudrab tashlang (.xlsx)</span>
-                <span className="mt-2 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm">
+                <span className={buttonClass('primary', 'md', 'mt-2')}>
                   <Upload className="size-4" aria-hidden />
                   Fayl tanlash
                 </span>

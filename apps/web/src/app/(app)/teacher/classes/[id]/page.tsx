@@ -61,7 +61,7 @@ export default function TeacherClassPage() {
         description={`${data.academicYear.name} o‘quv yili · ${data.students.length} o‘quvchi · sinf rahbari: ${data.homeroomTeacher?.fullName ?? 'belgilanmagan'}`}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_24rem]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <Card>
           <CardHeader
             title="O‘quvchilar"

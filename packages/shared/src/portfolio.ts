@@ -209,9 +209,12 @@ export const isLegacyPortfolioDetails = (type: PortfolioItemType, details: unkno
 
 // ---------------------------------------------------------------- Ko‘rsatish
 
-const band = (value: number | undefined) => (value === undefined ? null : String(value));
+/** IELTS balli rasmiy hisobotdagidek bir kasr xonasi bilan: 7 → “7.0”, 6.5 → “6.5”. */
+export const formatIeltsBand = (value: number) => value.toFixed(1);
 
-/** Qisqa natija matni: “IELTS 7.5 (L 8 · R 7.5 · W 6.5 · S 7)”, “Matematika — A+ (95 ball)” va h.k. */
+const band = (value: number | undefined) => (value === undefined ? null : formatIeltsBand(value));
+
+/** Qisqa natija matni: “IELTS 7.5 (L 8.0 · R 7.5 · W 6.5 · S 7.0)”, “Matematika — A+ (95 ball)” va h.k. */
 export function portfolioDetailsSummary(type: PortfolioItemType, details: unknown): string | null {
   const parsed = parsePortfolioDetails(type, details);
   if (!parsed.success || !parsed.data) return null;
@@ -233,7 +236,7 @@ export function portfolioDetailsSummary(type: PortfolioItemType, details: unknow
         ['S', band(value.speaking)],
       ].filter(([, score]) => score !== null);
       const sections = parts.length ? ` (${parts.map(([label, score]) => `${label} ${score}`).join(' · ')})` : '';
-      return `IELTS ${value.overall}${sections}`;
+      return `IELTS ${formatIeltsBand(value.overall)}${sections}`;
     }
     case 'SAT': {
       const value = parsed.data as SatDetails;
@@ -356,9 +359,25 @@ type TrackedRecord = Partial<Record<PortfolioTrackedField, unknown>>;
 const pickFields = (record: TrackedRecord, fields: readonly PortfolioTrackedField[]): TrackedRecord =>
   Object.fromEntries(fields.map((field) => [field, record[field]]));
 
+/**
+ * Tuzilgan turda natija details dan yasaladi, shuning uchun solishtirishda saqlangan matn emas, uning
+ * joriy ko‘rinishi olinadi: natija formati o‘zgarsa (masalan, “IELTS 7” → “IELTS 7.0”) yolg‘on o‘zgarish
+ * chiqmaydi. Details’siz (avvalgi shakldagi) yozuvda saqlangan natija matni solishtiriladi.
+ */
+function withDerivedResult(record: TrackedRecord): TrackedRecord {
+  const type = record.type;
+  if (!Object.hasOwn(record, 'result') || typeof type !== 'string') return record;
+  if (!isStructuredPortfolioType(type as PortfolioItemType)) return record;
+  const summary = portfolioDetailsSummary(type as PortfolioItemType, record.details);
+  return summary === null ? record : { ...record, result: summary };
+}
+
 /** Faqat muhim maydonlar bo‘yicha o‘zgarishlar: bo‘sh bo‘lmasa, tasdiqlangan yozuv qoralamaga qaytadi. */
 export function portfolioKeyChanges(before: TrackedRecord, after: TrackedRecord): PortfolioFieldChange[] {
-  return portfolioChanges(pickFields(before, PORTFOLIO_KEY_FIELDS), pickFields(after, PORTFOLIO_KEY_FIELDS));
+  return portfolioChanges(
+    pickFields(withDerivedResult(before), PORTFOLIO_KEY_FIELDS),
+    pickFields(withDerivedResult(after), PORTFOLIO_KEY_FIELDS),
+  );
 }
 
 /**
@@ -371,7 +390,10 @@ export function portfolioChangesSince(
 ): PortfolioFieldChange[] {
   if (!snapshot || typeof snapshot !== 'object') return [];
   const fields = PORTFOLIO_TRACKED_FIELDS.filter((field) => Object.hasOwn(snapshot, field));
-  return portfolioChanges(pickFields(snapshot, fields), pickFields(current, fields));
+  return portfolioChanges(
+    pickFields(withDerivedResult(snapshot as TrackedRecord), fields),
+    pickFields(withDerivedResult(current), fields),
+  );
 }
 
 /**
@@ -456,9 +478,15 @@ export const PORTFOLIO_DETAIL_FIELD_LABELS: { [T in StructuredPortfolioType]: Re
   },
 };
 
-/** Details qiymatining ko‘rinishi: “Academic”, “1-o‘rin”, “01.05.2027”, 7.5 → “7.5”. */
+/** IELTS ballari saqlanadigan maydonlar (boshqa turlarda bu nomlar yo‘q). */
+const IELTS_BAND_FIELDS: ReadonlySet<string> = new Set(['overall', 'listening', 'reading', 'writing', 'speaking']);
+
+/** Details qiymatining ko‘rinishi: “Academic”, “1-o‘rin”, “01.05.2027”, IELTS 7 → “7.0”. */
 export function portfolioDetailValue(field: string, value: unknown): string {
   if (value === undefined || value === null || value === '') return '—';
+  if (IELTS_BAND_FIELDS.has(field) && typeof value === 'number' && Number.isFinite(value)) {
+    return formatIeltsBand(value);
+  }
   if (field === 'testType' && typeof value === 'string' && value in IELTS_TEST_TYPE_LABELS) {
     return IELTS_TEST_TYPE_LABELS[value as IeltsTestType];
   }
@@ -544,7 +572,7 @@ export function portfolioHighlight(type: PortfolioItemType, details: unknown): s
   if (!parsed.success || !parsed.data) return null;
   switch (type) {
     case 'IELTS':
-      return `IELTS ${(parsed.data as IeltsDetails).overall}`;
+      return `IELTS ${formatIeltsBand((parsed.data as IeltsDetails).overall)}`;
     case 'SAT':
       return `SAT ${(parsed.data as SatDetails).total}`;
     case 'CEFR': {

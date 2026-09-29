@@ -418,7 +418,7 @@ export function ResultsView({
                 <TH className="w-8">
                   <input
                     type="checkbox"
-                    className="size-4 rounded border-slate-300"
+                    className="size-4"
                     checked={allSelected}
                     onChange={() => setSelected(allSelected ? [] : rows.map((row) => row.studentId))}
                     aria-label="Barcha qatorlarni tanlash"
@@ -444,7 +444,7 @@ export function ResultsView({
                   <TD>
                     <input
                       type="checkbox"
-                      className="size-4 rounded border-slate-300"
+                      className="size-4"
                       checked={selected.includes(row.studentId)}
                       onChange={() => toggle(row.studentId)}
                       aria-label={`${row.fullName}ni tanlash`}
@@ -478,7 +478,7 @@ export function ResultsView({
                           <span className="inline-flex items-center gap-1">
                             {formatPercent(value.percent)}
                             {value.reached ? (
-                              <Check className="size-3.5 text-emerald-600" aria-label="chegaraga yetdi" />
+                              <Check className="size-3.5 text-emerald-700" aria-label="chegaraga yetdi" />
                             ) : (
                               <Minus className="size-3.5 text-slate-400" aria-label="chegaraga yetmadi" />
                             )}

@@ -71,7 +71,7 @@ export function TeacherSelect({
           </option>
         ))}
       </Select>
-      {staff.isError && <p className="text-xs font-medium text-red-600">O‘qituvchilar ro‘yxatini yuklab bo‘lmadi.</p>}
+      {staff.isError && <p className="text-xs font-medium text-red-700">O‘qituvchilar ro‘yxatini yuklab bo‘lmadi.</p>}
       {!staff.isPending && !staff.isError && teachers.length === 0 && (
         <p className="text-xs text-slate-500">
           {q ? 'Qidiruv bo‘yicha o‘qituvchi topilmadi.' : 'Faol o‘qituvchilar yo‘q.'}

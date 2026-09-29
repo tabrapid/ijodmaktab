@@ -1,6 +1,7 @@
 import {
   ACHIEVEMENT_LEVEL_LABELS,
   CREATIVE_PORTFOLIO_TYPES,
+  formatIeltsBand,
   IELTS_TEST_TYPE_LABELS,
   isStructuredPortfolioType,
   parsePortfolioDetails,
@@ -143,7 +144,7 @@ export function suggestTitle(
     }
     case 'IELTS': {
       const value = parsed.data as IeltsDetails;
-      return `IELTS ${IELTS_TEST_TYPE_LABELS[value.testType]} — ${value.overall}`;
+      return `IELTS ${IELTS_TEST_TYPE_LABELS[value.testType]} — ${formatIeltsBand(value.overall)}`;
     }
     case 'SAT':
       return `SAT — ${(parsed.data as SatDetails).total}`;

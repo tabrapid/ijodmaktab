@@ -245,7 +245,7 @@ export function ImportReview({
           label="To‘g‘ri"
           value={counts.ok}
           tone={counts.ok ? 'success' : 'default'}
-          icon={<CheckCircle2 className="size-4 text-emerald-600" aria-hidden />}
+          icon={<CheckCircle2 className="size-4 text-emerald-700" aria-hidden />}
         />
         <Stat
           label="Ogohlantirish"
@@ -329,7 +329,7 @@ export function ImportReview({
                     <TD>
                       <input
                         type="checkbox"
-                        className="size-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        className="size-4"
                         checked={skip.has(row.rowNumber)}
                         onChange={(event) => toggleSkip(row.rowNumber, event.target.checked)}
                         aria-label={`${row.rowNumber}-qatorni o‘tkazib yuborish`}

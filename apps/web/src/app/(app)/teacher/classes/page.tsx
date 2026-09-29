@@ -41,7 +41,7 @@ export default function TeacherClassesPage() {
               <Link
                 key={item.id}
                 href={`/teacher/classes/${item.id}`}
-                className="group block rounded-xl focus-visible:outline-2 focus-visible:outline-brand-500"
+                className="group block rounded-xl focus-visible:outline-2"
               >
                 <Card className="h-full transition-colors group-hover:border-brand-300">
                   <CardBody className="space-y-3">

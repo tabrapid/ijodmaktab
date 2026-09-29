@@ -32,10 +32,10 @@ const PAGE_SIZE = 25;
 const FILTER_DEFAULTS = { q: '', class: '', grade: '', pending: '', has: '', sort: 'class', page: '1' };
 
 const SORTS = [
-  { value: 'class', label: 'Sinf, keyin F.I.Sh.', sort: 'class', order: 'asc' },
+  { value: 'class', label: 'Sinf bo‘yicha', sort: 'class', order: 'asc' },
   { value: 'name', label: 'F.I.Sh. (A → Z)', sort: 'name', order: 'asc' },
-  { value: 'approved', label: 'Eng ko‘p tasdiqlangan yutuq', sort: 'approved', order: 'desc' },
-  { value: 'pending', label: 'Eng ko‘p kutilayotgan', sort: 'pending', order: 'desc' },
+  { value: 'approved', label: 'Ko‘p tasdiqlangan', sort: 'approved', order: 'desc' },
+  { value: 'pending', label: 'Ko‘p kutilayotgan', sort: 'pending', order: 'desc' },
   { value: 'lastActivity', label: 'Oxirgi faollik', sort: 'lastActivity', order: 'desc' },
 ] as const;
 
@@ -117,7 +117,8 @@ export function StudentDirectory() {
     <div className="space-y-4">
       <Card>
         <CardBody className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          {/* Tanlangan qiymat kesilmasligi uchun: noutbukda 3 ustun (2 qator), faqat keng ekranda 6 ustun. */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             <Field label="Qidirish" className="sm:col-span-2">
               <Input
                 type="search"
@@ -234,7 +235,7 @@ export function StudentDirectory() {
         ) : (
           <div className={cn('relative', list.isPlaceholderData && 'opacity-60')}>
             {list.isPlaceholderData && (
-              <div className="absolute top-2 right-3 text-brand-600">
+              <div className="absolute top-2 right-3 text-brand-700">
                 <Spinner className="size-4" label="Yangilanmoqda…" />
               </div>
             )}
@@ -245,7 +246,7 @@ export function StudentDirectory() {
                 <li key={item.id}>
                   <Link
                     href={`/portfolio/students/${item.id}`}
-                    className="flex gap-3 px-4 py-3 hover:bg-slate-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500"
+                    className="flex gap-3 px-4 py-3 hover:bg-slate-50 focus-visible:outline-2 focus-visible:-outline-offset-2"
                   >
                     <Avatar name={item.fullName} src={item.avatarUrl} size="md" />
                     <span className="min-w-0 flex-1 space-y-1">
@@ -269,7 +270,8 @@ export function StudentDirectory() {
               ))}
             </ul>
 
-            {/* Katta ekran: jadval */}
+            {/* Katta ekran: jadval. Noutbukda gorizontal aylantirish kerak bo‘lmasligi uchun sertifikat va
+                olimpiada soni (2xl dan kichikda) hamda oxirgi faollik (xl dan kichikda) qo‘shni katakka o‘tadi. */}
             <div className="hidden md:block">
               <Table caption="O‘quvchilar portfoliosi">
                 <THead>
@@ -278,16 +280,16 @@ export function StudentDirectory() {
                     <TH>Sinf</TH>
                     <TH className="text-right">Tasdiqlangan</TH>
                     <TH>Kutilmoqda</TH>
-                    <TH className="text-right">Sertifikatlar</TH>
-                    <TH className="text-right">Olimpiadalar</TH>
+                    <TH className="hidden text-right 2xl:table-cell">Sertifikatlar</TH>
+                    <TH className="hidden text-right 2xl:table-cell">Olimpiadalar</TH>
                     <TH>Asosiy natijalar</TH>
-                    <TH>Oxirgi faollik</TH>
+                    <TH className="hidden xl:table-cell">Oxirgi faollik</TH>
                   </tr>
                 </THead>
                 <tbody>
                   {items.map((item) => (
                     <TR key={item.id} className="cursor-pointer" onClick={() => open(item.id)}>
-                      <TD className="min-w-56">
+                      <TD className="min-w-48">
                         <div className="flex items-center gap-2.5">
                           <Avatar name={item.fullName} src={item.avatarUrl} size="sm" />
                           <div className="min-w-0">
@@ -299,6 +301,11 @@ export function StudentDirectory() {
                               {item.fullName}
                             </Link>
                             <p className="text-xs text-slate-500 tabular">ID {formatInternalId(item.internalId)}</p>
+                            {item.lastActivityAt && (
+                              <p className="text-xs text-slate-500 xl:hidden">
+                                Oxirgi faollik: {formatDate(item.lastActivityAt)}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </TD>
@@ -307,12 +314,17 @@ export function StudentDirectory() {
                       <TD className="whitespace-nowrap">
                         <PendingBadge count={item.counts.pending} />
                       </TD>
-                      <TD className="text-right tabular">{item.certificates}</TD>
-                      <TD className="text-right tabular">{item.olympiads}</TD>
-                      <TD className="min-w-48">
+                      <TD className="hidden text-right tabular 2xl:table-cell">{item.certificates}</TD>
+                      <TD className="hidden text-right tabular 2xl:table-cell">{item.olympiads}</TD>
+                      <TD className="min-w-40">
                         <Highlights items={item.highlights} />
+                        {(item.certificates > 0 || item.olympiads > 0) && (
+                          <p className="mt-1 text-xs text-slate-500 tabular 2xl:hidden">
+                            {item.certificates} ta sertifikat · {item.olympiads} ta olimpiada
+                          </p>
+                        )}
                       </TD>
-                      <TD className="text-sm whitespace-nowrap text-slate-600">
+                      <TD className="hidden text-sm whitespace-nowrap text-slate-600 xl:table-cell">
                         {item.lastActivityAt ? formatDate(item.lastActivityAt) : '—'}
                       </TD>
                     </TR>

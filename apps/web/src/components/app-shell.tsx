@@ -110,11 +110,13 @@ export function navFor(me: Pick<Me, 'roles' | 'homeroomClassIds'>): NavSection[]
           icon: CalendarClock,
           match: teacher ? undefined : ['/teacher/sessions'],
         },
+        // O‘qituvchi bo‘lmagan rahbar ham sessiya o‘tkazadi va natijalarni eksport qiladi.
         ...(teacher
           ? []
           : [
               { href: '/teacher/tests', label: 'Test banki', icon: FileText },
               { href: '/teacher/questions', label: 'Savollar banki', icon: Library },
+              { href: '/exports', label: 'Eksportlar', icon: Download },
             ]),
         { href: '/management/questions', label: 'Bank so‘rovlari', icon: Inbox },
         ...(hasRole(me, 'DEPUTY') && !hasRole(me, 'ADMIN', 'SUPER_ADMIN')

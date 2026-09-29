@@ -850,7 +850,7 @@ export function AttemptRunner({
                           checked={selected}
                           onChange={() => choose(question, option.id)}
                           disabled={conflict || finishing || remainingMs <= 0}
-                          className="mt-1 size-4 shrink-0 text-brand-600 focus:ring-brand-500"
+                          className="mt-1 size-4 shrink-0"
                         />
                         <span className="flex-1 text-base text-slate-800">
                           <span className="mr-2 font-semibold text-slate-500">{LETTERS[index]})</span>
@@ -876,7 +876,7 @@ export function AttemptRunner({
             {allowBack ? (
               <nav aria-label="Savollar" className="rounded-xl border border-slate-200 bg-surface p-4">
                 <p className="mb-3 text-xs font-medium text-slate-500">
-                  Savollar: <span className="inline-block size-2.5 rounded-sm bg-brand-500 align-middle" /> javob
+                  Savollar: <span className="inline-block size-2.5 rounded-sm bg-brand-600 align-middle" /> javob
                   berilgan, <span className="inline-block size-2.5 rounded-sm border border-slate-300 align-middle" />{' '}
                   javobsiz
                 </p>
@@ -990,7 +990,7 @@ export function AttemptRunner({
         footer={<Button onClick={() => void takeover()}>Shu qurilmada davom etish</Button>}
       >
         <div className="flex gap-3 text-sm text-slate-700">
-          <MonitorSmartphone className="size-8 shrink-0 text-brand-600" aria-hidden />
+          <MonitorSmartphone className="size-8 shrink-0 text-brand-700" aria-hidden />
           <p>
             Bu test boshqa qurilma yoki brauzer oynasida ochilgan. Bir vaqtda faqat bitta joydan javob yozish mumkin.
             Shu yerda davom ettirsangiz, boshqa oynada javob yozish to‘xtatiladi. Qurilma almashtirilgani qayd etiladi.

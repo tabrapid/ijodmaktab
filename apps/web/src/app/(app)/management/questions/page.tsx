@@ -82,7 +82,9 @@ function QuestionCard({
                       <span
                         className={cn(
                           'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-                          correct ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600',
+                          correct
+                            ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
+                            : 'bg-slate-100 text-slate-600',
                         )}
                         aria-hidden
                       >

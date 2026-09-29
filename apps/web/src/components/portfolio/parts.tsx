@@ -33,7 +33,7 @@ export function EvidenceLinks({
 }) {
   const external = safeExternalUrl(url);
   if (!file && !external)
-    return emptyText ? <p className={cn('text-sm text-slate-400', className)}>{emptyText}</p> : null;
+    return emptyText ? <p className={cn('text-sm text-slate-500', className)}>{emptyText}</p> : null;
   const linkClass = cn(
     'inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border border-slate-200 bg-surface px-2 py-1',
     'text-xs font-medium text-brand-700 hover:border-brand-200 hover:bg-brand-50',
@@ -125,7 +125,7 @@ export function ReturnReasonAlert({ reason, className }: { reason: string | null
 export function AuthorshipNote({ author, className }: { author: string; className?: string }) {
   return (
     <p className={cn('inline-flex items-center gap-1.5 text-xs text-slate-600', className)}>
-      <PenLine className="size-3.5 shrink-0 text-brand-600" aria-hidden />
+      <PenLine className="size-3.5 shrink-0 text-brand-700" aria-hidden />
       <span>
         Ijodiy ish · Muallif: <span className="font-medium text-slate-800">{author}</span>
       </span>

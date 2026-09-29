@@ -415,7 +415,7 @@ export function SessionControls({ session }: { session: SessionDetail }) {
 export function SessionOverview({ session }: { session: SessionDetail }) {
   const finishedShare = session.assignedCount ? (session.finishedCount / session.assignedCount) * 100 : null;
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="space-y-4">
         {session.state === 'CANCELLED' && (
           <Alert tone="danger" title={`Sessiya bekor qilingan (${formatDateTime(session.cancelledAt)})`}>

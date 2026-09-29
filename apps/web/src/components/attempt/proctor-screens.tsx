@@ -83,7 +83,7 @@ function Rule({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 export function FullscreenGate({ onStart, failed }: { onStart: () => void; failed: boolean }) {
   return (
     <Panel tone="brand" icon={<Maximize2 className="size-6" />} titleId="gate-title">
-      <h1 id="gate-title" className="mt-4 text-xl font-semibold text-slate-900">
+      <h1 id="gate-title" className="mt-4 font-display text-xl font-semibold text-slate-900">
         Test to‘liq ekranda ishlanadi
       </h1>
       <p className="mt-1 text-sm text-slate-600">Savollar to‘liq ekran rejimiga o‘tganingizdan so‘ng ko‘rinadi.</p>
@@ -142,7 +142,7 @@ export function LockedScreen({
         id="locked-title"
         ref={heading}
         tabIndex={-1}
-        className="mt-4 text-xl font-semibold text-red-700 outline-none"
+        className="mt-4 font-display text-xl font-semibold text-red-700 outline-none"
       >
         Test to‘xtatildi
       </h1>
@@ -197,7 +197,11 @@ export function UnlockedScreen({
 }) {
   return (
     <Panel tone="emerald" icon={<ShieldCheck className="size-6" />} titleId="unlocked-title">
-      <h1 id="unlocked-title" className="mt-4 text-xl font-semibold text-emerald-700" aria-live="assertive">
+      <h1
+        id="unlocked-title"
+        className="mt-4 font-display text-xl font-semibold text-emerald-700"
+        aria-live="assertive"
+      >
         O‘qituvchi ruxsat berdi
       </h1>
       <p className="mt-2 text-base text-slate-800">

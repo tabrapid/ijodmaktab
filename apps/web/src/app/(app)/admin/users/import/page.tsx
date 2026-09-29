@@ -44,7 +44,11 @@ function Stepper({ current }: { current: Step['kind'] }) {
             <span
               className={cn(
                 'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-                active ? 'bg-brand-600 text-white' : done ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600',
+                active
+                  ? 'bg-brand-600 text-white'
+                  : done
+                    ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
+                    : 'bg-slate-200 text-slate-600',
               )}
             >
               {done ? <Check className="size-3.5" aria-hidden /> : position + 1}

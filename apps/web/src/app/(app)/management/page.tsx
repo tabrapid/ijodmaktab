@@ -17,7 +17,7 @@ import type { LeadershipDashboard } from '@/lib/types';
 
 function LinkTile({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link href={href} className="block rounded-xl focus-visible:outline-2 focus-visible:outline-brand-500">
+    <Link href={href} className="block rounded-xl *:transition-colors hover:*:border-brand-300 focus-visible:outline-2">
       {children}
     </Link>
   );
@@ -100,7 +100,7 @@ export default function ManagementDashboardPage() {
           </div>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <Card>
             <CardBody>
               <ColumnChart
@@ -139,7 +139,7 @@ export default function ManagementDashboardPage() {
           </Card>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1fr_26rem]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_26rem]">
           <Card>
             <CardHeader
               title="Sinflar kesimida"

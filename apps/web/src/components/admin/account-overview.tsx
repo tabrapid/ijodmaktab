@@ -12,7 +12,7 @@ export function StatLink({ href, children }: { href: string; children: ReactNode
   return (
     <Link
       href={href}
-      className="block rounded-xl transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+      className="block rounded-xl transition-shadow *:transition-colors hover:shadow-md hover:*:border-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       {children}
     </Link>
@@ -181,7 +181,7 @@ export function AttentionAlerts({ data }: { data: AdminDashboard }) {
   return (
     <section aria-labelledby="attention-title" className="space-y-2">
       <h2 id="attention-title" className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-        <AlertTriangle className="size-4 text-amber-600" aria-hidden />
+        <AlertTriangle className="size-4 text-amber-700" aria-hidden />
         E’tibor talab qiladi
       </h2>
       {alerts}

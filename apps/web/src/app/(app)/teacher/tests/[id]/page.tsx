@@ -134,7 +134,7 @@ function ShareDialog({ test, open, onClose }: { test: TestDetail; open: boolean;
                     onClick={() => unshare.mutate(item.userId)}
                     aria-label={`${item.fullName} uchun ulashishni bekor qilish`}
                   >
-                    <Trash2 className="size-4 text-red-600" />
+                    <Trash2 className="size-4 text-red-700" />
                   </Button>
                 </span>
               </li>
@@ -489,7 +489,7 @@ function Wizard() {
         </Alert>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
         <nav aria-label="Test yaratish bosqichlari" className="lg:sticky lg:top-20 lg:self-start">
           <ol className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:gap-1 lg:overflow-visible">
             {STEPS.slice(0, maxStep).map((item, index) => {
@@ -525,7 +525,7 @@ function Wizard() {
                       <AlertCircle
                         className={cn(
                           'ml-auto size-4 shrink-0',
-                          badge === 'error' ? 'text-red-500' : 'text-amber-500',
+                          badge === 'error' ? 'text-red-700' : 'text-amber-700',
                           active && 'text-white',
                         )}
                         aria-label={badge === 'error' ? 'Xatolar bor' : 'Ogohlantirishlar bor'}

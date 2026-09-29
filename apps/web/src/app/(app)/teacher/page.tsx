@@ -1,7 +1,17 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, BadgeCheck, CalendarClock, FilePlus2, FileText, Library, Radio, Users } from 'lucide-react';
+import {
+  ArrowRight,
+  BadgeCheck,
+  CalendarClock,
+  CalendarPlus,
+  FilePlus2,
+  FileText,
+  Library,
+  Radio,
+  Users,
+} from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, formatHumanDateTime } from '@ijod/shared';
 import { BarList } from '@/components/charts/bar-list';
@@ -32,11 +42,11 @@ export default function TeacherHomePage() {
         description={`Bugun ${formatDate(new Date())}. Bugungi sessiyalar, so‘nggi natijalar va qiyin mavzular.`}
         actions={
           <>
-            <ButtonLink href="/teacher/tests" icon={<FilePlus2 className="size-4" />}>
-              Test yaratish
+            <ButtonLink href="/teacher/sessions/new" icon={<CalendarPlus className="size-4" />}>
+              Yangi sessiya
             </ButtonLink>
-            <ButtonLink href="/teacher/sessions" variant="outline" icon={<CalendarClock className="size-4" />}>
-              Sessiyalar
+            <ButtonLink href="/teacher/tests" variant="outline" icon={<FilePlus2 className="size-4" />}>
+              Test yaratish
             </ButtonLink>
           </>
         }
@@ -62,7 +72,7 @@ export default function TeacherHomePage() {
             />
             <Link
               href="/teacher/tests"
-              className="block rounded-xl focus-visible:outline-2 focus-visible:outline-brand-500"
+              className="block rounded-xl *:transition-colors hover:*:border-brand-300 focus-visible:outline-2"
             >
               <Stat
                 label="Qoralama testlar"
@@ -74,7 +84,7 @@ export default function TeacherHomePage() {
             {homeroom ? (
               <Link
                 href="/portfolio/review"
-                className="block rounded-xl focus-visible:outline-2 focus-visible:outline-brand-500"
+                className="block rounded-xl *:transition-colors hover:*:border-brand-300 focus-visible:outline-2"
               >
                 <Stat
                   label="Portfolio tasdiqlash"
@@ -87,7 +97,7 @@ export default function TeacherHomePage() {
             ) : (
               <Link
                 href="/teacher/questions"
-                className="block rounded-xl focus-visible:outline-2 focus-visible:outline-brand-500"
+                className="block rounded-xl *:transition-colors hover:*:border-brand-300 focus-visible:outline-2"
               >
                 <Stat
                   label="Savollar banki"
@@ -98,7 +108,7 @@ export default function TeacherHomePage() {
             )}
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[1fr_24rem]">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
             <div className="space-y-6">
               <Card>
                 <CardHeader title="Bugungi va davom etayotgan sessiyalar" />
@@ -106,10 +116,10 @@ export default function TeacherHomePage() {
                   <EmptyState
                     icon={CalendarClock}
                     title="Bugun sessiya yo‘q"
-                    description="Test yaratib, sinfga sessiya belgilang — o‘quvchilar kod bilan kiradi."
+                    description="O‘z testingizni yoki maktab test bankidagi testni tanlab, sinfga sessiya belgilang — o‘quvchilar kod bilan kiradi."
                     action={
-                      <ButtonLink href="/teacher/tests" size="sm">
-                        Testlarga o‘tish
+                      <ButtonLink href="/teacher/sessions/new" size="sm" icon={<CalendarPlus className="size-4" />}>
+                        Yangi sessiya
                       </ButtonLink>
                     }
                   />

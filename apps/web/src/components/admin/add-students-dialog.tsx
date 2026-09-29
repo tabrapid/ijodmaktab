@@ -63,7 +63,7 @@ function StudentSearch({
             Qidirish uchun kamida 2 ta harf yoki ichki ID raqamini kiriting. Faqat faol o‘quvchilar ko‘rsatiladi.
           </p>
         ) : results.isPending ? (
-          <div className="flex justify-center py-6 text-brand-600">
+          <div className="flex justify-center py-6 text-brand-700">
             <Spinner label="Qidirilmoqda…" />
           </div>
         ) : results.isError ? (
@@ -86,7 +86,7 @@ function StudentSearch({
                   >
                     <input
                       type="checkbox"
-                      className="size-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                      className="size-4 shrink-0"
                       checked={here || selected.has(student.id)}
                       disabled={here}
                       onChange={(event) => onToggle(student, event.target.checked)}
@@ -198,7 +198,7 @@ export function AddStudentsDialog({
                   <button
                     type="button"
                     onClick={() => toggle(student, false)}
-                    className="rounded-full p-0.5 text-brand-600 hover:bg-brand-100"
+                    className="rounded-full p-0.5 text-brand-700 hover:bg-brand-100"
                     aria-label={`${student.fullName} — tanlovdan olib tashlash`}
                   >
                     <X className="size-3.5" />

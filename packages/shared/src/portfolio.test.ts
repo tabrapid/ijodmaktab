@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatIeltsBand,
   ieltsOverallFromBands,
   isLegacyPortfolioDetails,
   parsePortfolioDetails,
@@ -8,7 +9,9 @@ import {
   portfolioChanges,
   portfolioChangesSince,
   portfolioDetailChanges,
+  portfolioDetailValue,
   portfolioDetailsSummary,
+  portfolioHighlight,
   portfolioKeyChanges,
   portfolioStoredFields,
 } from './portfolio.js';
@@ -37,7 +40,14 @@ describe('portfolio details', () => {
     );
     expect(
       portfolioDetailsSummary('IELTS', { overall: 7.5, listening: 8, reading: 7.5, writing: 6.5, speaking: 7 }),
-    ).toBe('IELTS 7.5 (L 8 · R 7.5 · W 6.5 · S 7)');
+    ).toBe('IELTS 7.5 (L 8.0 · R 7.5 · W 6.5 · S 7.0)');
+    // Butun ball ham rasmiy hisobotdagidek bir kasr xonasi bilan.
+    expect(portfolioDetailsSummary('IELTS', { overall: 7 })).toBe('IELTS 7.0');
+    expect(portfolioHighlight('IELTS', { overall: 6 })).toBe('IELTS 6.0');
+    expect(portfolioDetailValue('overall', 7)).toBe('7.0');
+    expect(portfolioDetailValue('speaking', 6.5)).toBe('6.5');
+    expect(portfolioDetailValue('score', 88)).toBe('88');
+    expect(formatIeltsBand(9)).toBe('9.0');
     expect(portfolioDetailsSummary('SAT', { total: 1450, readingWriting: 720, math: 730 })).toBe(
       'SAT 1450 (RW 720 · M 730)',
     );
@@ -91,6 +101,30 @@ describe('muhim maydonlar va snapshot farqi', () => {
     expect(portfolioKeyChanges(before, { ...before, description: 'Yangi', visibility: 'PRIVATE' })).toEqual([]);
     const changed = portfolioKeyChanges(before, { ...before, details: { overall: 7.5 } });
     expect(changed.map((change) => change.field)).toEqual(['details']);
+  });
+
+  it('tuzilgan turda natija matni details dan qayta yasalib solishtiriladi (format o‘zgarishi farq emas)', () => {
+    const stored = {
+      type: 'IELTS',
+      title: 'IELTS Academic — 7.0',
+      result: 'IELTS 7 (L 7.5)',
+      details: { testType: 'ACADEMIC', overall: 7, listening: 7.5 },
+    };
+    const current = { ...stored, result: 'IELTS 7.0 (L 7.5)' };
+    expect(portfolioKeyChanges(stored, current)).toEqual([]);
+    expect(portfolioChangesSince(stored, current)).toEqual([]);
+    const changed = portfolioChangesSince(stored, {
+      ...current,
+      details: { ...current.details, overall: 7.5 },
+      result: 'IELTS 7.5 (L 7.5)',
+    });
+    expect(changed.map((change) => change.field)).toEqual(['result', 'details']);
+    expect(changed[0]).toMatchObject({ before: 'IELTS 7.0 (L 7.5)', after: 'IELTS 7.5 (L 7.5)' });
+    // Details’siz (avvalgi shakldagi) olimpiadada saqlangan matn solishtiriladi.
+    const legacy = { type: 'OLYMPIAD', result: '2-o‘rin', details: null };
+    expect(portfolioKeyChanges(legacy, { ...legacy, result: '1-o‘rin' }).map((change) => change.field)).toEqual([
+      'result',
+    ]);
   });
 
   it('to‘liq bo‘lmagan eski snapshot faqat o‘zidagi maydonlar bo‘yicha solishtiriladi', () => {

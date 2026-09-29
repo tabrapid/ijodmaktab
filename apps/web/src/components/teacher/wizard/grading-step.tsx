@@ -88,7 +88,7 @@ export function GradingStep({ test, readOnly }: { test: TestDetail; readOnly: bo
                   />
                 </TD>
                 <TD className="font-semibold">
-                  {keyIndex >= 0 ? LETTERS[keyIndex] : <span className="text-red-600">yo‘q</span>}
+                  {keyIndex >= 0 ? LETTERS[keyIndex] : <span className="text-red-700">yo‘q</span>}
                 </TD>
                 <TD className="text-slate-500">{question.explanation ? 'bor' : '—'}</TD>
               </TR>

@@ -24,7 +24,7 @@ import {
   formatHumanDateTime,
   formatInternalId,
 } from '@ijod/shared';
-import { RequireRole } from '@/components/app-shell';
+import { RequireRole, useActiveNav } from '@/components/app-shell';
 import { Avatar } from '@/components/avatar';
 import { DetailsView } from '@/components/portfolio/details-view';
 import { AuthorshipNote, EvidenceLinks, LevelBadge, ReturnReasonAlert } from '@/components/portfolio/parts';
@@ -60,7 +60,7 @@ function DetailRow({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-const empty = <span className="text-slate-400">Ko‘rsatilmagan</span>;
+const empty = <span className="text-slate-500">Ko‘rsatilmagan</span>;
 
 function statusExplanation(item: PortfolioItemView) {
   switch (item.status) {
@@ -111,6 +111,16 @@ function ItemDetail() {
     enabled: valid,
   });
   const item = query.data;
+  // Boshqa foydalanuvchining yozuvi “Portfoliom” emas: menyuda uning portfoliosi turgan band faol bo‘ladi.
+  useActiveNav(
+    item && !item.isMine
+      ? hasRole(me, 'DEPUTY', 'SUPER_ADMIN')
+        ? '/management/portfolio'
+        : item.canReview || (me?.homeroomClassIds.length ?? 0) > 0
+          ? '/portfolio/review'
+          : '/teacher/classes'
+      : null,
+  );
   const back = backLink(item, me);
   const backElement = (
     <Link
@@ -174,7 +184,7 @@ function ItemDetail() {
         <Button
           variant="ghost"
           onClick={() => setDeleting(true)}
-          icon={<Trash2 className="size-4 text-red-600" aria-hidden />}
+          icon={<Trash2 className="size-4 text-red-700" aria-hidden />}
         >
           <span className="text-red-700">O‘chirish</span>
         </Button>
@@ -238,7 +248,7 @@ function ItemDetail() {
           <CardHeader
             title={
               <span className="inline-flex items-center gap-2">
-                <GitCompare className="size-4 text-amber-600" aria-hidden />
+                <GitCompare className="size-4 text-amber-700" aria-hidden />
                 Nima o‘zgardi
               </span>
             }

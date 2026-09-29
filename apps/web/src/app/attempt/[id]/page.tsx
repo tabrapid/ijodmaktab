@@ -52,7 +52,7 @@ export default function AttemptPage() {
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
         <div>
           <p className="text-sm text-slate-500">{view.session.subject.name}</p>
-          <h1 className="text-2xl font-semibold text-slate-900">{view.session.title}</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{view.session.title}</h1>
         </div>
         <AttemptResult view={view} />
         <ButtonLink href="/student" icon={<ArrowLeft className="size-4" />}>

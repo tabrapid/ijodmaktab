@@ -37,7 +37,7 @@ function EnterCode() {
         <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
             <label htmlFor="access-code" className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <KeyRound className="size-4 text-brand-600" aria-hidden />
+              <KeyRound className="size-4 text-brand-700" aria-hidden />
               Kodni kiritish
             </label>
             <p className="mt-0.5 text-xs text-slate-500">O‘qituvchi aytgan test kodini kiriting.</p>
@@ -64,7 +64,7 @@ function EnterCode() {
           </Button>
         </form>
         {find.isError && (
-          <p id="code-error" className="mt-2 text-sm font-medium text-red-600">
+          <p id="code-error" className="mt-2 text-sm font-medium text-red-700">
             {errorMessage(find.error)}
           </p>
         )}

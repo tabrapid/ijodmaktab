@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AccessService } from '../access/access.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { hasRole, isLeadership, isStaff } from '../common/auth-user.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import { ownerFacts, type ItemWithRelations, type OwnerFacts } from './portfolio-common.js';
 
 /**
@@ -63,11 +64,22 @@ export class PortfolioAccess {
     return scope.teacher && Boolean(owner.classId && scope.teaching.has(owner.classId));
   }
 
-  /** Yozuvni ko‘rish: egasi; tekshiruvchi; boshqa xodim — faqat “maktab xodimlari” ko‘rinishidagi yozuv. */
+  /**
+   * Yozuvni ko‘rish: egasi — hammasini; tekshiruvchi — qoralamadan boshqasini; boshqa xodim — faqat
+   * “maktab xodimlari” ko‘rinishidagi tasdiqlangan yozuvni. Qoralama faqat egasiga ko‘rinadi.
+   */
   canView(scope: PortfolioScope, item: ItemWithRelations) {
     if (item.ownerId === scope.viewer.id) return true;
-    if (this.canReview(scope, item)) return true;
-    if (item.visibility !== 'STAFF') return false;
+    if (this.canReview(scope, item)) return item.status !== 'DRAFT';
+    if (item.visibility !== 'STAFF' || item.status !== 'APPROVED') return false;
     return this.canSeeOwnerAsStaff(scope, ownerFacts(item.owner));
+  }
+
+  /**
+   * `canView` ning so‘rov shartidagi ko‘rinishi (egasi bo‘lmagan kishi uchun): ro‘yxatning jami soni va
+   * sahifalash ham ko‘rish qoidasiga mos bo‘lishi uchun.
+   */
+  visibleWhere(reviewer: boolean): Prisma.PortfolioItemWhereInput[] {
+    return reviewer ? [{ status: { not: 'DRAFT' } }] : [{ status: 'APPROVED' }, { visibility: 'STAFF' }];
   }
 }

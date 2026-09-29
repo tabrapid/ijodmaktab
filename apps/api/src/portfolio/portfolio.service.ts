@@ -262,9 +262,10 @@ export class PortfolioService {
       const facts = ownerFacts(owner);
       const reviewer = this.portfolioAccess.canReviewOwner(scope, facts);
       if (!reviewer && !this.portfolioAccess.canSeeOwnerAsStaff(scope, facts)) throw notFound('Foydalanuvchi');
-      // Tekshiruvchi bo‘lmagan xodim faqat “maktab xodimlari” ko‘rinishidagi yozuvlarni ko‘radi —
-      // jami son va sahifalash ham shunga mos bo‘lishi uchun filtr so‘rovning o‘zida.
-      if (!reviewer) base.visibility = 'STAFF';
+      // Tekshiruvchi qoralamalarni ko‘rmaydi, boshqa xodim — faqat “maktab xodimlari” ko‘rinishidagi
+      // tasdiqlangan yozuvlarni. Jami son va sahifalash ham shunga mos bo‘lishi uchun shart so‘rovning
+      // o‘zida (AND — holat filtri bu shartni almashtirib yubormaydi).
+      base.AND = this.portfolioAccess.visibleWhere(reviewer);
     }
     const where = this.filters(query, base);
     const [items, total] = await Promise.all([
@@ -690,8 +691,10 @@ export class PortfolioService {
   async review(viewer: AuthUser, id: string, input: Out<typeof portfolioReviewSchema>) {
     const scope = await this.scope(viewer);
     const item = await this.prisma.portfolioItem.findUnique({ where: { id }, include: itemInclude });
-    if (!item || !this.portfolioAccess.canView(scope, item)) throw notFound('Portfolio yozuvi');
-    if (!this.portfolioAccess.canReview(scope, item)) throw forbidden('Bu yozuvni tasdiqlash vakolatingiz yo‘q.');
+    // Tekshiruvchi egasi qaytarib olgan (qoralamaga aylangan) yozuvda ham “kutilmayapti” javobini oladi.
+    const reviewer = item !== null && this.portfolioAccess.canReview(scope, item);
+    if (!item || (!reviewer && !this.portfolioAccess.canView(scope, item))) throw notFound('Portfolio yozuvi');
+    if (!reviewer) throw forbidden('Bu yozuvni tasdiqlash vakolatingiz yo‘q.');
     if (item.status !== 'SUBMITTED') throw notPending();
     const seen = seenVersion(input.updatedAt);
     if (seen && seen.getTime() !== item.updatedAt.getTime()) throw changedSinceView();
@@ -733,8 +736,9 @@ export class PortfolioService {
     for (const id of ids) {
       const item = byId.get(id);
       const seen = seenVersion(input.versions?.[id]);
-      if (!item || !this.portfolioAccess.canView(scope, item)) skipped.push({ id, reason: 'NOT_FOUND' });
-      else if (!this.portfolioAccess.canReview(scope, item)) skipped.push({ id, reason: 'NOT_ALLOWED' });
+      const reviewer = item !== undefined && this.portfolioAccess.canReview(scope, item);
+      if (!item || (!reviewer && !this.portfolioAccess.canView(scope, item))) skipped.push({ id, reason: 'NOT_FOUND' });
+      else if (!reviewer) skipped.push({ id, reason: 'NOT_ALLOWED' });
       else if (item.status !== 'SUBMITTED') skipped.push({ id, reason: 'NOT_PENDING' });
       else if (seen && seen.getTime() !== item.updatedAt.getTime()) skipped.push({ id, reason: 'CHANGED' });
       else candidates.push(item);

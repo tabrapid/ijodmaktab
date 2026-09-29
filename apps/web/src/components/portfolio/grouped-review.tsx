@@ -95,7 +95,7 @@ function StudentList({
                   aria-current={active ? 'true' : undefined}
                   className={cn(
                     'flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-slate-50',
-                    'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500',
+                    'focus-visible:outline-2 focus-visible:-outline-offset-2',
                     active && 'bg-brand-50 hover:bg-brand-50',
                   )}
                 >
@@ -247,7 +247,8 @@ export function GroupedReview({ note, emptyDescription }: { note?: ReactNode; em
                 <Card>
                   <CardBody className="flex flex-wrap items-center gap-4">
                     <Avatar name={owner.fullName} src={owner.avatarUrl} size="lg" />
-                    <div className="min-w-0 flex-1">
+                    {/* Ism bloki kamida 12rem: joy yetmasa, tugmalar ism ostiga tushadi (ism so‘z o‘rtasida bo‘linmaydi). */}
+                    <div className="min-w-0 grow basis-48">
                       <h2 className="text-lg font-semibold break-words text-slate-900">{owner.fullName}</h2>
                       <p className="text-sm text-slate-500">{ownerLine(owner)}</p>
                       {group && (
@@ -300,7 +301,7 @@ export function GroupedReview({ note, emptyDescription }: { note?: ReactNode; em
               ) : (
                 <>
                   {items.isFetching && (
-                    <p className="text-brand-600">
+                    <p className="text-brand-700">
                       <Spinner className="size-4" label="Yangilanmoqda…" />
                     </p>
                   )}

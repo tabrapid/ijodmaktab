@@ -11,6 +11,7 @@ import {
   NATIONAL_CERTIFICATE_SUBJECTS,
   OLYMPIAD_PLACES,
   OLYMPIAD_PLACE_LABELS,
+  formatIeltsBand,
   ieltsOverallFromBands,
   type StructuredPortfolioType,
 } from '@ijod/shared';
@@ -293,7 +294,7 @@ function IeltsFields({
       </fieldset>
       {mismatch && (
         <Alert tone="info" className="sm:col-span-2">
-          To‘rt bo‘lim o‘rtachasi bo‘yicha umumiy ball odatda <strong>{expected}</strong> bo‘ladi. Sertifikatdagi
+          To‘rt bo‘lim o‘rtachasi bo‘yicha umumiy ball odatda <strong>{formatIeltsBand(expected)}</strong> bo‘ladi. Sertifikatdagi
           qiymatni tekshiring — to‘g‘ri bo‘lsa, shunday qoldiring.
         </Alert>
       )}

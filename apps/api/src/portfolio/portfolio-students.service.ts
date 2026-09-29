@@ -286,9 +286,7 @@ export class PortfolioStudentsService {
 
     const where: Prisma.PortfolioItemWhereInput = self
       ? { ownerId }
-      : reviewer
-        ? { ownerId, status: { not: 'DRAFT' } }
-        : { ownerId, status: 'APPROVED', visibility: 'STAFF' };
+      : { ownerId, AND: this.portfolioAccess.visibleWhere(reviewer) };
     const [items, grouped] = await Promise.all([
       this.prisma.portfolioItem.findMany({
         where,

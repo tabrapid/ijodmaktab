@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {
   IELTS_TEST_TYPE_LABELS,
   OLYMPIAD_PLACE_LABELS,
+  formatIeltsBand,
   parsePortfolioDetails,
   portfolioDetailValue,
   type CefrDetails,
@@ -32,10 +33,10 @@ const cefrTone = (level: string): BadgeTone =>
 /** Medal rangi: oltin, kumush, bronza; qolganlari — neytral. */
 const MEDAL_COLORS: Record<OlympiadPlace, string> = {
   FIRST: 'text-amber-500',
-  SECOND: 'text-slate-400',
-  THIRD: 'text-amber-800',
-  HONORABLE: 'text-violet-500',
-  PARTICIPANT: 'text-slate-300',
+  SECOND: 'text-slate-400 dark:text-slate-500',
+  THIRD: 'text-accent-600',
+  HONORABLE: 'text-violet-700',
+  PARTICIPANT: 'text-slate-300 dark:text-slate-400',
 };
 
 /** Katta ball: “7.5 / Overall”. */
@@ -117,24 +118,24 @@ export function DetailsView({
         return (
           <p className={cn('flex flex-wrap items-center gap-1.5 text-sm', className)}>
             <Badge tone="brand">
-              {IELTS_TEST_TYPE_LABELS[value.testType]} · {value.overall}
+              {IELTS_TEST_TYPE_LABELS[value.testType]} · {formatIeltsBand(value.overall)}
             </Badge>
-            {bands
-              .filter(([, , score]) => score !== undefined)
-              .map(([short, label, score]) => (
+            {bands.map(([short, label, score]) =>
+              score === undefined ? null : (
                 <span key={short} className="text-slate-600 tabular print:text-black" title={label}>
-                  {short} {score}
+                  {short} {formatIeltsBand(score)}
                 </span>
-              ))}
+              ),
+            )}
           </p>
         );
       }
       return (
         <div className={cn('space-y-2', className)}>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-            <ScoreTile value={value.overall} label="Overall" emphasis />
+            <ScoreTile value={formatIeltsBand(value.overall)} label="Overall" emphasis />
             {bands.map(([short, label, score]) => (
-              <ScoreTile key={short} value={score ?? '—'} label={label} />
+              <ScoreTile key={short} value={score === undefined ? '—' : formatIeltsBand(score)} label={label} />
             ))}
           </div>
           <Facts

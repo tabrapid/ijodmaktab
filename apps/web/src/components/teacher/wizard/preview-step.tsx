@@ -38,7 +38,7 @@ export function PreviewStep({ test }: { test: TestDetail }) {
     setAnswers(Object.fromEntries(questions.map((question) => [question.testQuestionId, question.correctOptionId])));
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -119,7 +119,9 @@ export function PreviewStep({ test }: { test: TestDetail }) {
       <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start">
         <div className="rounded-xl border border-slate-200 bg-surface p-4">
           <p className="text-sm font-semibold text-slate-800">Namunaviy baholash</p>
-          <p className="mt-2 text-3xl font-bold tabular">{formatPercent(pairPercent(grade.total))}</p>
+          <p className="mt-2 font-display text-3xl font-semibold tracking-tight tabular">
+            {formatPercent(pairPercent(grade.total))}
+          </p>
           <p className="text-sm text-slate-500 tabular">
             {formatPoints(grade.total.earned)} / {formatPoints(grade.total.max)} ball
           </p>

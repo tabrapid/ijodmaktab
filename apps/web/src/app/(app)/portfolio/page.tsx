@@ -150,7 +150,7 @@ function StatusSummary({
             )}
           >
             <PortfolioStatusBadge status={status} />
-            <span className="mt-2 block text-2xl font-semibold text-slate-900 tabular">
+            <span className="mt-2 block font-display text-2xl font-semibold text-slate-900 tabular">
               {counts.data ? counts.data[status] : counts.isError ? '—' : '…'}
             </span>
             <span className="block text-xs text-slate-500">{STATUS_HINTS[status]}</span>
@@ -201,7 +201,7 @@ function ItemCard({
           checked={selected}
           onChange={onToggle}
           aria-label={`“${item.title}” yozuvini chop etish uchun tanlash`}
-          className="mt-1 size-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+          className="mt-1 size-4 shrink-0"
         />
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
@@ -251,7 +251,7 @@ function ItemCard({
                 variant="ghost"
                 size="sm"
                 onClick={onDelete}
-                icon={<Trash2 className="size-4 text-red-600" aria-hidden />}
+                icon={<Trash2 className="size-4 text-red-700" aria-hidden />}
               >
                 <span className="text-red-700">O‘chirish</span>
               </Button>
@@ -393,10 +393,10 @@ function MyPortfolio() {
                 onClick={() => setCreating({ type: entry.type ?? undefined })}
                 className={cn(
                   'flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2.5 text-left text-sm font-medium text-slate-800',
-                  'transition-colors hover:border-brand-300 hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-brand-500',
+                  'transition-colors hover:border-brand-300 hover:bg-brand-50',
                 )}
               >
-                <entry.icon className="size-4 shrink-0 text-brand-600" aria-hidden />
+                <entry.icon className="size-4 shrink-0 text-brand-700" aria-hidden />
                 <span className="min-w-0">{entry.label}</span>
               </button>
             ))}
@@ -550,7 +550,7 @@ function MyPortfolio() {
       ) : (
         <div className="space-y-4">
           {list.isPlaceholderData && (
-            <p className="text-brand-600">
+            <p className="text-brand-700">
               <Spinner className="size-4" label="Yangilanmoqda…" />
             </p>
           )}

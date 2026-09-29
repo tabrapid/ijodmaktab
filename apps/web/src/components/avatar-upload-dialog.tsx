@@ -208,7 +208,7 @@ export function AvatarUploadDialog({ open, onClose }: { open: boolean; onClose: 
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
             className={cn(
-              'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-500',
+              'flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-(--focus-ring)',
               dragging
                 ? 'border-brand-400 bg-brand-50'
                 : 'border-slate-300 bg-slate-50 hover:border-brand-300 hover:bg-brand-50/40',

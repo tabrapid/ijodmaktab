@@ -222,7 +222,7 @@ function UsersList() {
           description={users.data ? `Topildi: ${users.data.total}` : undefined}
           actions={
             users.isFetching && !users.isPending ? (
-              <Spinner className="size-4 text-brand-600" label="Yangilanmoqda…" />
+              <Spinner className="size-4 text-brand-700" label="Yangilanmoqda…" />
             ) : undefined
           }
         />

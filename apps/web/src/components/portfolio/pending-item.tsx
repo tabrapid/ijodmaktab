@@ -86,7 +86,7 @@ export function PendingItemCard({
         {changed && (
           <section aria-label="Tasdiqlangan holatdan farqlar" className="space-y-2">
             <h3 className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-              <GitCompare className="size-4 text-amber-600" aria-hidden />
+              <GitCompare className="size-4 text-amber-700" aria-hidden />
               Nima o‘zgardi
             </h3>
             <ChangesTable changes={item.changes ?? []} type={item.type} />

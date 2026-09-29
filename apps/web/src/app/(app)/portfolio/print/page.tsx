@@ -243,7 +243,7 @@ function PrintDocument({ data }: { data: PrintablePortfolio }) {
           <p className="text-xs font-semibold tracking-[0.14em] text-slate-600 uppercase print:text-black">
             {data.school}
           </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">Portfolio</h1>
+          <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">Portfolio</h1>
         </div>
       </header>
 

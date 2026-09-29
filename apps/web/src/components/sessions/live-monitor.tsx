@@ -14,7 +14,7 @@ import {
   WifiOff,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ATTEMPT_LOCK_REASON_LABELS,
   SUBMIT_SOURCE_LABELS,
@@ -226,7 +226,7 @@ function CountTile({
       <span className="block text-xs text-slate-500">{label}</span>
       <span
         className={cn(
-          'mt-0.5 block text-2xl font-semibold',
+          'mt-0.5 block font-display text-2xl font-semibold',
           tone === 'amber' && value > 0
             ? 'text-amber-700'
             : tone === 'red' && value > 0
@@ -237,6 +237,38 @@ function CountTile({
         {value}
       </span>
     </button>
+  );
+}
+
+/**
+ * Qatordagi ikkinchi darajali amal. `compact` — faqat belgi (nomi tooltip va ekran o‘qigichda): to‘xtatilgan
+ * qatorda asosiy “Ruxsat berish” tugmasi uchun joy qoladi va jadval 1280 px da ham gorizontal aylanmaydi.
+ */
+function RowActionButton({
+  icon,
+  label,
+  title,
+  compact,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  title: string;
+  compact: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      icon={icon}
+      onClick={onClick}
+      className={compact ? 'w-8 px-0' : undefined}
+      aria-label={compact ? title : undefined}
+      title={compact ? title : undefined}
+    >
+      {compact ? null : label}
+    </Button>
   );
 }
 
@@ -882,13 +914,11 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                     <TD>
                       <span className="inline-flex flex-wrap items-center gap-1">
                         <ParticipationBadge status={row.status} />
-                        {locked && row.lockReason && (
-                          <span title={ATTEMPT_LOCK_REASON_LABELS[row.lockReason]}>
-                            <Badge tone="red">
-                              <ShieldAlert className="size-3" aria-hidden />
-                              To‘xtatildi · {LOCK_REASON_SHORT[row.lockReason]} · {formatTime(row.lockedAt)}
-                            </Badge>
-                          </span>
+                        {locked && (
+                          <Badge tone="red">
+                            <ShieldAlert className="size-3" aria-hidden />
+                            To‘xtatildi
+                          </Badge>
                         )}
                         {row.connectionIssue && (
                           <Badge tone="amber">
@@ -897,6 +927,16 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                           </Badge>
                         )}
                       </span>
+                      {/* Sabab va vaqt nishon ichida emas, alohida qatorda — tor ustunda nishon cho‘zilib ketmaydi. */}
+                      {locked && row.lockReason && (
+                        <p
+                          className="mt-1 text-xs font-medium text-red-700"
+                          title={ATTEMPT_LOCK_REASON_LABELS[row.lockReason]}
+                        >
+                          {LOCK_REASON_SHORT[row.lockReason]} ·{' '}
+                          <span className="whitespace-nowrap tabular">{formatTime(row.lockedAt)}</span>
+                        </p>
+                      )}
                       {row.submitSource && (
                         <p className="mt-0.5 text-xs text-slate-500">{SUBMIT_SOURCE_LABELS[row.submitSource]}</p>
                       )}
@@ -936,7 +976,8 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                         <p className="text-xs text-brand-700">+{row.extraMinutes} daqiqa berilgan</p>
                       )}
                       {locked && row.lockedAt && (
-                        <p className="text-xs font-medium text-red-700">
+                        // Ustun kengayib ketmasligi uchun bu qator kerak bo‘lsa ikkiga bo‘linadi.
+                        <p className="text-xs font-medium whitespace-normal text-red-700">
                           Ruxsat kutmoqda: {since(serverNow - new Date(row.lockedAt).getTime())}
                         </p>
                       )}
@@ -992,34 +1033,31 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                           )}
                           {(row.status === 'IN_PROGRESS' || row.status === 'NOT_STARTED') &&
                             session.state !== 'CLOSED' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
+                              <RowActionButton
                                 icon={<Clock className="size-3.5" />}
+                                label="Vaqt"
+                                title="Qo‘shimcha vaqt berish"
+                                compact={locked}
                                 onClick={() => setAction({ kind: 'extend', row })}
-                              >
-                                Vaqt
-                              </Button>
+                              />
                             )}
                           {row.attemptId && row.status !== 'CANCELLED' && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
+                            <RowActionButton
                               icon={<XCircle className="size-3.5" />}
+                              label="Bekor qilish"
+                              title="Urinishni bekor qilish"
+                              compact={locked}
                               onClick={() => setAction({ kind: 'cancel', row })}
-                            >
-                              Bekor qilish
-                            </Button>
+                            />
                           )}
                           {rosterEditable && row.status === 'NOT_STARTED' && row.attemptsCount === 0 && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
+                            <RowActionButton
                               icon={<UserMinus className="size-3.5" />}
+                              label="Chiqarish"
+                              title="Ro‘yxatdan chiqarish"
+                              compact={locked}
                               onClick={() => setAction({ kind: 'remove', row })}
-                            >
-                              Chiqarish
-                            </Button>
+                            />
                           )}
                         </span>
                       </TD>

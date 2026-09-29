@@ -37,7 +37,9 @@ export function AttemptResult({ view }: { view: AttemptView }) {
           </div>
           {result.scoreVisible && result.score && (
             <div className="text-center sm:text-right">
-              <p className="text-5xl font-bold text-slate-900">{formatPercent(result.score.percent)}</p>
+              <p className="font-display text-5xl font-semibold tracking-tight text-slate-900">
+                {formatPercent(result.score.percent)}
+              </p>
               <p className="text-sm text-slate-500 tabular">
                 {formatPoints(result.score.earned)} / {formatPoints(result.score.max)} ball
               </p>
@@ -130,9 +132,9 @@ export function AttemptResult({ view }: { view: AttemptView }) {
                           )}
                         >
                           {isCorrect ? (
-                            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden />
+                            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-700" aria-hidden />
                           ) : isSelected ? (
-                            <XCircle className="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden />
+                            <XCircle className="mt-0.5 size-4 shrink-0 text-red-700" aria-hidden />
                           ) : (
                             <Circle className="mt-0.5 size-4 shrink-0 text-slate-300" aria-hidden />
                           )}

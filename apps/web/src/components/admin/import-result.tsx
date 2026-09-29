@@ -57,7 +57,7 @@ export function ImportResult({ result, onRestart }: { result: ImportCommitResult
         <Card className="border-amber-300 bg-amber-50/40">
           <CardBody className="space-y-4">
             <div className="flex gap-3">
-              <ShieldAlert className="mt-0.5 size-6 shrink-0 text-amber-600" aria-hidden />
+              <ShieldAlert className="mt-0.5 size-6 shrink-0 text-amber-700" aria-hidden />
               <div className="space-y-1 text-sm text-amber-900">
                 <p className="font-semibold">Kirish ma’lumotlarini hozir yuklab oling</p>
                 <p>

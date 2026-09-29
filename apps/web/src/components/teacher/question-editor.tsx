@@ -159,7 +159,7 @@ export function QuestionEditor({
               <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-sm font-semibold text-slate-600">
                 <input
                   type="radio"
-                  className="size-4 text-emerald-600 focus:ring-emerald-500"
+                  className="size-4 accent-emerald-600"
                   checked={isCorrect}
                   onChange={() =>
                     form.setValue('content.correctOptionId', optionId, { shouldValidate: true, shouldDirty: true })
@@ -190,12 +190,12 @@ export function QuestionEditor({
           );
         })}
         {(errors.content?.options?.message || errors.content?.options?.root?.message) && (
-          <p className="text-xs font-medium text-red-600">
+          <p className="text-xs font-medium text-red-700">
             {errors.content.options.message ?? errors.content.options.root?.message}
           </p>
         )}
         {errors.content?.correctOptionId?.message && (
-          <p className="text-xs font-medium text-red-600">{errors.content.correctOptionId.message}</p>
+          <p className="text-xs font-medium text-red-700">{errors.content.correctOptionId.message}</p>
         )}
         {options.fields.length < MAX_OPTIONS && (
           <Button

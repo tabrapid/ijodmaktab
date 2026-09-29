@@ -94,7 +94,7 @@ function AvatarCard({ me }: { me: Me }) {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="group relative shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-500"
+          className="group relative shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-4"
           aria-label="Profil rasmini o‘zgartirish"
         >
           <Avatar

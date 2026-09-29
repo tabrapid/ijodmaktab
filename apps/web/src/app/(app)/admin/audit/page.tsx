@@ -43,7 +43,7 @@ function FilterChip({ label, onRemove }: { label: ReactNode; onRemove: () => voi
       <button
         type="button"
         onClick={onRemove}
-        className="rounded-full p-0.5 text-brand-600 hover:bg-brand-100"
+        className="rounded-full p-0.5 text-brand-700 hover:bg-brand-100"
         aria-label="Filtrni olib tashlash"
       >
         <X className="size-3.5" />
@@ -156,7 +156,7 @@ function AuditRow({
             <summary className="cursor-pointer text-sm font-medium text-brand-700 select-none hover:underline">
               Tafsilotlar
             </summary>
-            <pre className="mt-2 max-h-72 max-w-md overflow-auto rounded-md bg-slate-900 p-3 text-xs whitespace-pre-wrap break-all text-slate-100">
+            <pre className="mt-2 max-h-72 max-w-md overflow-auto rounded-md bg-ink-900 p-3 text-xs whitespace-pre-wrap break-all text-ink-100">
               {JSON.stringify(item.data, null, 2)}
             </pre>
           </details>
@@ -314,7 +314,7 @@ function AuditLog() {
           description={query.data ? `Topildi: ${query.data.total}` : undefined}
           actions={
             query.isFetching && !query.isPending ? (
-              <Spinner className="size-4 text-brand-600" label="Yangilanmoqda…" />
+              <Spinner className="size-4 text-brand-700" label="Yangilanmoqda…" />
             ) : undefined
           }
         />

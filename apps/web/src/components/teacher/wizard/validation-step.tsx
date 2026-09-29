@@ -18,9 +18,9 @@ export function ValidationStep({
   const renderIssue = (issue: ValidationIssue, index: number) => (
     <li key={`${issue.code}-${index}`} className="flex items-start gap-2 text-sm">
       {issue.level === 'error' ? (
-        <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden />
+        <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-700" aria-hidden />
       ) : (
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" aria-hidden />
       )}
       <span className="flex-1">{issue.message}</span>
       {issue.questionNumber && (

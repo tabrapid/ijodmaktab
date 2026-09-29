@@ -236,7 +236,7 @@ export function SchoolItems() {
         ) : (
           <div className={cn('relative', list.isPlaceholderData && 'opacity-60')}>
             {list.isPlaceholderData && (
-              <div className="absolute top-2 right-3 text-brand-600">
+              <div className="absolute top-2 right-3 text-brand-700">
                 <Spinner className="size-4" label="Yangilanmoqda…" />
               </div>
             )}

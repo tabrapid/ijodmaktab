@@ -31,7 +31,7 @@ export function RoleCheckboxes({
     <fieldset aria-invalid={error ? true : undefined}>
       <legend className="text-sm font-medium text-slate-700">
         {legend}
-        <span className="text-red-600" aria-hidden>
+        <span className="text-red-700" aria-hidden>
           {' '}
           *
         </span>
@@ -49,7 +49,7 @@ export function RoleCheckboxes({
           />
         ))}
       </div>
-      {error && <p className="mt-1.5 text-xs font-medium text-red-600">{error}</p>}
+      {error && <p className="mt-1.5 text-xs font-medium text-red-700">{error}</p>}
     </fieldset>
   );
 }

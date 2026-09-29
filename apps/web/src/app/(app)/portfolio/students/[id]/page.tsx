@@ -177,7 +177,7 @@ function StudentPortfolio() {
         <CardBody className="flex flex-col gap-5 sm:flex-row sm:items-center">
           <Avatar name={owner.fullName} src={owner.avatarUrl} size="xl" />
           <div className="min-w-0 flex-1 space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight break-words text-slate-900">
+            <h1 className="font-display text-2xl font-semibold tracking-tight break-words text-slate-900">
               {owner.fullName} portfoliosi
             </h1>
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
@@ -255,7 +255,7 @@ function StudentPortfolio() {
           <CardHeader
             title={
               <span className="inline-flex items-center gap-2">
-                <Hourglass className="size-4 text-amber-600" aria-hidden />
+                <Hourglass className="size-4 text-amber-700" aria-hidden />
                 Tekshiruvni kutayotganlar ({data.pendingItems.length})
               </span>
             }
@@ -311,7 +311,7 @@ function StudentPortfolio() {
                 id={`section-${category}`}
                 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900"
               >
-                <Icon className="size-5 text-brand-600" aria-hidden />
+                <Icon className="size-5 text-brand-700" aria-hidden />
                 {PORTFOLIO_CATEGORY_LABELS[category]}
                 <span className="text-sm font-normal text-slate-500 tabular">({items.length})</span>
               </h2>

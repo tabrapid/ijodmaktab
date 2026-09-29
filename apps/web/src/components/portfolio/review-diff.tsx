@@ -103,7 +103,7 @@ export function ChangesTable({
               {row.before}
             </dd>
             <dd className="flex min-w-0 items-start gap-1.5 font-medium break-words text-slate-900">
-              <ArrowRight className="mt-0.5 size-4 shrink-0 text-amber-600 sm:hidden" aria-hidden />
+              <ArrowRight className="mt-0.5 size-4 shrink-0 text-amber-700 sm:hidden" aria-hidden />
               <span className="min-w-0">
                 <span className="sr-only">Yangi: </span>
                 <mark className="rounded bg-amber-50 px-1 text-amber-900">{row.after}</mark>
