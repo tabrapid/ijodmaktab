@@ -180,7 +180,7 @@ function ClassDetailView() {
                       {student.lastActiveAt ? (
                         formatDateTime(student.lastActiveAt)
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-slate-500">—</span>
                       )}
                     </TD>
                     {item.canManage && (

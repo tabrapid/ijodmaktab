@@ -5,11 +5,11 @@ tizim hisoblar, javoblar va fayllar bog‘lanishini saqlashi kerak. Bu hujjat sh
 
 ## Nimalar saqlanadi
 
-| Qism | Qanday | Izoh |
-|---|---|---|
-| PostgreSQL bazasi | `pg_dump --format=custom` | Hisoblar, sinflar, testlar, urinishlar, javoblar, baholash tarixi, portfolio, audit |
-| Fayl ombori | `STORAGE_DIR/files` va `STORAGE_DIR/quarantine` → `storage.tar.gz` | Portfolio dalillari. Eksport fayllari vaqtinchalik — ular qayta yaratiladi |
-| Nazorat yig‘indilari | `SHA256SUMS` | Tiklashdan oldin fayllar butunligi tekshiriladi |
+| Qism                 | Qanday                                                             | Izoh                                                                                |
+| -------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| PostgreSQL bazasi    | `pg_dump --format=custom`                                          | Hisoblar, sinflar, testlar, urinishlar, javoblar, baholash tarixi, portfolio, audit |
+| Fayl ombori          | `STORAGE_DIR/files` va `STORAGE_DIR/quarantine` → `storage.tar.gz` | Portfolio dalillari. Eksport fayllari vaqtinchalik — ular qayta yaratiladi          |
+| Nazorat yig‘indilari | `SHA256SUMS`                                                       | Tiklashdan oldin fayllar butunligi tekshiriladi                                     |
 
 `APP_ENCRYPTION_KEY` zaxiraga **kirmaydi**, lekin usiz tiklangan tizimda ikki bosqichli kirish kalitlarini
 ochib bo‘lmaydi. Uni alohida, xavfsiz joyda (masalan, maktab rahbariyatidagi muhrlangan konvertda yoki

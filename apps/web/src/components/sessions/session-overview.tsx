@@ -255,6 +255,62 @@ function TimingDialog({ session, open, onClose }: { session: SessionDetail; open
   );
 }
 
+/**
+ * To‘liq ekran nazorati: boshlanmagan sessiyada yoqiladi yoki o‘chiriladi, ochiq sessiyada esa
+ * faqat o‘chiriladi (ishlayotgan o‘quvchilarga nazorat to‘satdan yoqilmaydi).
+ */
+function FullscreenSetting({ session }: { session: SessionDetail }) {
+  const toast = useToast();
+  const refresh = useRefreshSession(session.id);
+  const [confirming, setConfirming] = useState(false);
+  const enabled = session.requireFullscreen;
+  const editable = session.canManage && (session.state === 'SCHEDULED' || (session.state === 'OPEN' && enabled));
+  const toggle = useMutation({
+    mutationFn: () => api.put(`/sessions/${session.id}/timing`, { requireFullscreen: !enabled }),
+    onSuccess: async () => {
+      toast.success(enabled ? 'To‘liq ekran nazorati o‘chirildi.' : 'To‘liq ekran nazorati yoqildi.');
+      setConfirming(false);
+      await refresh();
+    },
+    onError: (error) => {
+      setConfirming(false);
+      toast.error(errorMessage(error));
+    },
+  });
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={enabled ? 'green' : 'gray'}>{enabled ? 'Yoqilgan' : 'O‘chirilgan'}</Badge>
+        {editable && (
+          <Button size="sm" variant="outline" onClick={() => setConfirming(true)}>
+            {enabled ? 'O‘chirish' : 'Yoqish'}
+          </Button>
+        )}
+      </div>
+      <p className="mt-1 text-slate-500">
+        {enabled
+          ? 'Test to‘liq ekranda ishlanadi. To‘liq ekrandan chiqqan yoki boshqa oyna/ilovaga o‘tgan o‘quvchining testi avtomatik to‘xtatiladi — “Jonli kuzatuv”da ruxsat berasiz.'
+          : 'Oynadan chiqish holatlari faqat signal sifatida qayd etiladi, test to‘xtatilmaydi.'}
+      </p>
+      <ConfirmDialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        onConfirm={() => toggle.mutate()}
+        loading={toggle.isPending}
+        title={enabled ? 'To‘liq ekran nazoratini o‘chirasizmi?' : 'To‘liq ekran nazoratini yoqasizmi?'}
+        confirmLabel={enabled ? 'O‘chirish' : 'Yoqish'}
+      >
+        {enabled
+          ? session.state === 'OPEN'
+            ? 'Endi oynadan chiqqan o‘quvchining testi to‘xtatilmaydi, holat faqat signal sifatida qayd etiladi. Allaqachon to‘xtatilgan o‘quvchilarga “Jonli kuzatuv”da ruxsat bering. Sessiya boshlangani uchun nazoratni qayta yoqib bo‘lmaydi.'
+            : 'O‘quvchilar testni odatiy oynada ishlaydi; oynadan chiqish holatlari faqat signal sifatida qayd etiladi.'
+          : 'O‘quvchilar testni to‘liq ekranda ishlaydi. To‘liq ekrandan chiqqan yoki boshqa oyna/ilovaga o‘tgan o‘quvchining testi o‘qituvchi ruxsat berguncha to‘xtatiladi.'}
+      </ConfirmDialog>
+    </>
+  );
+}
+
 function CancelSessionDialog({
   session,
   open,
@@ -471,14 +527,7 @@ export function SessionOverview({ session }: { session: SessionDetail }) {
                 ].join('; ')}
               </Row>
               <Row label="To‘liq ekran nazorati">
-                <Badge tone={session.requireFullscreen ? 'green' : 'gray'}>
-                  {session.requireFullscreen ? 'Yoqilgan' : 'O‘chirilgan'}
-                </Badge>
-                <p className="mt-1 text-slate-500">
-                  {session.requireFullscreen
-                    ? 'Test to‘liq ekranda ishlanadi. To‘liq ekrandan chiqqan yoki boshqa oyna/ilovaga o‘tgan o‘quvchining testi avtomatik to‘xtatiladi — “Jonli kuzatuv”da ruxsat berasiz.'
-                    : 'Oynadan chiqish holatlari faqat signal sifatida qayd etiladi, test to‘xtatilmaydi.'}
-                </p>
+                <FullscreenSetting session={session} />
               </Row>
               <Row label="Ballni ko‘rsatish">
                 {SCORE_VISIBILITY_LABELS[session.scoreVisibility]}

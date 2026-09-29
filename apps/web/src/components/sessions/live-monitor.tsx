@@ -272,6 +272,22 @@ function RowActionButton({
   );
 }
 
+/**
+ * “Amallar” ustuni md dan boshlab o‘ng chetga qadaladi: jadval sig‘masa ham (tor noutbuk, kattalashtirilgan
+ * sahifa) “Ruxsat berish” ko‘rinib turadi. Qadalgan katak shaffof bo‘lmasligi kerak (ostidan aylanayotgan
+ * ustunlar ko‘rinmasin), shuning uchun qator rangi `bg-surface` ustidagi ::before qatlamida takrorlanadi.
+ * Jadval odatda sig‘maydigan kengliklarda (xl dan tor) chap chetda ingichka chiziq ham bor.
+ */
+const PINNED_EDGE = 'md:max-xl:shadow-[inset_1px_0_0_var(--color-slate-200)]';
+const PINNED_HEAD = `md:sticky md:right-0 md:z-10 md:bg-slate-50 ${PINNED_EDGE}`;
+const PINNED_CELL = `md:sticky md:right-0 md:z-10 md:bg-surface md:before:absolute md:before:inset-0 md:before:-z-10 md:before:transition-colors ${PINNED_EDGE}`;
+
+function pinnedTint(locked: boolean, connectionIssue: boolean) {
+  if (locked) return 'md:before:bg-red-50/70 md:group-hover/row:before:bg-red-50';
+  if (connectionIssue) return 'md:before:bg-amber-50/60 md:group-hover/row:before:bg-slate-50/70';
+  return 'md:group-hover/row:before:bg-slate-50/70';
+}
+
 // ------------------------------------------------------------ Dialoglar
 
 type RowAction = { kind: 'extend' | 'cancel' | 'remove' | 'unlock'; row: LiveRow };
@@ -882,7 +898,7 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                 <TH>Javoblar</TH>
                 <TH>Vaqt</TH>
                 <TH>Signallar</TH>
-                {editable && <TH className="text-right">Amallar</TH>}
+                {editable && <TH className={cn('text-right', PINNED_HEAD)}>Amallar</TH>}
               </tr>
             </THead>
             <tbody>
@@ -896,7 +912,10 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                 return (
                   <TR
                     key={row.studentId}
-                    className={cn(locked ? 'bg-red-50/70 hover:bg-red-50' : row.connectionIssue && 'bg-amber-50/60')}
+                    className={cn(
+                      'group/row',
+                      locked ? 'bg-red-50/70 hover:bg-red-50' : row.connectionIssue && 'bg-amber-50/60',
+                    )}
                   >
                     <TD>
                       <div className="flex items-center gap-3">
@@ -943,7 +962,7 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                     </TD>
                     <TD className="min-w-32">
                       {row.status === 'NOT_STARTED' ? (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-slate-500">—</span>
                       ) : (
                         <ProgressBar
                           percent={row.questionCount ? (row.answered / row.questionCount) * 100 : null}
@@ -970,7 +989,7 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                       ) : row.submittedAt ? (
                         <span className="text-slate-600">Topshirdi {formatTime(row.submittedAt)}</span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-slate-500">—</span>
                       )}
                       {row.extraMinutes > 0 && (
                         <p className="text-xs text-brand-700">+{row.extraMinutes} daqiqa berilgan</p>
@@ -1016,11 +1035,17 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                         )}
                         {row.lockCount === 0 &&
                           !showsFocusLoss(row, session.requireFullscreen) &&
-                          row.deviceChangeCount === 0 && <span className="text-slate-400">—</span>}
+                          row.deviceChangeCount === 0 && <span className="text-slate-500">—</span>}
                       </span>
                     </TD>
                     {editable && (
-                      <TD className="text-right whitespace-nowrap">
+                      <TD
+                        className={cn(
+                          'text-right whitespace-nowrap',
+                          PINNED_CELL,
+                          pinnedTint(locked, row.connectionIssue),
+                        )}
+                      >
                         <span className="inline-flex gap-1">
                           {locked && row.attemptId && (
                             <Button

@@ -1,4 +1,9 @@
-import type { PortfolioTrackedField } from '@ijod/shared';
+import {
+  isStructuredPortfolioType,
+  portfolioDetailsSummary,
+  type PortfolioItemType,
+  type PortfolioTrackedField,
+} from '@ijod/shared';
 import { isoDateOnly } from '../common/dates.js';
 import type { PortfolioItem, Prisma } from '../generated/prisma/client.js';
 
@@ -48,6 +53,16 @@ export function ownerFacts(owner: OwnerWithRelations): OwnerFacts {
     isStaff: roles.some((role) => role !== 'STUDENT'),
     classId: owner.enrollments[0]?.class.id ?? null,
   };
+}
+
+/**
+ * Ko‘rsatiladigan natija: tuzilgan turda details dan joriy formatda qayta yasaladi — saqlangan matn
+ * eski formatda bo‘lsa ham (masalan, “IELTS 7” → “IELTS 7.0”) ro‘yxat, nishon va sarlavha bir xil.
+ */
+export function resultOf(item: Pick<PortfolioItem, 'type' | 'result' | 'details'>): string | null {
+  const type = item.type as PortfolioItemType;
+  if (!isStructuredPortfolioType(type)) return item.result;
+  return portfolioDetailsSummary(type, item.details) ?? item.result;
 }
 
 type TrackedSource = Pick<

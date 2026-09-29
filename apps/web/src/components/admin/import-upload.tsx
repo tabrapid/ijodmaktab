@@ -97,7 +97,7 @@ export function ImportUpload({ onUploaded }: { onUploaded: (preview: ImportPrevi
                 <tr key={row[0]} className="border-b border-slate-100 last:border-0">
                   {row.map((cell, index) => (
                     <TD key={index} className="whitespace-nowrap">
-                      {cell || <span className="text-slate-400">—</span>}
+                      {cell || <span className="text-slate-500">—</span>}
                     </TD>
                   ))}
                 </tr>

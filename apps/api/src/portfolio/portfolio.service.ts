@@ -35,6 +35,7 @@ import {
   itemInclude,
   ownerFacts,
   ownerSelect,
+  resultOf,
   snapshotInclude,
   snapshotOf,
   trackedFieldsOf,
@@ -119,7 +120,7 @@ export class PortfolioService {
       organization: item.organization,
       date: item.date,
       level: item.level,
-      result: item.result,
+      result: resultOf(item),
       details: item.details ?? null,
       evidenceUrl: item.evidenceUrl,
       evidenceFile: item.evidenceFile,
@@ -579,7 +580,7 @@ export class PortfolioService {
     const changed = (await this.prisma.portfolioReview.count({ where: { itemId: id, decision: 'APPROVED' } })) > 0;
     const owner = fullName(item.owner);
     const title = changed ? `${owner}: yutuq o‘zgartirildi` : `${owner}: yangi yutuq tasdiqlash uchun`;
-    const body = [item.title, item.result].filter(Boolean).join(' — ');
+    const body = [item.title, resultOf(item)].filter(Boolean).join(' — ');
     const reviewers = await this.reviewersFor(item);
     await this.notifications.notify(reviewers.homeroom, {
       type: 'PORTFOLIO_SUBMITTED',

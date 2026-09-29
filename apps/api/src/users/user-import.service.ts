@@ -348,6 +348,7 @@ export class UserImportService {
 
   async commit(viewer: AuthUser, batchId: string, options: ImportOptions) {
     const batch = await this.loadBatch(viewer, batchId);
+    // Tezkor javob uchun; asosiy himoya — tranzaksiya ichidagi atomar band qilish.
     if (batch.committedAt) throw conflict('ALREADY_COMMITTED', 'Bu import allaqachon tasdiqlangan.');
     const rows = await this.validateRows(batch.rows, options);
     const importable = rows.filter((row) => row.status === 'ok' || row.status === 'warning');
@@ -376,6 +377,13 @@ export class UserImportService {
 
     const created = await this.prisma.$transaction(
       async (tx) => {
+        // Importni atomar band qilamiz: parallel ikkinchi tasdiqlash qator qulfini kutadi va hech narsa
+        // yaratmaydi (aks holda har bir o‘quvchiga ikkinchi hisob ochilardi).
+        const claimed = await tx.importBatch.updateMany({
+          where: { id: batch.id, committedAt: null },
+          data: { committedAt: new Date() },
+        });
+        if (claimed.count === 0) throw conflict('ALREADY_COMMITTED', 'Bu import allaqachon tasdiqlangan.');
         const reserved = new Set<string>(
           importable.map((row) => row.resolved.login).filter((login): login is string => Boolean(login)),
         );
@@ -429,7 +437,6 @@ export class UserImportService {
         await tx.importBatch.update({
           where: { id: batch.id },
           data: {
-            committedAt: new Date(),
             summary: {
               lastOptions: options,
               created: output.length,

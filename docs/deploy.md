@@ -6,13 +6,13 @@ kelishiladi (reja, 16-bo‘lim) — bu hujjat huquqiy muvofiqlik xulosasi emas.
 
 ## 1. Tarkib
 
-| Qism | Nima | Port (standart) |
-|---|---|---|
-| `apps/api` | NestJS API (`node dist/main.js`) | 4000 (faqat ichki tarmoqda) |
-| `apps/web` | Next.js veb-ilova (`next start`), `/api/*` so‘rovlarini API ga uzatadi | 3000 (faqat ichki tarmoqda) |
-| PostgreSQL 16 | Asosiy baza | 5432 (faqat ichki tarmoqda) |
-| Fayl ombori | `STORAGE_DIR` papkasi: yuklangan dalillar, karantin, eksportlar | — |
-| Teskari proksi | nginx / Caddy: HTTPS, faqat veb-ilovaga yo‘naltiradi | 443 |
+| Qism           | Nima                                                                   | Port (standart)             |
+| -------------- | ---------------------------------------------------------------------- | --------------------------- |
+| `apps/api`     | NestJS API (`node dist/main.js`)                                       | 4000 (faqat ichki tarmoqda) |
+| `apps/web`     | Next.js veb-ilova (`next start`), `/api/*` so‘rovlarini API ga uzatadi | 3000 (faqat ichki tarmoqda) |
+| PostgreSQL 16  | Asosiy baza                                                            | 5432 (faqat ichki tarmoqda) |
+| Fayl ombori    | `STORAGE_DIR` papkasi: yuklangan dalillar, karantin, eksportlar        | —                           |
+| Teskari proksi | nginx / Caddy: HTTPS, faqat veb-ilovaga yo‘naltiradi                   | 443                         |
 
 Brauzer faqat veb-ilova bilan gaplashadi (bitta manba, cookie `SameSite=Lax`, CORS kerak emas). API va
 bazani internetga ochmang.
@@ -47,6 +47,12 @@ Migratsiyalarni egasi rolida bajaring (`apps/api` papkasida):
 DATABASE_URL="postgresql://ijod_owner:...@localhost:5432/ijod?schema=public" pnpm db:deploy
 ```
 
+Yangilashda e’tibor bering: `20260927170000_batch2_features` migratsiyasi avval yaratilgan barcha sessiyalarda
+to‘liq ekran nazoratini yoqadi, rejalashtirilgan va ochiq sessiyalar ham bunga kiradi. O‘qituvchilarni oldindan
+ogohlantiring. Sessiya sahifasidagi “To‘liq ekran nazorati” qatorida nazoratni boshlanmagan sessiyada yoqish
+yoki o‘chirish, ochiq sessiyada esa faqat o‘chirish mumkin. Bu o‘zgarish auditga yoziladi. Allaqachon
+to‘xtatilgan o‘quvchilarga “Jonli kuzatuv”da ruxsat beriladi.
+
 So‘ng egasi rolida ilova huquqlarini bering (har yangi migratsiyadan keyin ham qayta ishlatish xavfsiz):
 
 ```sql
@@ -71,19 +77,19 @@ fon vazifalarini xatosiz bajaradi.
 
 `apps/api/.env` (namuna: `apps/api/.env.example`):
 
-| O‘zgaruvchi | Ishlab chiqarishda |
-|---|---|
-| `NODE_ENV` | `production` |
-| `DATABASE_URL` | `ijod_app` roli bilan ulanish |
-| `PORT` | `4000` |
-| `WEB_ORIGIN` | Tashqi manzil, masalan `https://ijod.maktab.uz` (bir nechta bo‘lsa vergul bilan) |
-| `APP_ENCRYPTION_KEY` | 32 baytlik base64: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. TOTP kalitlari shu bilan shifrlanadi — **yo‘qotmang va almashtirmang** (aks holda 2FA qayta sozlanadi) |
-| `COOKIE_SECURE` | `true` (faqat HTTPS) |
-| `TRUST_PROXY` | `true` (teskari proksi ortida — mijoz IP manzili to‘g‘ri aniqlanadi) |
-| `SESSION_TTL_HOURS` | Faolsizlikdan keyin chiqib ketish muddati (standart 12) |
-| `STORAGE_DIR` | Masalan `/srv/ijod/storage` (egasi — API jarayoni foydalanuvchisi, huquq `700`) |
-| `ANSWER_GRACE_SECONDS` | Tarmoq kechikishi uchun muddatdan keyingi qo‘shimcha soniyalar (standart 2) |
-| `BACKUP_STATUS_FILE` | Zaxira skripti yozadigan fayl — super admin panelida oxirgi zaxira vaqti ko‘rinadi |
+| O‘zgaruvchi            | Ishlab chiqarishda                                                                                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`             | `production`                                                                                                                                                                                             |
+| `DATABASE_URL`         | `ijod_app` roli bilan ulanish                                                                                                                                                                            |
+| `PORT`                 | `4000`                                                                                                                                                                                                   |
+| `WEB_ORIGIN`           | Tashqi manzil, masalan `https://ijod.maktab.uz` (bir nechta bo‘lsa vergul bilan)                                                                                                                         |
+| `APP_ENCRYPTION_KEY`   | 32 baytlik base64: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. TOTP kalitlari shu bilan shifrlanadi — **yo‘qotmang va almashtirmang** (aks holda 2FA qayta sozlanadi) |
+| `COOKIE_SECURE`        | `true` (faqat HTTPS)                                                                                                                                                                                     |
+| `TRUST_PROXY`          | `true` (teskari proksi ortida — mijoz IP manzili to‘g‘ri aniqlanadi)                                                                                                                                     |
+| `SESSION_TTL_HOURS`    | Faolsizlikdan keyin chiqib ketish muddati (standart 12)                                                                                                                                                  |
+| `STORAGE_DIR`          | Masalan `/srv/ijod/storage` (egasi — API jarayoni foydalanuvchisi, huquq `700`)                                                                                                                          |
+| `ANSWER_GRACE_SECONDS` | Tarmoq kechikishi uchun muddatdan keyingi qo‘shimcha soniyalar (standart 2)                                                                                                                              |
+| `BACKUP_STATUS_FILE`   | Zaxira skripti yozadigan fayl — super admin panelida oxirgi zaxira vaqti ko‘rinadi                                                                                                                       |
 
 `SEED_DEMO_PASSWORD` va `pnpm db:seed` faqat demo uchun — haqiqiy bazada ishlatmang.
 

@@ -36,26 +36,66 @@ afterAll(async () => {
 });
 
 describe('O‘qituvchi portfoliosidagi dalil fayli', () => {
-  it('“maktab xodimlari” ko‘rinishida boshqa o‘qituvchiga ochiq, yopiq yozuvda va o‘quvchiga yopiq', async () => {
+  it('“maktab xodimlari” ko‘rinishida tasdiqlangach hamkasbga ochiq, yopiq yozuvda va o‘quvchiga yopiq', async () => {
     const owner = await login(app, fx.teacher.login);
     const colleague = await login(app, fx.otherTeacher.login);
     const student = await login(app, fx.studentsB[0]!.login);
+    const deputy = await login(app, (await createUser(prisma, ['DEPUTY'])).login);
 
     const sharedFile = await upload(owner);
-    await owner
+    const shared = await owner
       .post('/api/portfolio')
       .send({ type: 'METHODICAL_WORK', title: 'Metodik qo‘llanma', evidenceFileId: sharedFile, visibility: 'STAFF' })
       .expect(201);
     const privateFile = await upload(owner);
-    await owner
+    const hidden = await owner
       .post('/api/portfolio')
       .send({ type: 'OPEN_LESSON', title: 'Ochiq dars', evidenceFileId: privateFile, visibility: 'PRIVATE' })
       .expect(201);
 
+    // Qoralama fayli faqat egasiga ochiq — tekshiruvchi rahbariyatga ham.
+    await colleague.get(`/api/files/${sharedFile}`).expect(404);
+    await deputy.get(`/api/files/${sharedFile}`).expect(404);
+    await owner.get(`/api/files/${sharedFile}`).expect(200);
+
+    // Tekshiruvga yuborilgach tekshiruvchi ko‘radi, hamkasb esa tasdiqlanguncha ko‘rmaydi.
+    for (const item of [shared.body.id, hidden.body.id]) {
+      await owner.post(`/api/portfolio/${item}/submit`).expect(200);
+    }
+    await deputy.get(`/api/files/${sharedFile}`).expect(200);
+    await colleague.get(`/api/files/${sharedFile}`).expect(404);
+
+    for (const item of [shared.body.id, hidden.body.id]) {
+      await deputy.post(`/api/portfolio/${item}/review`).send({ decision: 'APPROVED' }).expect(200);
+    }
     await colleague.get(`/api/files/${sharedFile}`).expect(200);
     await colleague.get(`/api/files/${privateFile}`).expect(404);
+    await deputy.get(`/api/files/${privateFile}`).expect(200);
     await student.get(`/api/files/${sharedFile}`).expect(404);
     await owner.get(`/api/files/${privateFile}`).expect(200);
+  });
+});
+
+describe('O‘quvchi qoralamasidagi dalil fayli', () => {
+  it('qoralama fayli sinf rahbariga ham yopiq, tekshiruvga yuborilgach ochiladi', async () => {
+    const studentLogin = fx.studentsA[0]!.login;
+    const student = await login(app, studentLogin);
+    const homeroom = await login(app, fx.teacher.login);
+    const deputy = await login(app, (await createUser(prisma, ['DEPUTY'])).login);
+
+    const file = await upload(student);
+    const item = await student
+      .post('/api/portfolio')
+      .send({ type: 'CERTIFICATE', title: 'Sertifikat', evidenceFileId: file, visibility: 'STAFF' })
+      .expect(201);
+
+    await homeroom.get(`/api/files/${file}`).expect(404);
+    await deputy.get(`/api/files/${file}`).expect(404);
+    await student.get(`/api/files/${file}`).expect(200);
+
+    await student.post(`/api/portfolio/${item.body.id}/submit`).expect(200);
+    await homeroom.get(`/api/files/${file}`).expect(200);
+    await deputy.get(`/api/files/${file}`).expect(200);
   });
 });
 

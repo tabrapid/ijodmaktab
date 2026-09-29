@@ -289,10 +289,10 @@ function UsersList() {
                       <RoleBadges roles={user.roles} />
                     </TD>
                     <TD className="whitespace-nowrap">
-                      {user.currentClass?.name ?? <span className="text-slate-400">—</span>}
+                      {user.currentClass?.name ?? <span className="text-slate-500">—</span>}
                     </TD>
                     <TD className="font-mono text-xs whitespace-nowrap text-slate-700">
-                      {user.login ?? <span className="text-slate-400">—</span>}
+                      {user.login ?? <span className="text-slate-500">—</span>}
                     </TD>
                     <TD>
                       <UserStatusCell user={user} />

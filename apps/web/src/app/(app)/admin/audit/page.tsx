@@ -146,7 +146,7 @@ function AuditRow({
               ))}
           </div>
         ) : (
-          <span className="text-slate-400">—</span>
+          <span className="text-slate-500">—</span>
         )}
       </TD>
       <TD className="font-mono text-xs whitespace-nowrap text-slate-600">{item.ip ?? '—'}</TD>
@@ -161,7 +161,7 @@ function AuditRow({
             </pre>
           </details>
         ) : (
-          <span className="text-slate-400">—</span>
+          <span className="text-slate-500">—</span>
         )}
       </TD>
     </TR>

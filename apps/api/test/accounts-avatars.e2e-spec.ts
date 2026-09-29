@@ -355,6 +355,43 @@ describe('Direktor o‘rinbosari hisoblarni boshqaradi', () => {
     });
     expect(audit.actorRoles).toContain('DEPUTY');
   });
+
+  it('bir importni parallel ikki marta tasdiqlab takroriy hisoblar yaratib bo‘lmaydi', async () => {
+    const { agent } = await deputyAgent();
+    const names = ['Anvar', 'Bobur', 'Dilnoza', 'Elyor', 'Farrux', 'G‘ayrat', 'Hilola', 'Iroda'];
+    names.push(...names.map((name) => `${name}jon`));
+    // Birinchisi tugashiga yaqin, parollar xeshlanayotganda va bir vaqtda kelgan ikkinchi so‘rov.
+    for (const delay of [120, 40, 0]) {
+      const surname = `Parallelov${suffix()}`;
+      const book = new ExcelJS.Workbook();
+      const sheet = book.addWorksheet('Ro‘yxat');
+      sheet.addRow(['F.I.Sh.', 'Sinf']);
+      for (const name of names) sheet.addRow([`${surname} ${name}`, fx.classA.name]);
+      const upload = await agent
+        .post('/api/users/import')
+        .attach('file', Buffer.from(await book.xlsx.writeBuffer()), {
+          filename: 'royxat.xlsx',
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        })
+        .expect(200);
+      expect(upload.body.counts.ok).toBe(names.length);
+      const body = { mapping: upload.body.mapping, defaultRole: 'STUDENT', skipRows: [] };
+      const commit = () => agent.post(`/api/users/import/${upload.body.batchId}/commit`).send(body);
+      const responses = await Promise.all([
+        commit(),
+        new Promise((resolve) => setTimeout(resolve, delay)).then(() => commit()),
+      ]);
+      expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+      const accepted = responses.find((response) => response.status === 200)!;
+      const rejected = responses.find((response) => response.status === 409)!;
+      expect(accepted.body.createdCount).toBe(names.length);
+      expect(rejected.body.code).toBe('ALREADY_COMMITTED');
+      expect(await prisma.user.count({ where: { lastName: surname } })).toBe(names.length);
+      expect(await prisma.auditEvent.count({ where: { action: 'user.import', entityId: upload.body.batchId } })).toBe(
+        1,
+      );
+    }
+  });
 });
 
 // ---------------------------------------------------------------- Profil rasmlari

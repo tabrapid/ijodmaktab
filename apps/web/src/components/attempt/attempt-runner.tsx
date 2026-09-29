@@ -63,6 +63,8 @@ interface ServerState {
   deviceConflict?: boolean;
   lock?: { lockedAt: string; reason: AttemptLockReason } | null;
   lockCount?: number;
+  /** Sessiyadagi to‘liq ekran nazorati (o‘qituvchi test davomida o‘chirishi mumkin). */
+  requireFullscreen?: boolean;
 }
 
 interface LockInfo {
@@ -125,7 +127,9 @@ export function AttemptRunner({
   const attemptId = initial.id;
   const questions = initial.questions;
   const allowBack = initial.session.allowBackNavigation;
-  const enforce = initial.session.requireFullscreen;
+  // O‘qituvchi nazoratni test davomida o‘chirishi mumkin — qiymat server signalidan yangilanadi.
+  const [enforce, setEnforce] = useState(initial.session.requireFullscreen);
+  const enforceRef = useRef(enforce);
   const [canFullscreen] = useState(() => fullscreenSupported());
   const [canKeepAwake] = useState(() => wakeLockSupported());
 
@@ -231,6 +235,18 @@ export function AttemptRunner({
     setMode('locked');
   }, [setMode]);
 
+  /** Serverdagi nazorat sozlamasini qabul qiladi (o‘chirilsa — to‘liq ekran talab qilinmaydi). */
+  const syncEnforce = useCallback(
+    (value: boolean | undefined) => {
+      if (typeof value !== 'boolean' || enforceRef.current === value) return;
+      enforceRef.current = value;
+      setEnforce(value);
+      if (!value && modeRef.current === 'gate') setMode('active');
+      if (value && canFullscreen && modeRef.current === 'active' && !isFullscreen()) setMode('gate');
+    },
+    [canFullscreen, setMode],
+  );
+
   /**
    * To‘xtatish xabarini serverga yetkazadi (internet uzilsa — qayta urinadi). Xabar to‘xtatgan
    * oyna nomidan yuboriladi: yangi oyna ham eski oynaning qoidabuzarligini bekor qila olmaydi,
@@ -251,6 +267,7 @@ export function AttemptRunner({
             // Sahifa yopilayotgan bo‘lsa ham so‘rov yetib boradi.
             { keepalive: true },
           );
+          syncEnforce(state.requireFullscreen);
           const own = flag.clientId === clientId;
           const refused =
             state.status === 'IN_PROGRESS' &&
@@ -264,7 +281,9 @@ export function AttemptRunner({
             // Server qabul qilmadi: to‘xtatgan oyna javob yozayotgan oyna emas edi — belgi bekor.
             clearLockFlag(attemptId);
             if (own && state.deviceConflict) setConflictState(true);
-            if (modeRef.current === 'locked') setMode(enforce && canFullscreen && !isFullscreen() ? 'gate' : 'active');
+            if (modeRef.current === 'locked') {
+              setMode(enforceRef.current && canFullscreen && !isFullscreen() ? 'gate' : 'active');
+            }
           }
           applyRef.current({ ...state, deviceConflict: own ? state.deviceConflict : undefined }, false);
           return;
@@ -280,7 +299,7 @@ export function AttemptRunner({
     } finally {
       lockSending.current = false;
     }
-  }, [attemptId, canFullscreen, clientId, enforce, goLogin, setConflictState, setMode]);
+  }, [attemptId, canFullscreen, clientId, goLogin, setConflictState, setMode, syncEnforce]);
 
   /** Server holatini qurilma holatiga moslaydi (server — yagona haqiqat manbai). */
   const reconcile = useCallback(
@@ -294,7 +313,7 @@ export function AttemptRunner({
       // Topshirish natijasi kutilmoqda: kechiktirilgan qoidabuzarlik belgisi submit() da hal qilinadi.
       if (deferredViolation.current) return;
       const flag = loadLockFlag(attemptId);
-      if (enforce && unconfirmed(flag, state.lockCount)) {
+      if (enforceRef.current && unconfirmed(flag, state.lockCount)) {
         // Qurilma to‘xtatgan, xabar esa serverga hali yetmagan — test ochilmaydi, xabar qayta yuboriladi.
         enterLocked();
         if (resend) void sendLock();
@@ -311,7 +330,7 @@ export function AttemptRunner({
         void flushRef.current();
       }
     },
-    [attemptId, enforce, enterLocked, sendLock, setMode],
+    [attemptId, enterLocked, sendLock, setMode],
   );
 
   const applyServer = useCallback(
@@ -324,6 +343,7 @@ export function AttemptRunner({
       }
       if (state.deadlineAt) updateDeadline(Date.parse(state.deadlineAt));
       if (state.deviceConflict) setConflictState(true);
+      syncEnforce(state.requireFullscreen);
       if (typeof state.lockCount === 'number') {
         reconcile(
           {
@@ -334,7 +354,7 @@ export function AttemptRunner({
         );
       }
     },
-    [finish, reconcile, setConflictState, syncClock, updateDeadline],
+    [finish, reconcile, setConflictState, syncClock, syncEnforce, updateDeadline],
   );
 
   useEffect(() => {
@@ -360,7 +380,7 @@ export function AttemptRunner({
    */
   const violate = useCallback(
     (reason: AttemptLockReason): boolean => {
-      if (!enforce || modeRef.current !== 'active') return false;
+      if (!enforceRef.current || modeRef.current !== 'active') return false;
       // Dasturning o‘zi chiqayotganda (yakunlash, qayta kirish) to‘xtatilmaydi.
       if (expectedExit.current || finishedRef.current) return false;
       // Javob yozish huquqi boshqa oynada — bu oynaning xabarini server baribir qabul qilmaydi.
@@ -380,7 +400,7 @@ export function AttemptRunner({
       void sendLock();
       return true;
     },
-    [attemptId, clientId, enforce, enterLocked, sendLock, serverNow],
+    [attemptId, clientId, enterLocked, sendLock, serverNow],
   );
 
   // ------------------------------------------------------------ Javoblarni yuborish navbati
@@ -520,7 +540,7 @@ export function AttemptRunner({
       // hisobga olinadi. Vaqt tugagan bo‘lsa, test baribir yakunlanadi.
       const deferred = deferredViolation.current;
       deferredViolation.current = null;
-      if (enforce && modeRef.current === 'active' && deadlineRef.current > serverNow()) {
+      if (enforceRef.current && modeRef.current === 'active' && deadlineRef.current > serverNow()) {
         if (deferred) violate(deferred);
         else if (canFullscreen && !isFullscreen()) violate('FULLSCREEN_EXIT');
         else if (document.visibilityState === 'hidden' || !document.hasFocus()) violate('PAGE_HIDDEN');
@@ -534,7 +554,6 @@ export function AttemptRunner({
       attemptId,
       canFullscreen,
       clientId,
-      enforce,
       enterLocked,
       finish,
       persist,
@@ -671,7 +690,7 @@ export function AttemptRunner({
       setMode('active');
       void flush();
     };
-    if (enforce && canFullscreen && !isFullscreen()) {
+    if (enforceRef.current && canFullscreen && !isFullscreen()) {
       enterFullscreen().then(proceed, () => setFullscreenFailed(true));
     } else {
       proceed();
@@ -680,7 +699,7 @@ export function AttemptRunner({
 
   const takeover = async () => {
     // Yangi oynada to‘liq ekranga o‘tish ham shu bosish bilan so‘raladi.
-    if (enforce && canFullscreen && modeRef.current === 'gate' && !isFullscreen()) {
+    if (enforceRef.current && canFullscreen && modeRef.current === 'gate' && !isFullscreen()) {
       enterFullscreen().catch(() => undefined);
     }
     try {
@@ -699,7 +718,8 @@ export function AttemptRunner({
       setConflictState(false);
       // Serverga yetmagan qoidabuzarlik endi javob yozayotgan shu oyna nomidan yuboriladi.
       const flag = loadLockFlag(attemptId);
-      if (enforce && flag && flag.clientId !== clientId && unconfirmed(flag, view.lockCount)) {
+      syncEnforce(view.session.requireFullscreen);
+      if (enforceRef.current && flag && flag.clientId !== clientId && unconfirmed(flag, view.lockCount)) {
         saveLockFlag(attemptId, { ...flag, clientId });
       }
       reconcile(
@@ -709,7 +729,7 @@ export function AttemptRunner({
         },
         true,
       );
-      if (enforce && canFullscreen && modeRef.current === 'active' && !isFullscreen()) setMode('gate');
+      if (enforceRef.current && canFullscreen && modeRef.current === 'active' && !isFullscreen()) setMode('gate');
       void flush();
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Qayta urinib ko‘ring.');

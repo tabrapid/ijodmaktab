@@ -423,6 +423,17 @@ export class SessionsService {
     if (state !== 'SCHEDULED' && (input.startsAt || input.durationMinutes)) {
       throw conflict('ALREADY_STARTED', 'Boshlangan sessiyada faqat yopilish va kirish muddatini o‘zgartirish mumkin.');
     }
+    const requireFullscreen = input.requireFullscreen ?? session.requireFullscreen;
+    const fullscreenChanged = requireFullscreen !== session.requireFullscreen;
+    // Ishlayotgan o‘quvchilarga nazoratni to‘satdan yoqib bo‘lmaydi; ochiq sessiyada faqat o‘chiriladi.
+    if (fullscreenChanged && state !== 'SCHEDULED') {
+      if (state !== 'OPEN') {
+        throw conflict('SESSION_FINISHED', 'Yopilgan sessiyada to‘liq ekran nazoratini o‘zgartirib bo‘lmaydi.');
+      }
+      if (requireFullscreen) {
+        throw conflict('ALREADY_STARTED', 'Boshlangan sessiyada to‘liq ekran nazoratini faqat o‘chirish mumkin.');
+      }
+    }
     const startsAt = input.startsAt ? new Date(input.startsAt) : session.startsAt;
     const endsAt = input.endsAt ? new Date(input.endsAt) : session.endsAt;
     const entryClosesAt =
@@ -435,49 +446,61 @@ export class SessionsService {
     if (entryClosesAt && (entryClosesAt <= startsAt || entryClosesAt > endsAt)) {
       throw badRequest('INVALID_TIMING', 'Kirish muddati sessiya vaqti ichida bo‘lishi kerak.');
     }
+    const durationMinutes = input.durationMinutes ?? session.durationMinutes;
+    const timingChanged =
+      startsAt.getTime() !== session.startsAt.getTime() ||
+      endsAt.getTime() !== session.endsAt.getTime() ||
+      (entryClosesAt?.getTime() ?? null) !== (session.entryClosesAt?.getTime() ?? null) ||
+      durationMinutes !== session.durationMinutes;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.assessmentSession.update({
         where: { id },
-        data: {
-          startsAt,
-          endsAt,
-          entryClosesAt,
-          durationMinutes: input.durationMinutes ?? session.durationMinutes,
-        },
+        data: { startsAt, endsAt, entryClosesAt, durationMinutes, requireFullscreen },
       });
       if (endsAt.getTime() !== session.endsAt.getTime()) {
         await this.adjustDeadlines(tx, id, session, endsAt, now);
       }
-      const students = await tx.sessionAssignment.findMany({
-        where: { sessionId: id, removedAt: null },
-        select: { studentId: true },
-      });
-      await this.notifications.notify(
-        students.map((item) => item.studentId),
-        {
-          type: 'TEST_TIME_CHANGED',
-          title: `Test vaqti o‘zgardi: ${session.title}`,
-          body: `Boshlanish: ${formatDateTime(startsAt)}, yopilish: ${formatDateTime(endsAt)}.`,
-          link: `/student/sessions/${id}`,
-        },
-        tx,
-      );
-      await this.audit.log(
-        'session.timing_changed',
-        { type: 'AssessmentSession', id },
-        {
-          before: {
-            startsAt: session.startsAt,
-            endsAt: session.endsAt,
-            entryClosesAt: session.entryClosesAt,
-            durationMinutes: session.durationMinutes,
+      // Faqat nazorat o‘zgarganda o‘quvchilarga “vaqt o‘zgardi” xabari yuborilmaydi.
+      if (timingChanged || !fullscreenChanged) {
+        const students = await tx.sessionAssignment.findMany({
+          where: { sessionId: id, removedAt: null },
+          select: { studentId: true },
+        });
+        await this.notifications.notify(
+          students.map((item) => item.studentId),
+          {
+            type: 'TEST_TIME_CHANGED',
+            title: `Test vaqti o‘zgardi: ${session.title}`,
+            body: `Boshlanish: ${formatDateTime(startsAt)}, yopilish: ${formatDateTime(endsAt)}.`,
+            link: `/student/sessions/${id}`,
           },
-          after: { startsAt, endsAt, entryClosesAt, durationMinutes: input.durationMinutes ?? session.durationMinutes },
-          reason: input.reason,
-        },
-        { tx },
-      );
+          tx,
+        );
+        await this.audit.log(
+          'session.timing_changed',
+          { type: 'AssessmentSession', id },
+          {
+            before: {
+              startsAt: session.startsAt,
+              endsAt: session.endsAt,
+              entryClosesAt: session.entryClosesAt,
+              durationMinutes: session.durationMinutes,
+            },
+            after: { startsAt, endsAt, entryClosesAt, durationMinutes },
+            reason: input.reason,
+          },
+          { tx },
+        );
+      }
+      if (fullscreenChanged) {
+        await this.audit.log(
+          'session.fullscreen_changed',
+          { type: 'AssessmentSession', id },
+          { before: session.requireFullscreen, after: requireFullscreen, state, reason: input.reason },
+          { tx },
+        );
+      }
     });
     if (endsAt <= now) await this.finalizeInProgress(id, 'STAFF');
     return this.detail(viewer, id);

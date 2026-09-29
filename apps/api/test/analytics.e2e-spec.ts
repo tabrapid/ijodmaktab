@@ -163,11 +163,19 @@ describe('Portfolio ro‘yxati xodim uchun', () => {
   it('tekshiruvchi bo‘lmagan fan o‘qituvchisi faqat “xodimlar” ko‘rinishidagi yozuvlarni ko‘radi va jami son mos', async () => {
     const owner = fx.studentsA[1]!;
     const student = await login(app, owner.login);
-    await student
+    const closed = await student
       .post('/api/portfolio')
       .send({ type: 'POEM', title: 'Yopiq she’r', visibility: 'PRIVATE' })
       .expect(201);
-    await student.post('/api/portfolio').send({ type: 'ESSAY', title: 'Ochiq esse', visibility: 'STAFF' }).expect(201);
+    const open = await student
+      .post('/api/portfolio')
+      .send({ type: 'ESSAY', title: 'Ochiq esse', visibility: 'STAFF' })
+      .expect(201);
+    // Qoralama faqat egasiga ko‘rinadi: yozuvlar tasdiqlangan bo‘lishi kerak.
+    for (const item of [closed.body, open.body]) {
+      await student.post(`/api/portfolio/${item.id}/submit`).expect(200);
+      await teacher.post(`/api/portfolio/${item.id}/review`).send({ decision: 'APPROVED' }).expect(200);
+    }
 
     // A sinfda dars beradigan, lekin sinf rahbari bo‘lmagan o‘qituvchi.
     const year = await currentYear(prisma);

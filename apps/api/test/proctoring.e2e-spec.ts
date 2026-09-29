@@ -436,3 +436,128 @@ describe('Vaqt to‘xtamaydi', () => {
     expect((await prisma.attempt.findUniqueOrThrow({ where: { id: third.attemptId } })).lockCount).toBe(0);
   });
 });
+
+describe('Nazoratni sessiya yaratilgandan keyin o‘zgartirish', () => {
+  it('boshlanmagan sessiyada yoqiladi va o‘chiriladi; audit yoziladi, vaqt xabari yuborilmaydi', async () => {
+    const teacher = await as(fx.teacher.login);
+    const test = await createTest(teacher, fx.subjectId, QUESTIONS);
+    const now = Date.now();
+    const session = await createSession(teacher, test.id, [fx.classA.id], {
+      startsAt: new Date(now + 60 * 60_000).toISOString(),
+      endsAt: new Date(now + 2 * 60 * 60_000).toISOString(),
+    });
+    expect(session.state).toBe('SCHEDULED');
+    const timeNotes = () =>
+      prisma.notification.count({ where: { type: 'TEST_TIME_CHANGED', link: `/student/sessions/${session.id}` } });
+    const audits = (action: string) => prisma.auditEvent.count({ where: { action, entityId: session.id } });
+
+    const invalid = await teacher.put(`/api/sessions/${session.id}/timing`).send({ requireFullscreen: 'no' });
+    expect(invalid.status).toBe(400);
+    // Sessiyani boshqarmaydigan o‘qituvchi o‘zgartira olmaydi.
+    const outsider = await as(fx.otherTeacher.login);
+    await outsider.put(`/api/sessions/${session.id}/timing`).send({ requireFullscreen: false }).expect(404);
+
+    const off = await teacher
+      .put(`/api/sessions/${session.id}/timing`)
+      .send({ requireFullscreen: false, reason: 'Planshetlarda to‘liq ekran ishlamaydi' })
+      .expect(200);
+    expect(off.body.requireFullscreen).toBe(false);
+    expect((await prisma.assessmentSession.findUniqueOrThrow({ where: { id: session.id } })).requireFullscreen).toBe(
+      false,
+    );
+    const audit = await prisma.auditEvent.findFirstOrThrow({
+      where: { action: 'session.fullscreen_changed', entityId: session.id },
+    });
+    expect(audit.actorId).toBe(fx.teacher.id);
+    expect(audit.data).toMatchObject({
+      before: true,
+      after: false,
+      state: 'SCHEDULED',
+      reason: 'Planshetlarda to‘liq ekran ishlamaydi',
+    });
+    expect(await audits('session.timing_changed')).toBe(0);
+    expect(await timeNotes()).toBe(0);
+
+    const student = await as(fx.studentsA[0]!.login);
+    const preview = await student.get(`/api/me/sessions/${session.id}`).expect(200);
+    expect(preview.body.requireFullscreen).toBe(false);
+
+    const on = await teacher.put(`/api/sessions/${session.id}/timing`).send({ requireFullscreen: true }).expect(200);
+    expect(on.body.requireFullscreen).toBe(true);
+    expect(await audits('session.fullscreen_changed')).toBe(2);
+    expect(await timeNotes()).toBe(0);
+
+    // Vaqt bilan birga o‘zgarsa — vaqt xabari ham, ikkala audit yozuvi ham bo‘ladi.
+    const both = await teacher
+      .put(`/api/sessions/${session.id}/timing`)
+      .send({ requireFullscreen: false, durationMinutes: 40 })
+      .expect(200);
+    expect(both.body.requireFullscreen).toBe(false);
+    expect(both.body.durationMinutes).toBe(40);
+    expect(await audits('session.fullscreen_changed')).toBe(3);
+    expect(await audits('session.timing_changed')).toBe(1);
+    expect(await timeNotes()).toBe(fx.studentsA.length);
+  });
+
+  it('ochiq sessiyada faqat o‘chiriladi: to‘xtatilgan urinish ruxsatni kutadi, keyingi chiqishlar to‘xtatmaydi', async () => {
+    const { teacher, session, student, attemptId, client, questions } = await begin(1);
+    const locked = await student
+      .post(`/api/attempts/${attemptId}/lock`)
+      .send({ clientId: client, reason: 'FULLSCREEN_EXIT', epoch: 0 })
+      .expect(200);
+    expect(locked.body.requireFullscreen).toBe(true);
+
+    const off = await teacher.put(`/api/sessions/${session.id}/timing`).send({ requireFullscreen: false }).expect(200);
+    // Ochiq test sahifasi o‘zgarishni yurak urishi orqali biladi.
+    const beat = await student.post(`/api/attempts/${attemptId}/heartbeat`).send({ clientId: client }).expect(200);
+    expect(beat.body.requireFullscreen).toBe(false);
+    expect(off.body.state).toBe('OPEN');
+    expect(off.body.requireFullscreen).toBe(false);
+    const audit = await prisma.auditEvent.findFirstOrThrow({
+      where: { action: 'session.fullscreen_changed', entityId: session.id },
+    });
+    expect(audit.data).toMatchObject({ before: true, after: false, state: 'OPEN' });
+
+    // Allaqachon to‘xtatilgan o‘quvchi o‘qituvchi ruxsatini kutadi.
+    const view = await student.get(`/api/attempts/${attemptId}`).query({ clientId: client }).expect(200);
+    expect(view.body.session.requireFullscreen).toBe(false);
+    expect(view.body.lock.reason).toBe('FULLSCREEN_EXIT');
+    await teacher.post(`/api/attempts/${attemptId}/unlock`).send({}).expect(200);
+
+    // Endi oynadan chiqish testni to‘xtatmaydi, javoblar saqlanadi.
+    const ignored = await student
+      .post(`/api/attempts/${attemptId}/lock`)
+      .send({ clientId: client, reason: 'PAGE_HIDDEN', epoch: 1 })
+      .expect(200);
+    expect(ignored.body.lock).toBeNull();
+    expect(ignored.body.lockCount).toBe(1);
+    expect(ignored.body.requireFullscreen).toBe(false);
+    await student
+      .put(`/api/attempts/${attemptId}/answers/${questions[0]!.id}`)
+      .send({ clientId: client, optionId: 'a', revision: 1 })
+      .expect(200);
+
+    // Ishlayotgan o‘quvchilarga nazoratni qayta yoqib bo‘lmaydi.
+    const again = await teacher.put(`/api/sessions/${session.id}/timing`).send({ requireFullscreen: true });
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe('ALREADY_STARTED');
+    expect((await prisma.assessmentSession.findUniqueOrThrow({ where: { id: session.id } })).requireFullscreen).toBe(
+      false,
+    );
+    expect(
+      await prisma.auditEvent.count({ where: { action: 'session.fullscreen_changed', entityId: session.id } }),
+    ).toBe(1);
+
+    // Yopilgan sessiyada nazorat o‘zgarmaydi.
+    const closed = await openSession();
+    await closed.teacher.post(`/api/sessions/${closed.session.id}/close`).expect(200);
+    const late = await closed.teacher
+      .put(`/api/sessions/${closed.session.id}/timing`)
+      .send({ requireFullscreen: false });
+    expect(late.status).toBe(409);
+    expect(late.body.code).toBe('SESSION_FINISHED');
+    expect(
+      (await prisma.assessmentSession.findUniqueOrThrow({ where: { id: closed.session.id } })).requireFullscreen,
+    ).toBe(true);
+  });
+});

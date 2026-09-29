@@ -513,6 +513,8 @@ export const updateSessionTimingSchema = timingRefinements(
     endsAt: isoDateTime().optional(),
     entryClosesAt: isoDateTime().nullish(),
     durationMinutes: sessionTimingShape.durationMinutes.optional(),
+    /** To‘liq ekran nazorati: boshlanmagan sessiyada yoqiladi/o‘chiriladi, ochiq sessiyada faqat o‘chiriladi. */
+    requireFullscreen: z.boolean().optional(),
     reason: optionalText(300),
   }),
 );

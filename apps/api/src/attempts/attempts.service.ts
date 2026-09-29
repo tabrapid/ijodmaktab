@@ -711,6 +711,8 @@ export class AttemptsService {
       serverNow: new Date(),
       deadlineAt: attempt.deadlineAt,
       deviceConflict: conflictDevice,
+      // O‘qituvchi test davomida nazoratni o‘chirsa, ochiq sahifa buni shu signal orqali biladi.
+      requireFullscreen: attempt.session.requireFullscreen,
       ...lockOf(attempt),
     };
   }
@@ -763,12 +765,16 @@ export class AttemptsService {
     });
     if (overdue) await this.grading.finalize(attemptId, 'TIMEOUT');
 
-    const fresh = await this.prisma.attempt.findUniqueOrThrow({ where: { id: attemptId } });
+    const fresh = await this.prisma.attempt.findUniqueOrThrow({
+      where: { id: attemptId },
+      include: { session: { select: { requireFullscreen: true } } },
+    });
     return {
       status: fresh.status as AttemptStatus,
       serverNow: new Date(),
       deadlineAt: fresh.deadlineAt,
       deviceConflict: Boolean(fresh.activeClientId && fresh.activeClientId !== input.clientId),
+      requireFullscreen: fresh.session.requireFullscreen,
       ...lockOf(fresh),
     };
   }

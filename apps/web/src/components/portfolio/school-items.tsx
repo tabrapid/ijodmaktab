@@ -113,8 +113,10 @@ export function SchoolItems() {
     <div className="space-y-6">
       <Card>
         <CardBody className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <Field label="Qidirish" className="sm:col-span-2 lg:col-span-3">
+          {/* Tanlangan qiymat (masalan, “Sana: avval yangilari”) kesilmasligi uchun: noutbukda 3 ustun (3 qator),
+              faqat keng ekranda 5 ustun. */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+            <Field label="Qidirish" className="sm:col-span-2 2xl:col-span-3">
               <Input
                 type="search"
                 value={search}
@@ -274,7 +276,7 @@ export function SchoolItems() {
                       </div>
                     </TD>
                     <TD className="whitespace-nowrap">{item.owner.className ?? '—'}</TD>
-                    <TD className="min-w-56">
+                    <TD className="min-w-52">
                       <Link href={`/portfolio/${item.id}`} className="font-medium text-brand-700 hover:underline">
                         {item.title}
                       </Link>

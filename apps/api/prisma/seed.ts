@@ -122,6 +122,14 @@ async function main() {
     login: 'b.yusupov',
     roles: ['DEPUTY', 'TEACHER'],
   });
+  // Dars bermaydigan direktor o‘rinbosari: faqat rahbariyat bo‘limlari (test banki, sessiyalar, hisoblar).
+  await createUser({
+    lastName: 'Rahbarova',
+    firstName: 'Nodira',
+    middleName: 'Shavkatovna',
+    login: 'n.rahbarova',
+    roles: ['DEPUTY'],
+  });
   const karimova = await createUser({
     lastName: 'Karimova',
     firstName: 'Dilnoza',
@@ -208,6 +216,8 @@ async function main() {
     });
   await teach(karimova.id, 'Matematika', class9A.id);
   await teach(karimova.id, 'Matematika', class9B.id);
+  // 9-B da matematika ikki guruhda o‘tiladi: sinf rahbari ham bankdagi algebra testini o‘z sinfiga o‘tkaza oladi.
+  await teach(tursunova.id, 'Matematika', class9B.id);
   await teach(karimova.id, 'Fizika', class10A.id);
   await teach(rahimov.id, 'Ona tili va adabiyot', class9A.id);
   await teach(rahimov.id, 'Ona tili va adabiyot', class9B.id);
@@ -327,7 +337,9 @@ async function main() {
       academicYearId: year.id,
       tags: ['algebra', 'nazorat ishi'],
       status: 'ACTIVE',
-      // Maktab test bankida: barcha o‘qituvchilar muzlatilgan v1 ni ko‘radi va o‘tkaza oladi.
+      // Maktab test bankida: barcha o‘qituvchilar muzlatilgan v1 ni ko‘radi va nusxa oladi. Sessiya esa
+      // Matematikadan dars beriladigan sinfga o‘tkaziladi: d.karimova (9-A, 9-B), m.tursunova (9-B);
+      // rahbariyat (b.yusupov, n.rahbarova) — istalgan sinfga.
       visibility: 'SCHOOL',
       schoolSharedAt: new Date(),
       searchText: normalizeForSearch('Algebra: kvadrat tenglamalar (1-bob) Kvadrat tenglamalar'),
@@ -951,8 +963,9 @@ async function main() {
   console.log('Demo ma’lumotlar yaratildi.');
   console.log(`  Parol (barcha demo hisoblar): ${DEMO_PASSWORD}`);
   console.log('  Super admin: superadmin (alohida kirish: /system/login, 2FA sozlash talab qilinadi)');
-  console.log('  Administrator: admin · Direktor o‘rinbosari: b.yusupov');
-  console.log('  O‘qituvchilar: d.karimova, j.rahimov, m.tursunova');
+  console.log('  Administrator: admin');
+  console.log('  Direktor o‘rinbosarlari: b.yusupov (Tarix o‘qituvchisi ham), n.rahbarova (dars bermaydi)');
+  console.log('  O‘qituvchilar: d.karimova, j.rahimov, m.tursunova (9-B — bankdagi algebra testini o‘tkaza oladi)');
   console.log('  O‘quvchilar: ali.aliyev, zebo.karimova (9-A), jahongir.abdullayev (9-B) va boshqalar');
   console.log('  Portfolio namunasi: jaloliddin.abduganiyev (10-A — IELTS, SAT, milliy sertifikatlar, olimpiada)');
   console.log(`  9-A uchun ochiq test kodi: ${DEMO_ACCESS_CODE}`);

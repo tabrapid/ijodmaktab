@@ -132,7 +132,7 @@ describe('Tuzilgan sertifikat maydonlari', () => {
   it('natija details dan avtomatik yasaladi, mijoz yuborgani e’tiborga olinmaydi', async () => {
     const student = await login(app, fx.studentsA[0]!.login);
     const item = await createItem(student, { ...IELTS, result: 'Soxta natija' });
-    expect(item.result).toBe('IELTS 7.5 (L 8 · R 7.5 · W 6.5 · S 7)');
+    expect(item.result).toBe('IELTS 7.5 (L 8.0 · R 7.5 · W 6.5 · S 7.0)');
     expect(item.details).toEqual({
       testType: 'ACADEMIC',
       overall: 7.5,
@@ -145,6 +145,35 @@ describe('Tuzilgan sertifikat maydonlari', () => {
     // Qidiruv matnida ham natija bor.
     const search = await student.get('/api/portfolio').query({ q: 'L 8' }).expect(200);
     expect(search.body.items.some((entry: { id: string }) => entry.id === item.id)).toBe(true);
+  });
+
+  it('IELTS ballari bir kasr xonasi bilan; eski formatda saqlangan natija ham shunday ko‘rsatiladi', async () => {
+    const student = await login(app, fx.studentsA[0]!.login);
+    const item = await createItem(student, {
+      ...IELTS,
+      title: 'IELTS Academic — 7.0',
+      details: { overall: 7, listening: 7.5, reading: 7, writing: 6.5, speaking: 7 },
+    });
+    expect(item.result).toBe('IELTS 7.0 (L 7.5 · R 7.0 · W 6.5 · S 7.0)');
+    // Oldingi format bilan saqlangan matn: ko‘rinishda details dan qayta yasaladi.
+    await prisma.portfolioItem.update({
+      where: { id: item.id },
+      data: { result: 'IELTS 7 (L 7.5 · R 7 · W 6.5 · S 7)' },
+    });
+    const fresh = await student.get(`/api/portfolio/${item.id}`).expect(200);
+    expect(fresh.body.result).toBe('IELTS 7.0 (L 7.5 · R 7.0 · W 6.5 · S 7.0)');
+    // Format farqi o‘zgarish emas: tasdiqlangan yozuv faqat shu sababli qoralamaga tushmaydi.
+    await student.post(`/api/portfolio/${item.id}/submit`).expect(200);
+    await homeroom.post(`/api/portfolio/${item.id}/review`).send({ decision: 'APPROVED' }).expect(200);
+    await prisma.portfolioItem.update({
+      where: { id: item.id },
+      data: { result: 'IELTS 7 (L 7.5 · R 7 · W 6.5 · S 7)' },
+    });
+    const same = await student
+      .put(`/api/portfolio/${item.id}`)
+      .send({ ...IELTS, title: 'IELTS Academic — 7.0', details: fresh.body.details })
+      .expect(200);
+    expect(same.body).toMatchObject({ status: 'APPROVED', result: 'IELTS 7.0 (L 7.5 · R 7.0 · W 6.5 · S 7.0)' });
   });
 
   it('tuzilgan maydoni yo‘q turda details saqlanmaydi', async () => {
@@ -936,5 +965,82 @@ describe('ZIP yuklab olish to‘xtatilganda', () => {
     const certificates = Object.keys(zip.files).filter((name) => name.includes('_Katta_fayl_'));
     expect(certificates).toHaveLength(12);
     expect(await settle(base)).toBe(base);
+  });
+});
+
+describe('Qoralama faqat egasiga ko‘rinadi', () => {
+  it('ro‘yxat, yozuv va chop etish: tekshiruvchi qoralamasiz, fan o‘qituvchisi faqat tasdiqlanganlarni ko‘radi', async () => {
+    const owner = fx.studentsA[1]!;
+    const student = await sessionOf(owner.login);
+    const draft = await createItem(student, { type: 'CERTIFICATE', title: 'Qoralama sertifikat', visibility: 'STAFF' });
+    const pending = await submitted(student, {
+      type: 'CERTIFICATE',
+      title: 'Yuborilgan sertifikat',
+      visibility: 'STAFF',
+    });
+    const approved = await submitted(student, {
+      type: 'CERTIFICATE',
+      title: 'Tasdiqlangan sertifikat',
+      visibility: 'STAFF',
+    });
+    await homeroom.post(`/api/portfolio/${approved.id}/review`).send({ decision: 'APPROVED' }).expect(200);
+    const ids = [draft.id, pending.id, approved.id];
+
+    /** Egasining ro‘yxati: shu sinovdagi yozuvlar, holatlar va jami son sahifadagi yozuvlar soniga tengmi. */
+    const listed = async (agent: Agent, query: Record<string, string> = {}) => {
+      const response = await agent
+        .get('/api/portfolio')
+        .query({ ownerId: owner.id, pageSize: 200, ...query })
+        .expect(200);
+      const items = response.body.items as { id: string; status: string }[];
+      expect(response.body.total).toBe(items.length);
+      return {
+        ids: items.filter((item) => ids.includes(item.id)).map((item) => item.id),
+        statuses: [...new Set(items.map((item) => item.status))],
+      };
+    };
+    const printed = async (agent: Agent, itemIds: string[]) => {
+      const response = await agent.post(`/api/portfolio/print/${owner.id}`).send({ itemIds }).expect(200);
+      const idsOf = (list: { id: string }[]) => list.map((item) => item.id).sort();
+      return { approved: idsOf(response.body.approved), unapproved: idsOf(response.body.unapproved) };
+    };
+
+    // Fan o‘qituvchisi: faqat “xodimlar” ko‘rinishidagi tasdiqlangan yozuv.
+    const subject = await listed(subjectTeacher);
+    expect(subject.ids).toEqual([approved.id]);
+    expect(subject.statuses).toEqual(['APPROVED']);
+    expect((await listed(subjectTeacher, { status: 'DRAFT' })).ids).toEqual([]);
+    expect((await listed(subjectTeacher, { status: 'SUBMITTED' })).ids).toEqual([]);
+    await subjectTeacher.get(`/api/portfolio/${draft.id}`).expect(404);
+    await subjectTeacher.get(`/api/portfolio/${pending.id}`).expect(404);
+    await subjectTeacher.get(`/api/portfolio/${approved.id}`).expect(200);
+    expect(await printed(subjectTeacher, ids)).toEqual({ approved: [approved.id], unapproved: [] });
+    await subjectTeacher
+      .post(`/api/portfolio/print/${owner.id}`)
+      .send({ itemIds: [draft.id] })
+      .expect(404);
+
+    // Tekshiruvchilar (sinf rahbari, o‘rinbosar): qoralamadan boshqasi.
+    for (const reviewer of [homeroom, deputy]) {
+      const seen = await listed(reviewer);
+      expect(seen.ids.sort()).toEqual([pending.id, approved.id].sort());
+      expect(seen.statuses).not.toContain('DRAFT');
+      expect(await listed(reviewer, { status: 'DRAFT' })).toEqual({ ids: [], statuses: [] });
+      await reviewer.get(`/api/portfolio/${draft.id}`).expect(404);
+      await reviewer.get(`/api/portfolio/${pending.id}`).expect(200);
+      expect(await printed(reviewer, ids)).toEqual({ approved: [approved.id], unapproved: [pending.id] });
+      await reviewer
+        .post(`/api/portfolio/print/${owner.id}`)
+        .send({ itemIds: [draft.id] })
+        .expect(404);
+      await reviewer.post(`/api/portfolio/${draft.id}/review`).send({ decision: 'APPROVED' }).expect(409);
+    }
+    await otherHomeroom.get(`/api/portfolio/${pending.id}`).expect(404);
+
+    // Egasi hammasini ko‘radi.
+    const own = await listed(student);
+    expect(own.ids.sort()).toEqual([...ids].sort());
+    await student.get(`/api/portfolio/${draft.id}`).expect(200);
+    expect((await printed(student, ids)).unapproved).toEqual([draft.id, pending.id].sort());
   });
 });

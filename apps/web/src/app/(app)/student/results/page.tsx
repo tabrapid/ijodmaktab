@@ -81,7 +81,7 @@ export default function MyResultsPage() {
                         ))}
                       </div>
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <span className="text-slate-500">—</span>
                     )}
                   </TD>
                   <TD className="text-right">

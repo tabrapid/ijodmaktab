@@ -120,6 +120,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'session.closed': 'Sessiya yopildi',
   'session.cancelled': 'Sessiya bekor qilindi',
   'session.timing_changed': 'Sessiya vaqti o‘zgartirildi',
+  'session.fullscreen_changed': 'To‘liq ekran nazorati o‘zgartirildi',
   'session.code_rotated': 'Kirish kodi almashtirildi',
   'session.assignments_changed': 'Ishtirokchilar ro‘yxati o‘zgartirildi',
   'session.review_opened': 'Javoblarni ko‘rish ochildi',

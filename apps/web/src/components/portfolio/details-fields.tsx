@@ -294,8 +294,8 @@ function IeltsFields({
       </fieldset>
       {mismatch && (
         <Alert tone="info" className="sm:col-span-2">
-          To‘rt bo‘lim o‘rtachasi bo‘yicha umumiy ball odatda <strong>{formatIeltsBand(expected)}</strong> bo‘ladi. Sertifikatdagi
-          qiymatni tekshiring — to‘g‘ri bo‘lsa, shunday qoldiring.
+          To‘rt bo‘lim o‘rtachasi bo‘yicha umumiy ball odatda <strong>{formatIeltsBand(expected)}</strong> bo‘ladi.
+          Sertifikatdagi qiymatni tekshiring — to‘g‘ri bo‘lsa, shunday qoldiring.
         </Alert>
       )}
       <Field label="TRF raqami" hint="Test Report Form raqami, ixtiyoriy." error={errors.trfNumber}>

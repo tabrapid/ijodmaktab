@@ -3,14 +3,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import type { Response } from 'express';
 import { fileTypeFromBuffer } from 'file-type';
-import { AccessService } from '../access/access.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
-import { hasRole, isStaff } from '../common/auth-user.js';
+import { isStaff } from '../common/auth-user.js';
 import { badRequest, notFound } from '../common/errors.js';
 import { StorageService } from '../common/storage.service.js';
 import { AppConfig } from '../config/app-config.js';
 import type { UploadedFileData } from '../common/uploaded-file.js';
+import { PortfolioAccess } from '../portfolio/portfolio-access.js';
+import { itemInclude } from '../portfolio/portfolio-common.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 export const FILE_MAX_BYTES = 10 * 1024 * 1024;
@@ -36,7 +37,7 @@ export class FilesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
-    private readonly access: AccessService,
+    private readonly portfolioAccess: PortfolioAccess,
     private readonly audit: AuditService,
     private readonly config: AppConfig,
   ) {}
@@ -136,37 +137,19 @@ export class FilesService {
   }
 
   /**
-   * Faylga kirish: egasi yoki fayl biriktirilgan portfolio yozuvini ko‘ra oladigan xodim
-   * (portfolio ko‘rinish qoidalari bilan bir xil: tekshiruvchi — har doim; boshqa xodim —
-   * “maktab xodimlari” ko‘rinishidagi yozuvda, o‘quvchi yozuvi bo‘lsa uni o‘qitadigan xodim).
-   * Kimningdir joriy profil rasmi bo‘lgan faylni esa tizimga kirgan har bir foydalanuvchi ko‘radi.
+   * Faylga kirish: egasi, kimningdir joriy profil rasmi bo‘lsa — tizimga kirgan har bir foydalanuvchi,
+   * aks holda fayl biriktirilgan portfolio yozuvlaridan birini ko‘ra oladigan kishi (portfolio ko‘rish
+   * qoidasining o‘zi: qoralama faqat egasiga, tekshiruvchi — qolganlarini, boshqa xodim — tasdiqlangan
+   * “maktab xodimlari” yozuvini). Hech bir yozuvga biriktirilmagan yuklamani faqat egasi ko‘radi.
    */
   private async canRead(viewer: AuthUser, fileId: string, ownerId: string, isAvatar: boolean) {
     if (isAvatar) return true;
     if (ownerId === viewer.id) return true;
-    if (hasRole(viewer, 'SUPER_ADMIN', 'DEPUTY')) return true;
     if (!isStaff(viewer)) return false;
-    const items = await this.prisma.portfolioItem.findMany({
-      where: { evidenceFileId: fileId },
-      select: { ownerId: true, visibility: true, owner: { select: { roles: { select: { role: true } } } } },
-    });
-    for (const item of items) {
-      const ownerIsStudent = item.owner.roles.some((entry) => entry.role === 'STUDENT');
-      if (!ownerIsStudent) {
-        if (item.visibility === 'STAFF') return true;
-        continue;
-      }
-      if (!(await this.access.canViewStudent(viewer, item.ownerId))) continue;
-      if (item.visibility === 'STAFF') return true;
-      const homeroom = await this.access.homeroomClassIds(viewer.id);
-      const isHomeroomOfOwner =
-        homeroom.length > 0 &&
-        (await this.prisma.enrollment.count({
-          where: { studentId: item.ownerId, classId: { in: homeroom }, endsOn: null },
-        })) > 0;
-      if (isHomeroomOfOwner) return true;
-    }
-    return false;
+    const items = await this.prisma.portfolioItem.findMany({ where: { evidenceFileId: fileId }, include: itemInclude });
+    if (!items.length) return false;
+    const scope = await this.portfolioAccess.scope(viewer);
+    return items.some((item) => this.portfolioAccess.canView(scope, item));
   }
 
   async download(viewer: AuthUser, id: string, res: Response) {

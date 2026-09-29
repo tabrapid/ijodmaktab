@@ -55,7 +55,7 @@ const effectiveStatus = (row: ImportPreviewRow, skip: ReadonlySet<number>): RowS
   skip.has(row.rowNumber) ? 'skipped' : row.errors.length ? 'error' : row.warnings.length ? 'warning' : 'ok';
 
 function RowNotes({ row }: { row: ImportPreviewRow }) {
-  if (row.errors.length === 0 && row.warnings.length === 0) return <span className="text-slate-400">—</span>;
+  if (row.errors.length === 0 && row.warnings.length === 0) return <span className="text-slate-500">—</span>;
   return (
     <ul className="space-y-1 text-xs">
       {row.errors.map((message) => (
@@ -337,7 +337,7 @@ export function ImportReview({
                     </TD>
                     <TD className="text-slate-500 tabular">{row.rowNumber}</TD>
                     <TD className="min-w-48 font-medium text-slate-900">
-                      {name || <span className="text-slate-400">—</span>}
+                      {name || <span className="text-slate-500">—</span>}
                     </TD>
                     <TD className="whitespace-nowrap">{row.resolved.role ? ROLE_LABELS[row.resolved.role] : '—'}</TD>
                     <TD className="whitespace-nowrap">{row.resolved.className ?? '—'}</TD>

@@ -42,7 +42,7 @@ const SORTS = [
 const TYPE_OPTIONS = PORTFOLIO_ITEM_TYPES.filter((type) => !TEACHER_ONLY_PORTFOLIO_TYPES.includes(type));
 
 function Highlights({ items, className }: { items: string[]; className?: string }) {
-  if (items.length === 0) return <span className="text-slate-400">—</span>;
+  if (items.length === 0) return <span className="text-slate-500">—</span>;
   return (
     <span className={cn('flex flex-wrap gap-1', className)}>
       {items.map((text) => (
@@ -60,7 +60,7 @@ function PendingBadge({ count }: { count: number }) {
       {count} ta kutmoqda
     </Badge>
   ) : (
-    <span className="text-slate-400">—</span>
+    <span className="text-slate-500">—</span>
   );
 }
 
