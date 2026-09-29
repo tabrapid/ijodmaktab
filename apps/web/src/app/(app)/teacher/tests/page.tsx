@@ -223,8 +223,10 @@ function TestRow({
           </span>
         )}
       </TD>
-      <TD className="whitespace-nowrap">
-        {test.subject.name} · {test.gradeLevel}-sinf
+      {/* Fan va sinf ikki qatorda: jadval 1280 px ekranda “Amallar” bilan birga sig‘adi. */}
+      <TD className="min-w-24">
+        <span className="block text-slate-800">{test.subject.name}</span>
+        <span className="block text-xs whitespace-nowrap text-slate-500">{test.gradeLevel}-sinf</span>
       </TD>
       <TD className="text-right tabular">{test.questionCount}</TD>
       <TD className="hidden text-right tabular sm:table-cell">{formatPoints(test.totalPoints)}</TD>
@@ -235,7 +237,7 @@ function TestRow({
         </span>
       </TD>
       <TD className="hidden text-right tabular md:table-cell">{test.sessionCount}</TD>
-      <TD className="hidden whitespace-nowrap text-slate-500 lg:table-cell">{formatDate(test.updatedAt)}</TD>
+      <TD className="hidden whitespace-nowrap text-slate-500 2xl:table-cell">{formatDate(test.updatedAt)}</TD>
       <TD>
         <div className="flex justify-end gap-1">
           {blocked ? (
@@ -267,8 +269,9 @@ function TestRow({
               icon={<Copy className="size-4" />}
               onClick={() => onCopy(test)}
               aria-label={`“${test.title}” testidan nusxa olish`}
+              title="Nusxa olish"
             >
-              <span className="hidden xl:inline">Nusxa olish</span>
+              <span className="hidden 2xl:inline">Nusxa olish</span>
             </Button>
           )}
         </div>
@@ -411,7 +414,7 @@ function TestsLibrary() {
                   <TH className="hidden text-right sm:table-cell">Ball</TH>
                   <TH>Holat</TH>
                   <TH className="hidden text-right md:table-cell">Sessiyalar</TH>
-                  <TH className="hidden lg:table-cell">Yangilangan</TH>
+                  <TH className="hidden 2xl:table-cell">Yangilangan</TH>
                   <TH className="text-right">Amallar</TH>
                 </tr>
               </THead>

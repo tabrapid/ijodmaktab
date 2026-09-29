@@ -187,11 +187,14 @@ export function LockedScreen({
 export function UnlockedScreen({
   addedMinutes,
   needsFullscreen,
+  relockWarning,
   failed,
   onResume,
 }: {
   addedMinutes: number;
   needsFullscreen: boolean;
+  /** Nazorat hali yoqilgan: yana chiqilsa test qayta to‘xtaydi (o‘qituvchi o‘chirgan bo‘lsa — yo‘q). */
+  relockWarning: boolean;
   failed: boolean;
   onResume: () => void;
 }) {
@@ -217,9 +220,15 @@ export function UnlockedScreen({
           </span>
         </Alert>
       )}
-      <p className="mt-4 text-sm text-slate-600">
-        Eslatma: to‘liq ekrandan yana chiqsangiz yoki boshqa oynaga o‘tsangiz, test qayta to‘xtatiladi.
-      </p>
+      {relockWarning ? (
+        <p className="mt-4 text-sm text-slate-600">
+          Eslatma: to‘liq ekrandan yana chiqsangiz yoki boshqa oynaga o‘tsangiz, test qayta to‘xtatiladi.
+        </p>
+      ) : (
+        <p className="mt-4 text-sm text-slate-600">
+          O‘qituvchi to‘liq ekran nazoratini o‘chirdi — test endi to‘xtatilmaydi.
+        </p>
+      )}
       {failed && (
         <Alert tone="danger" title="To‘liq ekranga o‘tib bo‘lmadi" className="mt-4">
           Brauzer ruxsat bermadi. Tugmani qayta bosing.

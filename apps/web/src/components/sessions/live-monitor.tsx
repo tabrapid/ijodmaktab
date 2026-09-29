@@ -193,11 +193,22 @@ function since(ms: number) {
 }
 
 /**
- * “Oynadan chiqish” belgisi. Nazoratli sessiyada har bir chetlatish ham shu songa qo‘shiladi, shuning
- * uchun belgi faqat undan ortiq chiqishlar bo‘lsa ko‘rsatiladi (savollar yopiq paytdagi chiqishlar).
+ * “Oynadan chiqish” belgisi. Har bir chetlatish ham shu songa qo‘shiladi (nazorat keyin o‘chirilgan
+ * bo‘lsa ham), shuning uchun belgi faqat undan ortiq chiqishlar bo‘lsa ko‘rsatiladi.
  */
-function showsFocusLoss(row: LiveRow, requireFullscreen: boolean) {
-  return requireFullscreen ? row.focusLossCount > row.lockCount : row.focusLossCount > 0;
+function showsFocusLoss(row: LiveRow) {
+  return row.focusLossCount > row.lockCount;
+}
+
+/** Signal ustunining izohi: nazorat o‘chirilgan sessiyada ham avvalgi chetlatishlar tushuntiriladi. */
+function signalHint(row: LiveRow, requireFullscreen: boolean) {
+  if (requireFullscreen) {
+    return '“Chetlatish” — test necha marta avtomatik to‘xtatilgani. “Oynadan chiqish” chetlatishlardan ko‘p bo‘lsa — o‘quvchi savollar yopiq paytda (masalan, test to‘xtatilganda) ham boshqa tab yoki ilovaga o‘tgan. Qurilma almashishi faqat signal.';
+  }
+  if (row.lockCount > 0) {
+    return '“Chetlatish” — nazorat o‘chirilgunga qadar test necha marta to‘xtatilgani. “Oynadan chiqish” chetlatishlardan ko‘p bo‘lsa — o‘quvchi keyin ham boshqa tab yoki ilovaga o‘tgan. Bu belgilar faqat signal — qoidabuzarlik isboti emas.';
+  }
+  return 'Bu belgilar faqat signal — qoidabuzarlik isboti emas.';
 }
 
 function CountTile({
@@ -1007,21 +1018,14 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                       )}
                     </TD>
                     <TD>
-                      <span
-                        className="inline-flex flex-wrap gap-1"
-                        title={
-                          session.requireFullscreen
-                            ? '“Chetlatish” — test necha marta avtomatik to‘xtatilgani. “Oynadan chiqish” chetlatishlardan ko‘p bo‘lsa — o‘quvchi savollar yopiq paytda (masalan, test to‘xtatilganda) ham boshqa tab yoki ilovaga o‘tgan. Qurilma almashishi faqat signal.'
-                            : 'Bu belgilar faqat signal — qoidabuzarlik isboti emas.'
-                        }
-                      >
+                      <span className="inline-flex flex-wrap gap-1" title={signalHint(row, session.requireFullscreen)}>
                         {row.lockCount > 0 && (
                           <Badge tone="red">
                             <ShieldAlert className="size-3" aria-hidden />
                             Chetlatish: {row.lockCount}
                           </Badge>
                         )}
-                        {showsFocusLoss(row, session.requireFullscreen) && (
+                        {showsFocusLoss(row) && (
                           <Badge tone={session.requireFullscreen ? 'amber' : 'gray'}>
                             <AlertTriangle className="size-3" aria-hidden />
                             Oynadan chiqish: {row.focusLossCount}
@@ -1033,9 +1037,9 @@ export function LiveMonitor({ session }: { session: SessionDetail }) {
                             Qurilma almashgan: {row.deviceChangeCount}
                           </Badge>
                         )}
-                        {row.lockCount === 0 &&
-                          !showsFocusLoss(row, session.requireFullscreen) &&
-                          row.deviceChangeCount === 0 && <span className="text-slate-500">—</span>}
+                        {row.lockCount === 0 && !showsFocusLoss(row) && row.deviceChangeCount === 0 && (
+                          <span className="text-slate-500">—</span>
+                        )}
                       </span>
                     </TD>
                     {editable && (

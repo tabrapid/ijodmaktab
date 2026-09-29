@@ -461,8 +461,9 @@ export class SessionsService {
       if (endsAt.getTime() !== session.endsAt.getTime()) {
         await this.adjustDeadlines(tx, id, session, endsAt, now);
       }
-      // Faqat nazorat o‘zgarganda o‘quvchilarga “vaqt o‘zgardi” xabari yuborilmaydi.
-      if (timingChanged || !fullscreenChanged) {
+      // “Vaqt o‘zgardi” xabari va audit faqat vaqt haqiqatan o‘zgarganda: nazoratning o‘zi yoki
+      // eskirgan sahifadan kelgan takroriy so‘rov o‘quvchilarni bezovta qilmaydi.
+      if (timingChanged) {
         const students = await tx.sessionAssignment.findMany({
           where: { sessionId: id, removedAt: null },
           select: { studentId: true },

@@ -154,14 +154,20 @@ function TimingDialog({ session, open, onClose }: { session: SessionDetail; open
   const toast = useToast();
   const refresh = useRefreshSession(session.id);
   const scheduled = session.state === 'SCHEDULED';
-  const [values, setValues] = useState(() => ({
+  const [initial] = useState(() => ({
     startsAt: dateToSchoolInput(session.startsAt),
     endsAt: dateToSchoolInput(session.endsAt),
     entryClosesAt: session.entryClosesAt ? dateToSchoolInput(session.entryClosesAt) : '',
     durationMinutes: String(session.durationMinutes),
     reason: '',
   }));
+  const [values, setValues] = useState(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Hech narsa o‘zgarmasa so‘rov yuborilmaydi: server o‘quvchilarga xabar ham yubormaydi.
+  const unchanged =
+    values.endsAt === initial.endsAt &&
+    values.entryClosesAt === initial.entryClosesAt &&
+    (!scheduled || (values.startsAt === initial.startsAt && values.durationMinutes === initial.durationMinutes));
   const save = useMutation({
     mutationFn: () =>
       api.put(`/sessions/${session.id}/timing`, {
@@ -200,7 +206,14 @@ function TimingDialog({ session, open, onClose }: { session: SessionDetail; open
           <Button variant="outline" onClick={onClose}>
             Bekor qilish
           </Button>
-          <Button onClick={() => save.mutate()} loading={save.isPending}>
+          <Button
+            onClick={() => {
+              if (!unchanged) return save.mutate();
+              toast.info('Vaqt o‘zgartirilmadi.');
+              onClose();
+            }}
+            loading={save.isPending}
+          >
             Saqlash
           </Button>
         </>

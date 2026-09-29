@@ -36,6 +36,15 @@ export function pendingSummary(group: Pick<PortfolioReviewGroup, 'newCount' | 'c
 const ownerLine = (owner: Pick<PortfolioOwnerRef, 'className' | 'roles'>) =>
   owner.className ? `${owner.className} sinf` : owner.roles.map((role) => ROLE_LABELS[role]).join(', ');
 
+/** “3 ta o‘quvchi, 1 ta o‘qituvchi”: rahbariyat o‘qituvchilar portfoliosini ham tekshiradi. */
+function ownersSummary(owners: Pick<PortfolioOwnerRef, 'className' | 'roles'>[]) {
+  const staff = owners.filter((owner) => !owner.className && !owner.roles.includes('STUDENT'));
+  const students = owners.length - staff.length;
+  if (staff.length === 0) return `${students} ta o‘quvchi`;
+  const staffLabel = `${staff.length} ta ${staff.every((owner) => owner.roles.includes('TEACHER')) ? 'o‘qituvchi' : 'xodim'}`;
+  return students ? `${students} ta o‘quvchi, ${staffLabel}` : staffLabel;
+}
+
 function StudentList({
   groups,
   selectedId,
@@ -61,10 +70,10 @@ function StudentList({
   return (
     <Card className="overflow-hidden">
       <div className="space-y-2 border-b border-slate-100 p-3">
-        <p className="flex items-center justify-between gap-2 text-sm text-slate-600">
+        <p className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm text-slate-600">
           <span className="inline-flex items-center gap-1.5 font-medium text-slate-800">
             <Users className="size-4 text-slate-500" aria-hidden />
-            {groups.length} ta o‘quvchi
+            {ownersSummary(groups.map((group) => group.owner))}
           </span>
           <span className="tabular">{total} ta yozuv</span>
         </p>

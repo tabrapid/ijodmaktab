@@ -518,6 +518,26 @@ describe('Nazoratni sessiya yaratilgandan keyin o‘zgartirish', () => {
     });
     expect(audit.data).toMatchObject({ before: true, after: false, state: 'OPEN' });
 
+    // Eskirgan sahifadan takroriy o‘chirish yoki o‘zgarishsiz saqlash o‘quvchilarga
+    // “vaqt o‘zgardi” xabarini yubormaydi va audit yozmaydi.
+    const repeated = await teacher
+      .put(`/api/sessions/${session.id}/timing`)
+      .send({ requireFullscreen: false })
+      .expect(200);
+    expect(repeated.body.requireFullscreen).toBe(false);
+    await teacher
+      .put(`/api/sessions/${session.id}/timing`)
+      .send({ endsAt: off.body.endsAt, reason: 'Tekshiruv' })
+      .expect(200);
+    expect(
+      await prisma.notification.count({
+        where: { type: 'TEST_TIME_CHANGED', link: `/student/sessions/${session.id}` },
+      }),
+    ).toBe(0);
+    expect(await prisma.auditEvent.count({ where: { action: 'session.timing_changed', entityId: session.id } })).toBe(
+      0,
+    );
+
     // Allaqachon to‘xtatilgan o‘quvchi o‘qituvchi ruxsatini kutadi.
     const view = await student.get(`/api/attempts/${attemptId}`).query({ clientId: client }).expect(200);
     expect(view.body.session.requireFullscreen).toBe(false);

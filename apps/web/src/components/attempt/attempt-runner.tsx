@@ -313,13 +313,20 @@ export function AttemptRunner({
       // Topshirish natijasi kutilmoqda: kechiktirilgan qoidabuzarlik belgisi submit() da hal qilinadi.
       if (deferredViolation.current) return;
       const flag = loadLockFlag(attemptId);
-      if (enforceRef.current && unconfirmed(flag, state.lockCount)) {
+      const notSent = unconfirmed(flag, state.lockCount);
+      if (enforceRef.current && notSent) {
         // Qurilma to‘xtatgan, xabar esa serverga hali yetmagan — test ochilmaydi, xabar qayta yuboriladi.
         enterLocked();
         if (resend) void sendLock();
         return;
       }
       if (flag) clearLockFlag(attemptId);
+      if (modeRef.current === 'locked' && notSent) {
+        // Nazorat o‘chirilgan, server esa testni to‘xtatmagan — o‘qituvchi ruxsati kerak emas, test davom etadi.
+        setMode('active');
+        void flushRef.current();
+        return;
+      }
       if (modeRef.current === 'locked') {
         // O‘qituvchi ruxsat berdi (qo‘shimcha vaqt bo‘lsa — ko‘rsatiladi).
         const before = deadlineAtLock.current;
@@ -815,6 +822,7 @@ export function AttemptRunner({
         <UnlockedScreen
           addedMinutes={addedMinutes}
           needsFullscreen={enforce && canFullscreen}
+          relockWarning={enforce}
           failed={fullscreenFailed}
           onResume={resume}
         />
