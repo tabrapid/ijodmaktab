@@ -12,7 +12,8 @@ tizim hisoblar, javoblar va fayllar bog‘lanishini saqlashi kerak. Bu hujjat sh
 | Nazorat yig‘indilari | `SHA256SUMS`                                                       | Tiklashdan oldin fayllar butunligi tekshiriladi                                     |
 
 `APP_ENCRYPTION_KEY` zaxiraga **kirmaydi**, lekin usiz tiklangan tizimda ikki bosqichli kirish kalitlarini
-ochib bo‘lmaydi. Uni alohida, xavfsiz joyda (masalan, maktab rahbariyatidagi muhrlangan konvertda yoki
+va o‘quvchilarning JSHSHIRini ochib bo‘lmaydi (JSHSHIR bo‘yicha takroriy ro‘yxatdan o‘tish tekshiruvi ham
+ishlamay qoladi). Uni alohida, xavfsiz joyda (masalan, maktab rahbariyatidagi muhrlangan konvertda yoki
 parol menejerida) saqlang.
 
 ## Zaxira olish
