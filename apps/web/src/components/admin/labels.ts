@@ -86,7 +86,13 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'user.import': 'Excel orqali import qilindi',
   'user.avatar_updated': 'Profil rasmi yangilandi',
   'user.avatar_removed': 'Profil rasmi olib tashlandi',
+  'user.pinfl_viewed': 'JSHSHIR to‘liq ko‘rildi',
+  'user.identity_updated': 'Hujjat bo‘yicha shaxsiy ma’lumotlar tuzatildi',
+  'user.registered': 'O‘zi ro‘yxatdan o‘tdi',
+  'user.registration_approved': 'O‘qituvchi hisobi tasdiqlandi',
+  'user.registration_rejected': 'Ro‘yxatdan o‘tish arizasi rad etildi (hisob o‘chirildi)',
   'school.update': 'Maktab ma’lumotlari o‘zgartirildi',
+  'school.registration_settings': 'Ro‘yxatdan o‘tish sozlamalari o‘zgartirildi',
   'academic_year.create': 'O‘quv yili yaratildi',
   'academic_year.update': 'O‘quv yili o‘zgartirildi',
   'academic_year.make_current': 'Joriy o‘quv yili belgilandi',
@@ -96,6 +102,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'class.update': 'Sinf o‘zgartirildi',
   'class.archive': 'Sinf arxivlandi',
   'class.unarchive': 'Sinf arxivdan chiqarildi',
+  'class.homeroom_changed': 'Sinf rahbari o‘zgartirildi',
   'enrollment.add': 'O‘quvchilar sinfga qo‘shildi',
   'enrollment.transfer': 'O‘quvchi boshqa sinfga ko‘chirildi',
   'enrollment.end': 'Sinfga a’zolik tugatildi',
@@ -150,6 +157,12 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'portfolio.directory_exported': 'Portfoliolar ro‘yxati Excelga yuklab olindi',
   'file.uploaded': 'Fayl yuklandi',
   'file.quarantined': 'Fayl karantinga olindi',
+  'teacher.profile_updated': 'O‘qituvchi ma’lumotnomasi o‘zgartirildi',
+  'teacher.credential_added': 'Ma’lumotnomaga hujjat qo‘shildi',
+  'teacher.credential_updated': 'Ma’lumotnomadagi hujjat o‘zgartirildi',
+  'teacher.credential_removed': 'Ma’lumotnomadan hujjat o‘chirildi',
+  'teacher.mentorship_added': 'O‘quvchi sertifikatiga ustozlik qayd etildi',
+  'teacher.mentorship_removed': 'Ustozlik yozuvi o‘chirildi',
 };
 
 export const auditActionLabel = (action: string): string | null => AUDIT_ACTION_LABELS[action] ?? null;
@@ -179,6 +192,7 @@ export const AUDIT_PREFIXES: AuditPrefix[] = [
   { value: 'academic_year.', label: 'O‘quv yillari' },
   { value: 'subject.', label: 'Fanlar' },
   { value: 'file.', label: 'Fayllar' },
+  { value: 'teacher.', label: 'O‘qituvchi ma’lumotnomasi' },
 ];
 
 export const AUDIT_ENTITY_LABELS: Record<string, string> = {
@@ -197,6 +211,9 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   ExportJob: 'Eksport',
   PortfolioItem: 'Portfolio yozuvi',
   FileAsset: 'Fayl',
+  TeacherProfile: 'O‘qituvchi ma’lumotnomasi',
+  TeacherCredential: 'Ma’lumotnoma hujjati',
+  TeacherMentorship: 'Ustozlik yozuvi',
 };
 
 export const auditEntityLabel = (type: string | null) => (type ? (AUDIT_ENTITY_LABELS[type] ?? type) : '—');

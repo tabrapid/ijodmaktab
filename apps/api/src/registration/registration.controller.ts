@@ -29,10 +29,7 @@ const TEACHER_LIMIT = { default: { limit: 5, ttl: MINUTE, getTracker: byIp } };
 /** Tizimga kirgan foydalanuvchi yangi hisob ochmaydi (umumiy kompyuterda boshqa odam nomidan). */
 function assertSignedOut(user: AuthUser | undefined) {
   if (user) {
-    throw conflict(
-      'ALREADY_AUTHENTICATED',
-      'Siz tizimga kirgansiz. Yangi hisob ochish uchun avval tizimdan chiqing.',
-    );
+    throw conflict('ALREADY_AUTHENTICATED', 'Siz tizimga kirgansiz. Yangi hisob ochish uchun avval tizimdan chiqing.');
   }
 }
 

@@ -12,6 +12,8 @@ import {
   Download,
   FileText,
   FolderHeart,
+  GraduationCap,
+  IdCard,
   Inbox,
   LayoutDashboard,
   Library,
@@ -22,6 +24,7 @@ import {
   ShieldCheck,
   Trophy,
   Upload,
+  UserPlus,
   UserRound,
   Users,
   X,
@@ -97,6 +100,8 @@ export function navFor(me: Pick<Me, 'roles' | 'homeroomClassIds'>): NavSection[]
       title: 'Rahbariyat',
       items: [
         { href: '/management', label: 'Ko‘rsatkichlar', icon: BarChart3 },
+        // O‘quvchilar va sinflar: /management/students/* (sinf sahifasi va o‘quvchi profili ham) shu bandda.
+        { href: '/management/students', label: 'O‘quvchilar', icon: GraduationCap },
         {
           href: '/management/portfolio',
           label: 'Portfoliolar',
@@ -119,6 +124,7 @@ export function navFor(me: Pick<Me, 'roles' | 'homeroomClassIds'>): NavSection[]
               { href: '/exports', label: 'Eksportlar', icon: Download },
             ]),
         { href: '/management/questions', label: 'Bank so‘rovlari', icon: Inbox },
+        { href: '/management/registrations', label: 'Ro‘yxatdan o‘tish', icon: UserPlus },
         ...(hasRole(me, 'DEPUTY') && !hasRole(me, 'ADMIN', 'SUPER_ADMIN')
           ? [{ href: '/admin/users', label: 'Foydalanuvchilar', icon: Users, match: ['/admin/users'] }]
           : []),
@@ -150,6 +156,7 @@ export function navFor(me: Pick<Me, 'roles' | 'homeroomClassIds'>): NavSection[]
             ]
           : []),
         { href: '/portfolio', label: 'Portfoliom', icon: FolderHeart },
+        { href: '/profile/malumotnoma', label: 'Ma’lumotnoma', icon: IdCard },
         { href: '/exports', label: 'Eksportlar', icon: Download },
       ],
     });

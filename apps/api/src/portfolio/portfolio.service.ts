@@ -481,7 +481,14 @@ export class PortfolioService {
       // Profil rasmi va o‘qituvchi ma’lumotnomasidagi hujjat dalil sifatida ishlatilmaydi (ular boshqa
       // ruxsat qoidalari bilan ochiladi).
       const reference = Boolean(file?.categoryOf || file?.degreeOf || file?.credentialOf);
-      if (!file || file.ownerId !== viewer.id || file.status !== 'CLEAN' || file.deletedAt || file.avatarOf || reference) {
+      if (
+        !file ||
+        file.ownerId !== viewer.id ||
+        file.status !== 'CLEAN' ||
+        file.deletedAt ||
+        file.avatarOf ||
+        reference
+      ) {
         throw notFound('Fayl');
       }
     }

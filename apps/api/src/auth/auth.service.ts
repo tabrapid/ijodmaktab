@@ -114,12 +114,7 @@ export class AuthService {
 
     // Holat faqat parol to‘g‘ri bo‘lgandan keyin aytiladi (noto‘g‘ri parolda — umumiy xabar).
     if (user.status === 'PENDING') {
-      await this.audit.log(
-        'auth.login_failed',
-        { type: 'User', id: user.id },
-        { realm, reason: 'pending' },
-        { actor },
-      );
+      await this.audit.log('auth.login_failed', { type: 'User', id: user.id }, { realm, reason: 'pending' }, { actor });
       throw forbidden(
         'Hisobingiz direktor o‘rinbosari tasdig‘ini kutmoqda. Tasdiqlangach kira olasiz.',
         'ACCOUNT_PENDING',

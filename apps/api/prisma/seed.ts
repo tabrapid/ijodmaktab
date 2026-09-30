@@ -12,9 +12,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
+  SCHOOL_CLASS_SECTIONS,
+  SCHOOL_GRADE_LEVELS,
+  checkPinfl,
   gradeAttempt,
   normalizeForSearch,
   portfolioDetailsSummary,
+  schoolToday,
   userSearchText,
   type AchievementLevel,
   type Category,
@@ -23,6 +27,7 @@ import {
   type Role,
 } from '@ijod/shared';
 import { hashPassword } from '../src/auth/passwords.js';
+import { PinflCrypto } from '../src/common/pinfl-vault.js';
 import { PrismaClient, type Prisma } from '../src/generated/prisma/client.js';
 import { snapshotOf } from '../src/portfolio/portfolio-common.js';
 
@@ -42,11 +47,34 @@ const toLogin = (first: string, last: string) =>
     .replace(/[‘’'ʻʼ`]/g, '')
     .replace(/[^a-z0-9.]/g, '');
 
+/**
+ * Demo JSHSHIR: jins va asr (5 — o‘g‘il, 6 — qiz, 2000-yillar), tug‘ilgan sana (KKOOYY), hudud, tartib
+ * raqami va nazorat raqami (7-3-1 og‘irliklar). Haqiqiy shaxsga tegishli emas — faqat sinov uchun.
+ */
+function demoPinfl(birthDate: string, female: boolean, region: string, serial: number) {
+  const [year, month, day] = birthDate.split('-') as [string, string, string];
+  const century = Number(year) >= 2000 ? (female ? 6 : 5) : female ? 4 : 3;
+  const body = `${century}${day}${month}${year.slice(2)}${region}${String(serial).padStart(3, '0')}`;
+  const weights = [7, 3, 1];
+  const sum = [...body].reduce((total, digit, index) => total + Number(digit) * weights[index % 3]!, 0);
+  const pinfl = `${body}${sum % 10}`;
+  const check = checkPinfl(pinfl, birthDate);
+  if (!check.ok) throw new Error(`Demo JSHSHIR noto‘g‘ri: ${check.message}`);
+  return pinfl;
+}
+
 async function main() {
   if ((await prisma.user.count()) > 0) {
     console.log('Baza allaqachon to‘ldirilgan — seed o‘tkazib yuborildi.');
     return;
   }
+
+  // JSHSHIR bazaga faqat shifrlangan holda yoziladi: kalit hech narsa yozilishidan oldin tekshiriladi.
+  const encryptionKey = Buffer.from(process.env.APP_ENCRYPTION_KEY ?? '', 'base64');
+  if (encryptionKey.length !== 32) {
+    throw new Error('APP_ENCRYPTION_KEY 32 baytlik base64 qiymat bo‘lishi kerak (yaratish: pnpm env:setup).');
+  }
+  const pinflCrypto = new PinflCrypto(encryptionKey);
 
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
@@ -79,12 +107,19 @@ async function main() {
     ),
   );
 
+  /** Qo‘shimcha maydonlar: tug‘ilgan sana, JSHSHIR, mutaxassislik, holat, ro‘yxatdan o‘tish manbai va h.k. */
+  type UserExtra = Omit<
+    Prisma.UserUncheckedCreateInput,
+    'login' | 'passwordHash' | 'lastName' | 'firstName' | 'middleName' | 'searchText' | 'roles'
+  >;
+
   async function createUser(input: {
     lastName: string;
     firstName: string;
     middleName?: string;
     login?: string;
     roles: Role[];
+    extra?: UserExtra;
   }) {
     const login = input.login ?? toLogin(input.firstName, input.lastName);
     return prisma.user.create({
@@ -97,9 +132,14 @@ async function main() {
         middleName: input.middleName ?? null,
         searchText: userSearchText({ ...input, login }),
         roles: { create: input.roles.map((role) => ({ role })) },
+        ...input.extra,
       },
     });
   }
+
+  /** Hozirdan `days` kun (va `hours` soat) oldingi vaqt — “yaqinda ro‘yxatdan o‘tgan” hisoblar uchun. */
+  const registeredAgo = (days: number, hours = 0) => new Date(Date.now() - (days * 24 + hours) * 60 * 60_000);
+  const specialty = (name: string) => ({ specialtySubjectId: subjects[name]!.id });
 
   // ---------------------------------------------------------------- Xodimlar
   await createUser({
@@ -121,6 +161,7 @@ async function main() {
     middleName: 'Karimovich',
     login: 'b.yusupov',
     roles: ['DEPUTY', 'TEACHER'],
+    extra: specialty('Tarix'),
   });
   // Dars bermaydigan direktor o‘rinbosari: faqat rahbariyat bo‘limlari (test banki, sessiyalar, hisoblar).
   await createUser({
@@ -136,6 +177,7 @@ async function main() {
     middleName: 'Rustamovna',
     login: 'd.karimova',
     roles: ['TEACHER'],
+    extra: specialty('Matematika'),
   });
   const rahimov = await createUser({
     lastName: 'Rahimov',
@@ -143,6 +185,7 @@ async function main() {
     middleName: 'Anvarovich',
     login: 'j.rahimov',
     roles: ['TEACHER'],
+    extra: specialty('Ona tili va adabiyot'),
   });
   const tursunova = await createUser({
     lastName: 'Tursunova',
@@ -150,10 +193,35 @@ async function main() {
     middleName: 'Baxtiyorovna',
     login: 'm.tursunova',
     roles: ['TEACHER'],
+    extra: specialty('Ingliz tili'),
+  });
+  // Yangi sinflarning rahbarlari; r.olimov hech qaysi sinfga biriktirilmagan (sinf rahbari etib tayinlash uchun).
+  const teacher = (lastName: string, firstName: string, middleName: string, login: string, subject: string) =>
+    createUser({ lastName, firstName, middleName, login, roles: ['TEACHER'], extra: specialty(subject) });
+  const xolmirzayeva = await teacher('Xolmirzayeva', 'Gulnora', 'Tohirovna', 'g.xolmirzayeva', 'Fizika');
+  const ismoilov = await teacher('Ismoilov', 'Sherzod', 'Baxromovich', 's.ismoilov', 'Informatika');
+  const qosimova = await teacher('Qosimova', 'Nargiza', 'Alisherovna', 'n.qosimova', 'Kimyo');
+  await teacher('Olimov', 'Rustam', 'Hamidovich', 'r.olimov', 'Biologiya');
+  // O‘zi ro‘yxatdan o‘tgan o‘qituvchi: direktor o‘rinbosari tasdiqlaguncha tizimga kira olmaydi.
+  await createUser({
+    lastName: 'Nazarova',
+    firstName: 'Saodat',
+    middleName: 'Hamidovna',
+    login: 's.nazarova',
+    roles: ['TEACHER'],
+    extra: {
+      status: 'PENDING',
+      registrationSource: 'SELF',
+      birthYear: 1994,
+      createdAt: registeredAgo(1, 3),
+      ...specialty('Biologiya'),
+    },
   });
 
   // ---------------------------------------------------------------- Sinflar
-  const makeClass = (gradeLevel: number, section: string, homeroomTeacherId: string) =>
+  // 7–11-sinflar, har birida uchta parallel (A, B, D). Ayrim sinflarda sinf rahbari ataylab tayinlanmagan:
+  // direktor o‘rinbosari uni “O‘quvchilar → Sinflar” bo‘limida tayinlaydi.
+  const makeClass = (gradeLevel: number, section: string, homeroomTeacherId: string | null) =>
     prisma.class.create({
       data: {
         academicYearId: year.id,
@@ -166,6 +234,18 @@ async function main() {
   const class9A = await makeClass(9, 'A', karimova.id);
   const class9B = await makeClass(9, 'B', tursunova.id);
   const class10A = await makeClass(10, 'A', rahimov.id);
+  const homerooms: Record<string, string> = { '11-A': xolmirzayeva.id, '10-B': ismoilov.id, '8-A': qosimova.id };
+  const classByName: Record<string, { id: string; name: string }> = {
+    '9-A': class9A,
+    '9-B': class9B,
+    '10-A': class10A,
+  };
+  for (const grade of SCHOOL_GRADE_LEVELS) {
+    for (const section of SCHOOL_CLASS_SECTIONS) {
+      const name = `${grade}-${section}`;
+      classByName[name] ??= await makeClass(grade, section, homerooms[name] ?? null);
+    }
+  }
 
   const roster: Record<string, [string, string, string][]> = {
     [class9A.id]: [
@@ -207,6 +287,123 @@ async function main() {
       });
       studentsByClass[classId]!.push(student);
     }
+  }
+
+  // Boshqa sinflar o‘quvchilari (hujjatdagidek F.I.Sh. va tug‘ilgan sana). ID-karta 16 yoshdan beriladi,
+  // shuning uchun JSHSHIR asosan 10–11-sinf o‘quvchilarida; u faqat shifrlangan holda saqlanadi.
+  type Pupil = { name: [string, string, string]; female: boolean; birthDate: string | null; pinfl?: boolean };
+  const pupil = (
+    lastName: string,
+    firstName: string,
+    middleName: string,
+    female: boolean,
+    birthDate: string | null = null,
+    pinfl = false,
+  ): Pupil => ({ name: [lastName, firstName, middleName], female, birthDate, pinfl });
+  const moreRoster: Record<string, Pupil[]> = {
+    '11-A': [
+      pupil('Abdurahmonov', 'Behruz', 'Alisherovich', false, '2009-03-21', true),
+      pupil('Yo‘ldosheva', 'Maftuna', 'Shuhratovna', true, '2009-10-05', true),
+      pupil('Nurmatova', 'Sabina', 'Ikromovna', true, '2010-01-14'),
+    ],
+    '11-B': [
+      pupil('Rasulov', 'Ulug‘bek', 'Tohirovich', false, '2009-06-30', true),
+      pupil('Ortiqova', 'Mehrinoz', 'Davronovna', true),
+    ],
+    '11-D': [
+      pupil('Sharipov', 'Umid', 'Fazliddinovich', false, '2009-12-11'),
+      pupil('Xasanova', 'Durdona', 'Jahongirovna', true, '2009-08-19', true),
+    ],
+    '10-B': [
+      pupil('Aminova', 'Shahnoza', 'Rustamovna', true, '2010-04-02', true),
+      pupil('Boboyev', 'Sanjar', 'Ergashevich', false, '2010-09-27'),
+      pupil('Murodova', 'Gulshan', 'Karimovna', true),
+    ],
+    '10-D': [pupil('Jo‘rayev', 'Firdavs', 'Abdurashidovich', false, '2010-05-16', true)],
+    '9-D': [
+      pupil('Salimova', 'Diyora', 'Otabekovna', true, '2011-02-08'),
+      pupil('Hasanov', 'Mirjalol', 'Sobirovich', false),
+    ],
+    '8-A': [
+      pupil('Tursunov', 'Ibrohim', 'Akmalovich', false, '2012-03-29'),
+      pupil('Ne’matova', 'Zarina', 'Farhodovna', true, '2012-07-13'),
+      pupil('Qo‘chqorov', 'Azizbek', 'Bahodirovich', false),
+    ],
+    '8-B': [pupil('Ismoilova', 'Robiya', 'Jamshidovna', true, '2012-11-22')],
+    '8-D': [pupil('Egamberdiyev', 'Javohir', 'Nodirovich', false)],
+    '7-A': [
+      pupil('Karimov', 'Abdulloh', 'Jasurovich', false, '2013-05-09'),
+      pupil('Rahimova', 'Mohinur', 'Sherzodovna', true, '2013-09-01'),
+      pupil('To‘xtayev', 'Ismoil', 'Ulug‘bekovich', false),
+    ],
+    '7-B': [pupil('Sodiqov', 'Muhammadali', 'Anvarovich', false, '2013-12-24')],
+    '7-D': [
+      pupil('Xudoyberdiyeva', 'Sevinch', 'Olimjonovna', true, '2013-06-17'),
+      pupil('Mamatqulov', 'Bekzod', 'Rustamovich', false),
+    ],
+  };
+  let pinflSerial = 100;
+  /** Tug‘ilgan sana va (bo‘lsa) shifrlangan JSHSHIR maydonlari. */
+  const identity = (person: Pupil) => {
+    if (!person.birthDate) return {};
+    pinflSerial += 7;
+    return {
+      birthDate: new Date(person.birthDate),
+      birthYear: Number(person.birthDate.slice(0, 4)),
+      ...(person.pinfl ? pinflCrypto.fields(demoPinfl(person.birthDate, person.female, '262', pinflSerial)) : {}),
+    };
+  };
+  for (const [className, pupils] of Object.entries(moreRoster)) {
+    const target = classByName[className]!;
+    for (const person of pupils) {
+      const [lastName, firstName, middleName] = person.name;
+      const student = await createUser({
+        lastName,
+        firstName,
+        middleName,
+        roles: ['STUDENT'],
+        extra: identity(person),
+      });
+      await prisma.enrollment.create({
+        data: { studentId: student.id, classId: target.id, academicYearId: year.id, startsOn: year.startsOn },
+      });
+    }
+  }
+
+  // O‘zi ro‘yxatdan o‘tgan o‘quvchilar (so‘nggi kunlarda): ro‘yxatda “Yangi”, sinf kartasida “+N yangi”.
+  const selfRegistered: { person: Pupil; className: string; days: number }[] = [
+    { person: pupil('Sultonova', 'Yasmina', 'Rustamovna', true, '2013-11-02'), className: '7-B', days: 2 },
+    { person: pupil('Pardayev', 'Otabek', 'Nurmatovich', false, '2012-04-17'), className: '8-D', days: 3 },
+    { person: pupil('Ahmadjonova', 'Munisa', 'Baxtiyorovna', true, '2010-02-25', true), className: '10-D', days: 4 },
+    { person: pupil('Toirov', 'Shohjahon', 'Akbarovich', false, '2009-07-08', true), className: '11-B', days: 5 },
+  ];
+  const selfLogins: string[] = [];
+  for (const [index, { person, className, days }] of selfRegistered.entries()) {
+    const [lastName, firstName, middleName] = person.name;
+    const createdAt = registeredAgo(days, 2 + index);
+    const student = await createUser({
+      lastName,
+      firstName,
+      middleName,
+      roles: ['STUDENT'],
+      extra: {
+        registrationSource: 'SELF',
+        createdAt,
+        // Ro‘yxatdan o‘tgach darhol kirgan (o‘quvchi hisobi tasdiqsiz faol).
+        lastLoginAt: new Date(createdAt.getTime() + 2 * 60_000),
+        ...identity(person),
+      },
+    });
+    selfLogins.push(`${student.login} (${className})`);
+    const registeredOn = new Date(`${schoolToday(createdAt)}T00:00:00.000Z`);
+    await prisma.enrollment.create({
+      data: {
+        studentId: student.id,
+        classId: classByName[className]!.id,
+        academicYearId: year.id,
+        startsOn: registeredOn > year.startsOn ? registeredOn : year.startsOn,
+      },
+    });
   }
 
   // ---------------------------------------------------------------- Biriktirishlar
@@ -717,7 +914,7 @@ async function main() {
     reviewerId: rahimov.id,
     sentDaysAgo: 90,
   });
-  await addPortfolio({
+  const jaloliddinMath = await addPortfolio({
     ownerId: jaloliddin.id,
     type: 'NATIONAL_CERTIFICATE',
     title: 'Milliy sertifikat — Matematika (A+)',
@@ -960,15 +1157,78 @@ async function main() {
     sentDaysAgo: 20,
   });
 
+  // ---------------------------------------------------------------- O‘qituvchi ma’lumotnomasi
+  // d.karimova: oliy ma’lumot, birinchi toifa (hujjat bilan), matematikadan milliy sertifikat, malaka
+  // oshirish kursi va o‘quvchisi Jaloliddinning matematika sertifikatiga ustozlik.
+  const categoryFile = await demoPdf(karimova.id, 'toifa-guvohnomasi-karimova.pdf', [
+    'Malaka toifasi haqida guvohnoma (DEMO)',
+    'Karimova Dilnoza Rustamovna',
+    'Birinchi malaka toifasi, 2024-yil 15-iyun',
+  ]);
+  await prisma.teacherProfile.create({
+    data: {
+      userId: karimova.id,
+      university: 'Nizomiy nomidagi Toshkent davlat pedagogika universiteti',
+      graduationYear: 2012,
+      academicDegree: 'NONE',
+      category: 'FIRST',
+      categoryAwardedOn: new Date('2024-06-15'),
+      categoryFileId: categoryFile.id,
+    },
+  });
+  const certificateFile = await demoPdf(karimova.id, 'milliy-sertifikat-matematika-karimova.pdf', [
+    'Milliy sertifikat (DEMO)',
+    'Karimova Dilnoza Rustamovna',
+    'Matematika - A+ (78 ball)',
+  ]);
+  await prisma.teacherCredential.create({
+    data: {
+      teacherId: karimova.id,
+      kind: 'SPECIALTY_NATIONAL',
+      title: 'Milliy sertifikat — Matematika',
+      subjectId: subjects['Matematika']!.id,
+      provider: 'Bilim va malakalarni baholash agentligi',
+      level: 'A+',
+      score: 78,
+      certificateNumber: 'MS-2025-051234',
+      issuedOn: new Date('2025-04-12'),
+      validUntil: new Date('2028-04-12'),
+      fileId: certificateFile.id,
+    },
+  });
+  await prisma.teacherCredential.create({
+    data: {
+      teacherId: karimova.id,
+      kind: 'PROFESSIONAL_DEVELOPMENT',
+      title: 'Matematika darslarida raqamli texnologiyalar (72 soat)',
+      provider: 'Abdulla Avloniy nomidagi Pedagogik mahorat milliy instituti',
+      issuedOn: new Date('2025-11-20'),
+    },
+  });
+  await prisma.teacherMentorship.create({
+    data: { teacherId: karimova.id, portfolioItemId: jaloliddinMath.id, kind: 'NATIONAL' },
+  });
+
+  const unassigned = Object.keys(classByName).filter(
+    (name) => !['9-A', '9-B', '10-A', ...Object.keys(homerooms)].includes(name),
+  );
+
   console.log('Demo ma’lumotlar yaratildi.');
   console.log(`  Parol (barcha demo hisoblar): ${DEMO_PASSWORD}`);
   console.log('  Super admin: superadmin (alohida kirish: /system/login, 2FA sozlash talab qilinadi)');
   console.log('  Administrator: admin');
   console.log('  Direktor o‘rinbosarlari: b.yusupov (Tarix o‘qituvchisi ham), n.rahbarova (dars bermaydi)');
   console.log('  O‘qituvchilar: d.karimova, j.rahimov, m.tursunova (9-B — bankdagi algebra testini o‘tkaza oladi)');
+  console.log('    shuningdek g.xolmirzayeva (11-A), s.ismoilov (10-B), n.qosimova (8-A), r.olimov (sinfsiz)');
   console.log('  O‘quvchilar: ali.aliyev, zebo.karimova (9-A), jahongir.abdullayev (9-B) va boshqalar');
   console.log('  Portfolio namunasi: jaloliddin.abduganiyev (10-A — IELTS, SAT, milliy sertifikatlar, olimpiada)');
   console.log(`  9-A uchun ochiq test kodi: ${DEMO_ACCESS_CODE}`);
+  console.log(
+    `  Sinflar: 7-A … 11-D (${Object.keys(classByName).length} ta); sinf rahbari tayinlanmagan: ${unassigned.join(', ')}`,
+  );
+  console.log(`  O‘zi ro‘yxatdan o‘tgan o‘quvchilar: ${selfLogins.join(', ')}`);
+  console.log('  Tasdiq kutayotgan o‘qituvchi: s.nazarova (Biologiya) — direktor o‘rinbosari tasdiqlagach kira oladi');
+  console.log('  Ma’lumotnoma namunasi: d.karimova (birinchi toifa, milliy sertifikat, Jaloliddinga ustozlik)');
 }
 
 main()

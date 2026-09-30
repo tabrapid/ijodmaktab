@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 const SESSION_COOKIE = 'ijod_sid';
-const PUBLIC = ['/login', '/system/login'];
+// Ro‘yxatdan o‘tish sahifalari ham ochiq: tizimga kirgan foydalanuvchini sahifaning o‘zi bosh sahifasiga o‘tkazadi.
+const PUBLIC = ['/login', '/system/login', '/register', '/register/student', '/register/teacher'];
 
 /**
  * Kirish cookie’si bo‘lmasa sahifalar kirish oynasiga yo‘naltiriladi. Bu faqat qulaylik:

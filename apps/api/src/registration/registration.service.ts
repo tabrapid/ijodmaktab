@@ -91,8 +91,12 @@ export class RegistrationService {
   async updateSettings(input: RegistrationSettingsInput) {
     const before = await this.settings();
     const data = {
-      ...(input.studentRegistrationOpen === undefined ? {} : { studentRegistrationOpen: input.studentRegistrationOpen }),
-      ...(input.teacherRegistrationOpen === undefined ? {} : { teacherRegistrationOpen: input.teacherRegistrationOpen }),
+      ...(input.studentRegistrationOpen === undefined
+        ? {}
+        : { studentRegistrationOpen: input.studentRegistrationOpen }),
+      ...(input.teacherRegistrationOpen === undefined
+        ? {}
+        : { teacherRegistrationOpen: input.teacherRegistrationOpen }),
     };
     await this.prisma.$transaction(async (tx) => {
       await tx.school.upsert({ where: { id: 1 }, update: data, create: { id: 1, name: DEFAULT_SCHOOL_NAME, ...data } });
@@ -325,7 +329,11 @@ export class RegistrationService {
 
     await this.assertLoginFree(input.login);
     const namesakes = await this.prisma.user.findMany({
-      where: { birthYear: input.birthYear, status: { in: ['ACTIVE', 'PENDING'] }, roles: { some: { role: 'TEACHER' } } },
+      where: {
+        birthYear: input.birthYear,
+        status: { in: ['ACTIVE', 'PENDING'] },
+        roles: { some: { role: 'TEACHER' } },
+      },
       select: personSelect,
     });
     if (namesakes.some((person) => samePerson(person, input))) {
@@ -394,7 +402,12 @@ export class RegistrationService {
     const orderBy: Prisma.UserOrderByWithRelationInput[] = [{ createdAt: 'desc' }, { internalId: 'desc' }];
     // Login faqat boshqara oladigan hisoblarda ko‘rsatiladi (foydalanuvchilar bo‘limidagi qoida).
     const credentials = (id: string, roles: { role: string }[], login: string) => {
-      const manageable = id !== viewer.id && canManageRoles(viewer.roles, roles.map((item) => item.role as Role));
+      const manageable =
+        id !== viewer.id &&
+        canManageRoles(
+          viewer.roles,
+          roles.map((item) => item.role as Role),
+        );
       return { manageable, login: manageable ? login : null };
     };
 

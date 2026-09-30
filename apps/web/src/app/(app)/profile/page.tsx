@@ -10,6 +10,7 @@ import { InfoList } from '@/components/admin/info-list';
 import { Avatar } from '@/components/avatar';
 import { AvatarUploadDialog, useRemoveOwnAvatar } from '@/components/avatar-upload-dialog';
 import { RoleBadges } from '@/components/status';
+import { TeacherReferenceLinkCard } from '@/components/teacher-reference/reference-link-card';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
@@ -558,6 +559,8 @@ export default function ProfilePage() {
         description="Profil rasmi, shaxsiy ma’lumotlar, parol, faol sessiyalar va ikki bosqichli kirish."
       />
       <AvatarCard me={me} />
+      {/* O‘qituvchining ma’lumotnomasi (ta’lim, toifa, sertifikatlar, ustozlik) — alohida sahifada. */}
+      {hasRole(me, 'TEACHER') && <TeacherReferenceLinkCard />}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <SessionsCard />

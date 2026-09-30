@@ -227,7 +227,13 @@ export class ManagementStudentsService {
 
   /** Hisobni boshqarish mumkinmi (o‘z hisobi va vakolatdan tashqari rollar — yo‘q). */
   private manageable(viewer: AuthUser, user: ProfileSource) {
-    return user.id !== viewer.id && canManageRoles(viewer.roles, user.roles.map((entry) => entry.role as Role));
+    return (
+      user.id !== viewer.id &&
+      canManageRoles(
+        viewer.roles,
+        user.roles.map((entry) => entry.role as Role),
+      )
+    );
   }
 
   /** Shifrlangan JSHSHIRni ochadi; kalit almashgan bo‘lsa — tushunarli xato. */

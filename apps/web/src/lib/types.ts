@@ -3,6 +3,7 @@
  * Sana va vaqtlar JSON orqali ISO satr sifatida keladi.
  */
 import type {
+  AcademicDegree,
   AchievementLevel,
   AttemptLockReason,
   AttemptPolicy,
@@ -15,6 +16,8 @@ import type {
   ExportKind,
   ExportStatus,
   GradingOverride,
+  InternationalCertificateType,
+  MentorshipKind,
   ParticipationStatus,
   PortfolioDetails,
   PortfolioFieldChange,
@@ -33,6 +36,8 @@ import type {
   SessionState,
   SharePermission,
   SubmitSource,
+  TeacherCategory,
+  TeacherCredentialKind,
   TestStatus,
   TestVisibility,
   UserStatus,
@@ -822,6 +827,8 @@ export interface PortfolioItemView {
     /** Profil rasmi manzili yoki null. */
     avatarUrl?: string | null;
   };
+  /** Sertifikatga ustoz sifatida qayd etilgan o‘qituvchilar (ma’lumotnomaning 10–11-bandlari). */
+  mentors?: PersonRef[];
   isMine: boolean;
   canReview: boolean;
   createdAt: string;
@@ -914,6 +921,87 @@ export interface PrintablePortfolio {
   approved: PortfolioItemView[];
   unapproved: PortfolioItemView[];
   generatedAt: string;
+}
+
+// ------------------------------------------------------------ O‘qituvchi ma’lumotnomasi
+
+/** Ma’lumotnomadagi hujjat (4–9-bandlar). Sanalar “YYYY-MM-DD”. */
+export interface TeacherCredentialView {
+  id: string;
+  kind: TeacherCredentialKind;
+  title: string;
+  subject: Ref | null;
+  provider: string | null;
+  level: string | null;
+  score: number | null;
+  certificateNumber: string | null;
+  issuedOn: string | null;
+  validUntil: string | null;
+  certificateType: InternationalCertificateType | null;
+  file: FileRef | null;
+  createdAt: string;
+}
+
+/** Ustozlik ro‘yxatidagi o‘quvchi (faqat ism, sinf va profil rasmi). */
+export interface MentorshipStudentRef {
+  id: string;
+  fullName: string;
+  className: string | null;
+  avatarUrl: string | null;
+}
+
+/** O‘quvchi sertifikati haqida qisqa ma’lumot. */
+export interface MentorshipCertificateBrief {
+  id: string;
+  type: PortfolioItemType;
+  typeLabel: string;
+  title: string;
+  summary: string | null;
+  date: string | null;
+}
+
+/** Qayd etilgan ustozlik (10–11-bandlar). */
+export interface MentorshipItemView {
+  id: string;
+  kind: MentorshipKind;
+  createdAt: string;
+  student: MentorshipStudentRef;
+  /** `approved: false` — sertifikat keyin o‘zgartirilib, qayta tasdiqlanishi kutilmoqda. */
+  certificate: MentorshipCertificateBrief & { approved: boolean };
+}
+
+/** O‘qituvchi ma’lumotnomasi (o‘zi va rahbariyat uchun bir xil). */
+export interface TeacherReferenceView {
+  teacher: { id: string; fullName: string; avatarUrl: string | null; status: UserStatus };
+  specialtySubject: Ref | null;
+  profile: {
+    university: string | null;
+    graduationYear: number | null;
+    academicDegree: AcademicDegree;
+    degreeFile: FileRef | null;
+    category: TeacherCategory;
+    categoryAwardedOn: string | null;
+    /** Toifa berilgan sanadan 5 yil. */
+    categoryValidUntil: string | null;
+    categoryExpired: boolean;
+    categoryFile: FileRef | null;
+  };
+  credentials: TeacherCredentialView[];
+  mentorships: { national: MentorshipItemView[]; international: MentorshipItemView[] };
+}
+
+/** Ustozlik qayd etish mumkin bo‘lgan sertifikat. */
+export interface MentorshipCandidate extends Omit<MentorshipCertificateBrief, 'id'> {
+  portfolioItemId: string;
+  /** Bu o‘qituvchi allaqachon qayd etgan. */
+  claimed: boolean;
+}
+
+export interface MentorshipCandidatesView {
+  student: MentorshipStudentRef;
+  specialty: Ref;
+  national: MentorshipCandidate[];
+  international: MentorshipCandidate[];
 }
 
 // ------------------------------------------------------------ Bosh sahifalar
@@ -1042,6 +1130,124 @@ export interface StudentResultsView {
     categories: ({ category: Category } & Ratio)[];
   };
   results: StudentResultItem[];
+}
+
+// ------------------------------------------------------------ Rahbariyat: “O‘quvchilar” bo‘limi
+
+/** Shaxs va uning profil rasmi (sinf rahbari). */
+export interface PersonWithAvatar extends PersonRef {
+  avatarUrl: string | null;
+}
+
+export interface PortfolioBrief {
+  approved: number;
+  pending: number;
+}
+
+/** Butun maktab ro‘yxatidagi o‘quvchi (11-sinfdan 7-sinfgacha, sinfsizlar oxirida). */
+export interface ManagementStudentRow {
+  id: string;
+  internalId: number;
+  fullName: string;
+  lastName: string;
+  firstName: string;
+  middleName: string | null;
+  avatarUrl: string | null;
+  classId: string | null;
+  className: string | null;
+  gradeLevel: number | null;
+  section: string | null;
+  homeroomTeacher: PersonRef | null;
+  status: UserStatus;
+  registrationSource: RegistrationSource;
+  createdAt: string;
+  lastLoginAt: string | null;
+  /** “YYYY-MM-DD”. */
+  birthDate: string | null;
+  login: string;
+  portfolio: PortfolioBrief;
+}
+
+export interface ManagementStudentPage extends Page<ManagementStudentRow> {
+  /** Sahifadagi sinf guruhlari va ulardagi o‘quvchilar soni (butun filtrlangan natija bo‘yicha); `null` — sinfsizlar. */
+  groups: { classId: string | null; count: number }[];
+}
+
+/** Sinf kartasi (joriy o‘quv yili). */
+export interface ManagementClassCard {
+  id: string;
+  name: string;
+  gradeLevel: number;
+  section: string;
+  studentCount: number;
+  /** So‘nggi 30 kunda o‘zi ro‘yxatdan o‘tganlar. */
+  newStudentCount: number;
+  homeroomTeacher: PersonWithAvatar | null;
+}
+
+export interface ManagementClassStudent {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+  login: string;
+  status: UserStatus;
+  registrationSource: RegistrationSource;
+  createdAt: string;
+  birthDate: string | null;
+  portfolio: PortfolioBrief;
+}
+
+export interface ManagementClassDetail extends ManagementClassCard {
+  academicYear: { id: string; name: string; isCurrent: boolean };
+  archivedAt: string | null;
+  students: ManagementClassStudent[];
+}
+
+/** Sinf rahbari tayinlangach: sinf kartasi va o‘qituvchi rahbarlik qiladigan boshqa sinflar. */
+export interface HomeroomAssignResult extends ManagementClassCard {
+  alsoHomeroomOf: Ref[];
+}
+
+/** O‘quvchining to‘liq profili (rahbariyat uchun). JSHSHIR faqat yashirilgan ko‘rinishda. */
+export interface ManagementStudentProfile {
+  id: string;
+  internalId: number;
+  lastName: string;
+  firstName: string;
+  middleName: string | null;
+  fullName: string;
+  avatarUrl: string | null;
+  birthDate: string | null;
+  birthYear: number | null;
+  pinflMasked: string | null;
+  hasPinfl: boolean;
+  login: string;
+  status: UserStatus;
+  statusReason: string | null;
+  registrationSource: RegistrationSource;
+  createdAt: string;
+  lastLoginAt: string | null;
+  mustChangePassword: boolean;
+  locked: boolean;
+  currentClass: {
+    id: string;
+    name: string;
+    gradeLevel: number;
+    enrollmentId: string;
+    academicYearId: string;
+    homeroomTeacher: PersonWithAvatar | null;
+  } | null;
+  enrollments: {
+    id: string;
+    classId: string;
+    className: string;
+    academicYear: string;
+    startsOn: string;
+    endsOn: string | null;
+    endReason: string | null;
+  }[];
+  portfolio: PortfolioBrief & { certificates: number };
+  manageable: boolean;
 }
 
 // ------------------------------------------------------------ Ro‘yxatdan o‘tish

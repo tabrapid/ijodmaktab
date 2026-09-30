@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRightLeft, GraduationCap, Lock, ScrollText, UserMinus, UserPlus } from 'lucide-react';
+import { ArrowRightLeft, GraduationCap, IdCard, Lock, ScrollText, UserMinus, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -526,6 +526,17 @@ function UserDetailView() {
         actions={
           <>
             {user.avatarUrl && canManage && <RemoveAvatarButton user={user} />}
+            {/* O‘qituvchi ma’lumotnomasi — faqat rahbariyatga (administratorga emas). */}
+            {user.roles.includes('TEACHER') && hasRole(me, 'DEPUTY', 'SUPER_ADMIN') && (
+              <ButtonLink
+                href={`/management/teachers/${user.id}`}
+                variant="outline"
+                size="sm"
+                icon={<IdCard className="size-4" aria-hidden />}
+              >
+                Ma’lumotnoma
+              </ButtonLink>
+            )}
             <ButtonLink
               href={`/admin/audit?entityType=User&entityId=${user.id}`}
               variant="outline"

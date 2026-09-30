@@ -23,7 +23,9 @@ const PDF = Buffer.from(
 );
 
 async function upload(agent: Agent, name = 'hujjat.pdf') {
-  const response = await agent.post('/api/files').attach('file', PDF, { filename: name, contentType: 'application/pdf' });
+  const response = await agent
+    .post('/api/files')
+    .attach('file', PDF, { filename: name, contentType: 'application/pdf' });
   expect(response.status).toBe(201);
   return response.body.id as string;
 }
@@ -50,7 +52,8 @@ beforeAll(async () => {
   ({ app, prisma } = await createApp());
   fx = await createFixture(prisma, 2);
   // Ustozlik fan nomi bo‘yicha moslanadi (SAT — matematika va ingliz tili), shuning uchun nomlar aniq.
-  const subject = (name: string) => prisma.subject.upsert({ where: { name }, create: { name }, update: { isActive: true } });
+  const subject = (name: string) =>
+    prisma.subject.upsert({ where: { name }, create: { name }, update: { isActive: true } });
   math = await subject('Matematika');
   english = await subject('Ingliz tili');
   physics = await prisma.subject.create({ data: { name: `Fizika ${suffix()}` } });
@@ -298,9 +301,7 @@ describe('Ma’lumotnomadagi hujjatlar', () => {
 
     // Mutaxassislik belgilanmagan o‘qituvchi.
     const otherFile = await upload(otherTeacher);
-    const noSpecialty = await otherTeacher
-      .post('/api/me/teacher-credentials')
-      .send(nationalBody(math.id, otherFile));
+    const noSpecialty = await otherTeacher.post('/api/me/teacher-credentials').send(nationalBody(math.id, otherFile));
     expect(noSpecialty.status).toBe(400);
     expect(noSpecialty.body.code).toBe('SPECIALTY_REQUIRED');
 
@@ -392,7 +393,12 @@ describe('Ma’lumotnomadagi hujjatlar', () => {
       })
       .expect(201);
     // Xalqaro sertifikatda fan saqlanmaydi.
-    expect(ielts.body).toMatchObject({ certificateType: 'IELTS', subject: null, score: 7.5, provider: 'British Council' });
+    expect(ielts.body).toMatchObject({
+      certificateType: 'IELTS',
+      subject: null,
+      score: 7.5,
+      provider: 'British Council',
+    });
     const stored = await prisma.teacherCredential.findUniqueOrThrow({ where: { id: ielts.body.id } });
     expect(stored.details).toEqual({ certificateType: 'IELTS' });
 
@@ -691,7 +697,12 @@ describe('O‘quvchilar sertifikatlariga ustozlik', () => {
     expect(created.body).toMatchObject({
       kind: 'NATIONAL',
       student: { id: zebo.id, fullName: `Karimova Zebo${tag}`, className: fx.classA.name },
-      certificate: { id: items.natMath, type: 'NATIONAL_CERTIFICATE', summary: 'Matematika — A+ (95 ball)', approved: true },
+      certificate: {
+        id: items.natMath,
+        type: 'NATIONAL_CERTIFICATE',
+        summary: 'Matematika — A+ (95 ball)',
+        approved: true,
+      },
     });
 
     const again = await teacher.post('/api/me/mentorships').send({ portfolioItemId: items.natMath }).expect(200);

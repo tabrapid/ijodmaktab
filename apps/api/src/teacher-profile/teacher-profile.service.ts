@@ -202,8 +202,7 @@ export class TeacherProfileService {
     };
     await this.prisma.$transaction(async (tx) => {
       const before = await this.lockTeacher(tx, viewer.id);
-      const specialtyId =
-        input.specialtySubjectId === undefined ? before.specialtySubjectId : input.specialtySubjectId;
+      const specialtyId = input.specialtySubjectId === undefined ? before.specialtySubjectId : input.specialtySubjectId;
       const specialtyChanged = specialtyId !== before.specialtySubjectId;
       if (specialtyChanged && specialtyId) await this.assertActiveSubject(tx, specialtyId, 'specialtySubjectId');
       await this.assertFiles(tx, viewer.id, [

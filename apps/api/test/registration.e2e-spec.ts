@@ -110,7 +110,11 @@ beforeAll(async () => {
       isCurrent: false,
     },
   });
-  const makeClass = async (gradeLevel: number, section: string, options: { archived?: boolean; yearId?: string } = {}) => {
+  const makeClass = async (
+    gradeLevel: number,
+    section: string,
+    options: { archived?: boolean; yearId?: string } = {},
+  ) => {
     const created = await prisma.class.create({
       data: {
         academicYearId: options.yearId ?? year.id,
@@ -165,7 +169,12 @@ describe('Ro‘yxatdan o‘tish sahifasi ma’lumotlari', () => {
     expect(teacher.open).toBe(true);
 
     const mine = student.classes.filter((item) => item.name.endsWith(tag));
-    expect(mine.map((item) => item.name)).toEqual([classes.a11.name, classes.b11.name, classes.d9.name, classes.a7.name]);
+    expect(mine.map((item) => item.name)).toEqual([
+      classes.a11.name,
+      classes.b11.name,
+      classes.d9.name,
+      classes.a7.name,
+    ]);
     expect(Object.keys(mine[0]!).sort()).toEqual(['gradeLevel', 'id', 'name', 'section']);
     const grades = student.classes.map((item) => item.gradeLevel);
     expect(grades).toEqual([...grades].sort((a, b) => b - a));
@@ -544,7 +553,13 @@ describe('Rahbariyat: ruxsatlar va sozlamalar', () => {
       }
     }
     for (const [method, path, payload] of endpoints) {
-      expect((await http()[method](path).send(payload ?? {})).status).toBe(401);
+      expect(
+        (
+          await http()
+            [method](path)
+            .send(payload ?? {})
+        ).status,
+      ).toBe(401);
     }
     const unchanged = await prisma.user.findUniqueOrThrow({ where: { id: pendingUser.id } });
     expect(unchanged.status).toBe('PENDING');
@@ -556,7 +571,10 @@ describe('Rahbariyat: ruxsatlar va sozlamalar', () => {
 
   it('o‘rinbosar ro‘yxatdan o‘tishni alohida yopadi va ochadi', async () => {
     try {
-      const closed = await deputy.put('/api/registrations/settings').send({ studentRegistrationOpen: false }).expect(200);
+      const closed = await deputy
+        .put('/api/registrations/settings')
+        .send({ studentRegistrationOpen: false })
+        .expect(200);
       expect(closed.body).toEqual({ studentRegistrationOpen: false, teacherRegistrationOpen: true });
       let options = await get('/api/registration/options');
       expect(options.body.student).toEqual({ open: false, classes: [] });
@@ -600,7 +618,10 @@ describe('Rahbariyat: ruxsatlar va sozlamalar', () => {
     const body = studentBody({ birthDate: '2010-11-30', pinfl, classId: classes.d9.id });
     const created = await send('/api/registration/student', body);
     expect(created.status).toBe(201);
-    const list = await deputy.get('/api/registrations').query({ view: 'students', days: 30, pageSize: 200 }).expect(200);
+    const list = await deputy
+      .get('/api/registrations')
+      .query({ view: 'students', days: 30, pageSize: 200 })
+      .expect(200);
     expect(list.text).not.toContain(pinfl);
     expect(list.body.items[0].createdAt >= list.body.items.at(-1).createdAt).toBe(true);
     expect(list.body.items).toContainEqual({

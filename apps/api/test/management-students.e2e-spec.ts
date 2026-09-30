@@ -57,12 +57,12 @@ async function agentFor(roles: Role[]) {
 
 let deputy: Agent;
 let year: Awaited<ReturnType<typeof currentYear>>;
-const classes = {} as Record<'c11A' | 'c11B' | 'c10D' | 'c9A' | 'c7D' | 'archived' | 'previous', { id: string; name: string }>;
-const teachers = {} as Record<'t1' | 't2' | 'off' | 'pending' | 'deputyOnly', User>;
-const students = {} as Record<
-  'anvar' | 'bobur' | 'sardor' | 'jasur' | 'nilufar' | 'madina' | 'temur' | 'eldor',
-  User
+const classes = {} as Record<
+  'c11A' | 'c11B' | 'c10D' | 'c9A' | 'c7D' | 'archived' | 'previous',
+  { id: string; name: string }
 >;
+const teachers = {} as Record<'t1' | 't2' | 'off' | 'pending' | 'deputyOnly', User>;
+const students = {} as Record<'anvar' | 'bobur' | 'sardor' | 'jasur' | 'nilufar' | 'madina' | 'temur' | 'eldor', User>;
 const sardorPinfl = pinflFor('2009-05-14', false, 101);
 
 beforeAll(async () => {
@@ -82,7 +82,11 @@ beforeAll(async () => {
   });
   teachers.deputyOnly = await createUser(prisma, ['DEPUTY']);
 
-  const makeClass = async (gradeLevel: number, section: string, data: Partial<Prisma.ClassUncheckedCreateInput> = {}) => {
+  const makeClass = async (
+    gradeLevel: number,
+    section: string,
+    data: Partial<Prisma.ClassUncheckedCreateInput> = {},
+  ) => {
     const created = await prisma.class.create({
       data: {
         academicYearId: year.id,
@@ -603,12 +607,15 @@ describe('Hujjat bo‘yicha ma’lumotlarni tuzatish', () => {
     const response = await patch({
       lastName: `  o'rinboyeva-${word} `,
       firstName: 'KAMOLA',
-      middleName: "baxtiyor QIZI",
+      middleName: 'baxtiyor QIZI',
     }).expect(200);
     const lastName = `O‘rinboyeva-${word.charAt(0).toUpperCase()}${word.slice(1)}`;
     expect(response.body).toMatchObject({ lastName, firstName: 'Kamola', middleName: 'Baxtiyor qizi' });
 
-    const found = await deputy.get('/api/management/students').query({ q: `o‘rinboyeva-${word}` }).expect(200);
+    const found = await deputy
+      .get('/api/management/students')
+      .query({ q: `o‘rinboyeva-${word}` })
+      .expect(200);
     expect(found.body.items.map((item: { id: string }) => item.id)).toEqual([student.id]);
 
     const audits = await identityAudits(student.id);

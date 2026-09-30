@@ -18,6 +18,8 @@ export function LoginForm({ realm }: { realm: 'SCHOOL' | 'SYSTEM' }) {
   const params = useSearchParams();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  // Tasdiq kutayotgan hisob (o‘zi ro‘yxatdan o‘tgan o‘qituvchi) — xato emas, ma’lumot sifatida ko‘rsatiladi.
+  const [pending, setPending] = useState(false);
   const form = useForm<LoginInput>({ resolver: zodResolver(loginSchema), defaultValues: { login: '', password: '' } });
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -27,6 +29,7 @@ export function LoginForm({ realm }: { realm: 'SCHOOL' | 'SYSTEM' }) {
       queryClient.setQueryData(ME_KEY, me);
       router.replace(afterLoginPath(me, params.get('next')));
     } catch (caught) {
+      setPending(caught instanceof ApiError && caught.code === 'ACCOUNT_PENDING');
       setError(caught instanceof ApiError ? caught.message : 'Kirishda xatolik yuz berdi.');
       form.setValue('password', '');
       form.setFocus('password');
@@ -36,7 +39,14 @@ export function LoginForm({ realm }: { realm: 'SCHOOL' | 'SYSTEM' }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
       {params.get('expired') && !error && <Alert tone="info">Sessiya muddati tugadi. Qaytadan kiring.</Alert>}
-      {error && <Alert tone="danger">{error}</Alert>}
+      {error &&
+        (pending ? (
+          <Alert tone="info" title="Hisobingiz hali tasdiqlanmagan">
+            {error}
+          </Alert>
+        ) : (
+          <Alert tone="danger">{error}</Alert>
+        ))}
       <Field label="Login" error={form.formState.errors.login?.message}>
         <Input autoComplete="username" autoCapitalize="none" spellCheck={false} autoFocus {...form.register('login')} />
       </Field>

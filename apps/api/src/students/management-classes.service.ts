@@ -165,7 +165,9 @@ export class ManagementClassesService {
     }
 
     if (target.homeroomTeacherId !== teacherId) {
-      const before = target.homeroomTeacher ? { id: target.homeroomTeacher.id, name: fullName(target.homeroomTeacher) } : null;
+      const before = target.homeroomTeacher
+        ? { id: target.homeroomTeacher.id, name: fullName(target.homeroomTeacher) }
+        : null;
       const after = teacher ? { id: teacher.id, name: fullName(teacher) } : null;
       await this.prisma.$transaction(async (tx) => {
         // Shu orada sinf arxivlangan bo‘lsa, o‘zgarish yozilmaydi.

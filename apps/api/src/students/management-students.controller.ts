@@ -66,7 +66,10 @@ export class ManagementStudentsController {
   }
 
   @Put('classes/:id/homeroom')
-  assignHomeroom(@Param('id', Uuid) id: string, @Body(zod(homeroomAssignSchema)) body: Out<typeof homeroomAssignSchema>) {
+  assignHomeroom(
+    @Param('id', Uuid) id: string,
+    @Body(zod(homeroomAssignSchema)) body: Out<typeof homeroomAssignSchema>,
+  ) {
     return this.classes.assignHomeroom(id, body.teacherId);
   }
 }

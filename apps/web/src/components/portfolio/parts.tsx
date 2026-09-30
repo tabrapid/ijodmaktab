@@ -91,6 +91,11 @@ export function PortfolioMeta({
     { label: 'Fan', value: item.subject?.name },
     { label: 'Yo‘nalish', value: item.direction },
     { label: 'Tashkilot', value: item.organization },
+    // Sertifikatga ustozlik qilgan o‘qituvchilar (o‘qituvchi ma’lumotnomasidan).
+    {
+      label: (item.mentors?.length ?? 0) > 1 ? 'Ustozlar' : 'Ustoz',
+      value: item.mentors?.map((mentor) => mentor.fullName).join(', '),
+    },
   ];
   const visible = parts.filter((part) => part.value);
   if (visible.length === 0) return null;
