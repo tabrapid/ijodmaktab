@@ -433,6 +433,15 @@ describe('O‘qituvchining ro‘yxatdan o‘tishi va tasdiqlash', () => {
       login: body.login,
     });
 
+    // Holatni qo‘lda o‘zgartirib tasdiqlashni chetlab o‘tib bo‘lmaydi.
+    for (const status of ['ACTIVE', 'DEACTIVATED']) {
+      const manual = await deputy.post(`/api/users/${user.id}/status`).send({ status });
+      expect(manual.status).toBe(409);
+      expect(manual.body.code).toBe('REGISTRATION_PENDING');
+    }
+    const pendingBody = await deputy.post(`/api/users/${user.id}/status`).send({ status: 'PENDING' });
+    expect(pendingBody.status).toBe(400);
+
     const approved = await deputy.post(`/api/registrations/${user.id}/approve`).expect(200);
     expect(approved.body).toMatchObject({ id: user.id, status: 'ACTIVE' });
     const again = await deputy.post(`/api/registrations/${user.id}/approve`);

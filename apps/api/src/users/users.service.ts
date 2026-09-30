@@ -420,6 +420,14 @@ export class UsersService {
   async setStatus(viewer: AuthUser, id: string, status: UserStatus, reason: string | null) {
     const { target } = await this.assertManageable(viewer, id);
     if (target.status === status) return this.detail(viewer, id);
+    // Tasdiq kutayotgan ariza faqat “Ro‘yxatdan o‘tish” sahifasida tasdiqlanadi yoki rad etiladi:
+    // holatni qo‘lda o‘zgartirib tasdiqlashni chetlab o‘tib bo‘lmaydi.
+    if (target.status === 'PENDING') {
+      throw conflict(
+        'REGISTRATION_PENDING',
+        'Bu hisob tasdiq kutmoqda. Uni “Ro‘yxatdan o‘tish” bo‘limida tasdiqlang yoki rad eting.',
+      );
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id },

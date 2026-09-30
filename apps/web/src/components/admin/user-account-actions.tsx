@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Archive, ImageOff, KeyRound, LockOpen, LogOut, Power, PowerOff, Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -160,24 +161,33 @@ export function StatusCard({
             <span className="text-slate-500">Sabab:</span> {user.statusReason}
           </p>
         )}
-        <div className="flex flex-col gap-2">
-          {MANUAL_USER_STATUSES.filter((status) => status !== user.status).map((status) => {
-            const action = STATUS_ACTIONS[status];
-            const Icon = action.icon;
-            return (
-              <Button
-                key={status}
-                variant="outline"
-                className="justify-start"
-                disabled={disabled}
-                onClick={() => onChange(status)}
-                icon={<Icon className="size-4" aria-hidden />}
-              >
-                {action.verb}
-              </Button>
-            );
-          })}
-        </div>
+        {user.status === 'PENDING' ? (
+          <Alert tone="info" title="Ariza tasdiq kutmoqda">
+            O‘zi ro‘yxatdan o‘tgan hisob faqat “Ro‘yxatdan o‘tish” bo‘limida tasdiqlanadi yoki rad etiladi.{' '}
+            <Link href="/management/registrations" className="font-medium text-brand-700 underline">
+              Arizalarga o‘tish
+            </Link>
+          </Alert>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {MANUAL_USER_STATUSES.filter((status) => status !== user.status).map((status) => {
+              const action = STATUS_ACTIONS[status];
+              const Icon = action.icon;
+              return (
+                <Button
+                  key={status}
+                  variant="outline"
+                  className="justify-start"
+                  disabled={disabled}
+                  onClick={() => onChange(status)}
+                  icon={<Icon className="size-4" aria-hidden />}
+                >
+                  {action.verb}
+                </Button>
+              );
+            })}
+          </div>
+        )}
       </CardBody>
     </Card>
   );

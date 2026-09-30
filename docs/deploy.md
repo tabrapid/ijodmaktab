@@ -85,7 +85,7 @@ fon vazifalarini xatosiz bajaradi.
 | `WEB_ORIGIN`           | Tashqi manzil, masalan `https://ijod.maktab.uz` (bir nechta bo‘lsa vergul bilan)                                                                                                                         |
 | `APP_ENCRYPTION_KEY`   | 32 baytlik base64: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. TOTP kalitlari shu bilan shifrlanadi — **yo‘qotmang va almashtirmang** (aks holda 2FA qayta sozlanadi) |
 | `COOKIE_SECURE`        | `true` (faqat HTTPS)                                                                                                                                                                                     |
-| `TRUST_PROXY`          | `true` (teskari proksi ortida — mijoz IP manzili to‘g‘ri aniqlanadi)                                                                                                                                     |
+| `TRUST_PROXY`          | `true` (teskari proksi ortida — mijoz IP manzili to‘g‘ri aniqlanadi; nginx `X-Forwarded-For` ni `$remote_addr` bilan qayta yozishi shart, 6-bo‘lim)                                                      |
 | `SESSION_TTL_HOURS`    | Faolsizlikdan keyin chiqib ketish muddati (standart 12)                                                                                                                                                  |
 | `STORAGE_DIR`          | Masalan `/srv/ijod/storage` (egasi — API jarayoni foydalanuvchisi, huquq `700`)                                                                                                                          |
 | `ANSWER_GRACE_SECONDS` | Tarmoq kechikishi uchun muddatdan keyingi qo‘shimcha soniyalar (standart 2)                                                                                                                              |
@@ -139,7 +139,9 @@ server {
   location / {
     proxy_pass http://127.0.0.1:3000;
     proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # Mijoz yuborgan X-Forwarded-For qayta yoziladi: aks holda IP manzilni soxtalashtirib, kirish va
+    # ro‘yxatdan o‘tishdagi urinishlar chegarasini aylanib o‘tish mumkin bo‘ladi.
+    proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto https;
   }
 }

@@ -291,6 +291,11 @@ function ItemDetail() {
               <DetailRow label="Dalil">
                 <EvidenceLinks file={item.evidenceFile} url={item.evidenceUrl} />
               </DetailRow>
+              {item.mentors?.length ? (
+                <DetailRow label={item.mentors.length > 1 ? 'Ustozlar' : 'Ustoz'}>
+                  {item.mentors.map((mentor) => mentor.fullName).join(', ')}
+                </DetailRow>
+              ) : null}
               <DetailRow label="Kim ko‘ra oladi">
                 {PORTFOLIO_VISIBILITY_LABELS[item.visibility]}
                 <span className="block text-xs text-slate-500">Portfolio ommaga ochiq emas.</span>
