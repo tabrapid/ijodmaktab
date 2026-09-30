@@ -37,12 +37,15 @@ export function useRegistrationOptions() {
  * Tizimga kirgan foydalanuvchi ro‘yxatdan o‘tish sahifalarini ko‘rmaydi — o‘z bosh sahifasiga o‘tadi.
  * Kirmaganlik (401) xato sifatida umumiy ishlovchiga yetib bormaydi: u kirish sahifasiga yo‘naltirardi.
  * Muddati o‘tgan cookie ham sahifani to‘smaydi (umumiy kompyuterlarda ko‘p uchraydi).
+ * `hasSession` — sahifa serverda kirish cookie’si borligini aniqlab beradi (cookie httpOnly).
  */
-export function useSignedInRedirect() {
+export function useSignedInRedirect(hasSession: boolean) {
   const router = useRouter();
   const session = useQuery({
     queryKey: registrationKeys.session,
     queryFn: () => api.get<Me>('/auth/me').catch(() => null),
+    // Kirish cookie’si bo‘lmasa server so‘ralmaydi (aks holda har tashrifda keraksiz 401 bo‘ladi).
+    enabled: hasSession,
     retry: false,
     staleTime: 0,
     gcTime: 0,
@@ -50,7 +53,10 @@ export function useSignedInRedirect() {
   useEffect(() => {
     if (session.data) router.replace(afterLoginPath(session.data));
   }, [session.data, router]);
-  return { checking: session.isPending || Boolean(session.data), recheck: () => session.refetch() };
+  return {
+    checking: hasSession && (session.isPending || Boolean(session.data)),
+    recheck: () => session.refetch(),
+  };
 }
 
 /** Login qoidasi (`loginValue` bilan bir xil): 3–50 ta lotin harfi, raqam, nuqta, chiziqcha, pastki chiziq. */

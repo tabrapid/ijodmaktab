@@ -148,35 +148,46 @@ export class TeacherProfileService {
   private async assertFiles(tx: Tx, teacherId: string, requests: FileRequest[]) {
     const wanted = requests.filter((request): request is FileRequest & { id: string } => Boolean(request.id));
     if (wanted.length === 0) return;
+    const ids = wanted.map((request) => request.id);
+    // Faylning bog‘liqliklari alohida so‘rovlar bilan ketma-ket o‘qiladi: tranzaksiya bitta ulanishda
+    // ishlaydi, bir so‘rovdagi bir nechta bog‘liqlik esa unga parallel yuborilib, pg ogohlantirishini beradi.
     const files = await tx.fileAsset.findMany({
-      where: { id: { in: wanted.map((request) => request.id) } },
-      select: {
-        id: true,
-        ownerId: true,
-        status: true,
-        deletedAt: true,
-        avatarOf: { select: { id: true } },
-        portfolioItems: { select: { id: true }, take: 1 },
-        categoryOf: { select: { userId: true } },
-        degreeOf: { select: { userId: true } },
-        credentialOf: { select: { id: true } },
-      },
+      where: { id: { in: ids } },
+      select: { id: true, ownerId: true, status: true, deletedAt: true },
     });
+    const avatars = await tx.user.findMany({ where: { avatarFileId: { in: ids } }, select: { avatarFileId: true } });
+    const evidence = await tx.portfolioItem.findMany({
+      where: { evidenceFileId: { in: ids } },
+      select: { evidenceFileId: true },
+    });
+    const profiles = await tx.teacherProfile.findMany({
+      where: { OR: [{ categoryFileId: { in: ids } }, { degreeFileId: { in: ids } }] },
+      select: { categoryFileId: true, degreeFileId: true },
+    });
+    const credentials = await tx.teacherCredential.findMany({
+      where: { fileId: { in: ids } },
+      select: { id: true, fileId: true },
+    });
+
     const byId = new Map(files.map((file) => [file.id, file]));
+    const avatarIds = new Set(avatars.map((row) => row.avatarFileId));
+    const evidenceIds = new Set(evidence.map((row) => row.evidenceFileId));
+    const categoryIds = new Set(profiles.map((row) => row.categoryFileId));
+    const degreeIds = new Set(profiles.map((row) => row.degreeFileId));
+    const credentialByFile = new Map(credentials.map((row) => [row.fileId, row.id]));
     const used = new Set<string>();
     for (const request of wanted) {
       const file = byId.get(request.id);
       const slot = request.slot;
+      const credentialId = credentialByFile.get(request.id);
       let problem: string | null = null;
       if (!file || file.ownerId !== teacherId || file.deletedAt || file.status !== 'CLEAN') problem = FILE_MISSING;
       else if (used.has(file.id)) problem = FILE_TWICE;
-      else if (file.avatarOf) problem = FILE_AVATAR;
-      else if (file.portfolioItems.length > 0) problem = FILE_EVIDENCE;
-      else if (file.categoryOf && !('profile' in slot && slot.profile === 'category')) problem = FILE_BUSY;
-      else if (file.degreeOf && !('profile' in slot && slot.profile === 'degree')) problem = FILE_BUSY;
-      else if (file.credentialOf && !('credentialId' in slot && slot.credentialId === file.credentialOf.id)) {
-        problem = FILE_BUSY;
-      }
+      else if (avatarIds.has(file.id)) problem = FILE_AVATAR;
+      else if (evidenceIds.has(file.id)) problem = FILE_EVIDENCE;
+      else if (categoryIds.has(file.id) && !('profile' in slot && slot.profile === 'category')) problem = FILE_BUSY;
+      else if (degreeIds.has(file.id) && !('profile' in slot && slot.profile === 'degree')) problem = FILE_BUSY;
+      else if (credentialId && !('credentialId' in slot && slot.credentialId === credentialId)) problem = FILE_BUSY;
       if (problem) throw fieldError('FILE_NOT_ALLOWED', request.field, problem);
       used.add(request.id);
     }

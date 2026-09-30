@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { PinflVault } from '../src/common/pinfl-vault.js';
+import { STUDENT_LIMIT } from '../src/registration/registration.controller.js';
 import type { PrismaService } from '../src/prisma/prisma.service.js';
 import { createApp, createUser, currentYear, login, suffix } from './helpers.js';
 
@@ -654,7 +655,7 @@ describe('Rahbariyat: ruxsatlar va sozlamalar', () => {
 describe('Tezlik cheklovi', () => {
   it('bir IP dan ko‘p urinish cheklanadi (loginni almashtirish yordam bermaydi)', async () => {
     const ip = '203.0.113.7';
-    for (let index = 0; index < 10; index += 1) {
+    for (let index = 0; index < STUDENT_LIMIT.default.limit; index += 1) {
       const response = await http()
         .post('/api/registration/student')
         .set('X-Forwarded-For', ip)

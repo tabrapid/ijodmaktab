@@ -17,14 +17,13 @@ import { RegistrationService } from './registration.service.js';
 const byIp: ThrottlerGetTrackerFunction = (req) => `registration:${normalizeIp(String(req.ip ?? ''))}`;
 
 const MINUTE = 60_000;
+// Chegaralar maktab kompyuter xonasi yoki Wi-Fi uchun: butun sinf (30–35 o‘quvchi) bitta tashqi IP
+// ortida bir vaqtda ro‘yxatdan o‘tadi, xato to‘ldirilgan forma ham urinish hisoblanadi. Qattiqroq
+// cheklov darsni to‘xtatib qo‘yardi; ommaviy soxta ro‘yxatdan o‘tishni o‘rinbosar ro‘yxatni yopib to‘xtatadi.
 /** Sahifa ma’lumotlari va login tekshiruvi (login yozilayotganda kechiktirib so‘raladi). */
-const READ_LIMIT = { default: { limit: 30, ttl: MINUTE, getTracker: byIp } };
-/**
- * O‘quvchi: bir IP dan daqiqasiga 10 ta. Maktab kompyuter xonasi yoki Wi-Fi da butun sinf bitta
- * tashqi IP ortida ro‘yxatdan o‘tadi — qattiqroq cheklov darsni to‘xtatib qo‘yardi.
- */
-const STUDENT_LIMIT = { default: { limit: 10, ttl: MINUTE, getTracker: byIp } };
-const TEACHER_LIMIT = { default: { limit: 5, ttl: MINUTE, getTracker: byIp } };
+const READ_LIMIT = { default: { limit: 200, ttl: MINUTE, getTracker: byIp } };
+export const STUDENT_LIMIT = { default: { limit: 40, ttl: MINUTE, getTracker: byIp } };
+const TEACHER_LIMIT = { default: { limit: 15, ttl: MINUTE, getTracker: byIp } };
 
 /** Tizimga kirgan foydalanuvchi yangi hisob ochmaydi (umumiy kompyuterda boshqa odam nomidan). */
 function assertSignedOut(user: AuthUser | undefined) {

@@ -245,8 +245,8 @@ function Submitted({ login }: { login: string }) {
 }
 
 /** O‘qituvchining o‘zi ro‘yxatdan o‘tishi: ariza direktor o‘rinbosari tasdig‘iga yuboriladi. */
-export function TeacherRegistration() {
-  const { checking, recheck } = useSignedInRedirect();
+export function TeacherRegistration({ hasSession }: { hasSession: boolean }) {
+  const { checking, recheck } = useSignedInRedirect(hasSession);
   const options = useRegistrationOptions();
   const [submitted, setSubmitted] = useState<string | null>(null);
   const teacher = options.data?.teacher;

@@ -73,8 +73,8 @@ function Choice({
 }
 
 /** “Kim sifatida ro‘yxatdan o‘tasiz?” — o‘quvchi yoki o‘qituvchi. Yopiq tur ko‘rinadi, lekin tanlanmaydi. */
-export function RegisterChoice() {
-  const { checking } = useSignedInRedirect();
+export function RegisterChoice({ hasSession }: { hasSession: boolean }) {
+  const { checking } = useSignedInRedirect(hasSession);
   const options = useRegistrationOptions();
   const data = options.data;
 

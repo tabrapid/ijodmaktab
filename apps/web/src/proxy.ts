@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { SESSION_COOKIE } from '@/lib/session-cookie';
 
-const SESSION_COOKIE = 'ijod_sid';
 // Ro‘yxatdan o‘tish sahifalari ham ochiq: tizimga kirgan foydalanuvchini sahifaning o‘zi bosh sahifasiga o‘tkazadi.
 const PUBLIC = ['/login', '/system/login', '/register', '/register/student', '/register/teacher'];
 

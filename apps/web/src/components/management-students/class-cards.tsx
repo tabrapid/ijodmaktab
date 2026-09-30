@@ -52,7 +52,7 @@ function ClassCardItem({ item, onAssign }: { item: ManagementClassCard; onAssign
         )}
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-        <HomeroomTeacher teacher={item.homeroomTeacher} className="min-w-0 flex-1" />
+        <HomeroomTeacher teacher={item.homeroomTeacher} className="min-w-0 flex-1 basis-52" />
         <Button
           size="sm"
           variant={item.homeroomTeacher ? 'outline' : 'secondary'}

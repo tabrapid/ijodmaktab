@@ -274,8 +274,8 @@ function StudentForm({ classes, onSignedIn }: { classes: RegistrationClassOption
 }
 
 /** O‘quvchining o‘zi ro‘yxatdan o‘tishi: muvaffaqiyatli bo‘lsa, darhol o‘quvchi paneliga o‘tadi. */
-export function StudentRegistration() {
-  const { checking, recheck } = useSignedInRedirect();
+export function StudentRegistration({ hasSession }: { hasSession: boolean }) {
+  const { checking, recheck } = useSignedInRedirect(hasSession);
   const options = useRegistrationOptions();
   const student = options.data?.student;
 

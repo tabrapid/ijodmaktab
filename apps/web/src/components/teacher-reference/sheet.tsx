@@ -75,7 +75,7 @@ export function SectionHeading({
 /** Bandlar bo‘yicha tezkor o‘tish (telefonda uzun sahifa uchun qulay). */
 export function SectionNav({ items }: { items: { number: number; label: string }[] }) {
   return (
-    <nav aria-label="Ma’lumotnoma bandlari" className="-mx-1 overflow-x-auto pb-1">
+    <nav aria-label="Ma’lumotnoma bandlari" className="relative -mx-1 overflow-x-auto pb-1">
       <ol className="flex w-max gap-1.5 px-1">
         {items.map((item) => (
           <li key={item.number}>

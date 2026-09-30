@@ -94,13 +94,18 @@ const StudentRow = memo(function StudentRow({ row, now }: { row: ManagementStude
 
 function GroupSection({ group, now }: { group: Group; now: number }) {
   const headingId = `group-${group.key}`;
-  // Ekrandan tashqaridagi guruhlar chizilmaydi (uzun ro‘yxat tez ochiladi); taxminiy balandlik — qatorlar soni bo‘yicha.
+  // Ekrandan tashqaridagi guruhlar chizilmaydi (uzun ro‘yxat tez ochiladi); taxminiy balandlik — qatorlar soni
+  // bo‘yicha (telefonda sarlavha ham, qator ham ikki qavat: holat va portfolio ism ostida).
   const style: CSSProperties = {
     contentVisibility: 'auto',
-    containIntrinsicSize: `auto ${44 + group.rows.length * 60}px`,
+    containIntrinsicSize: `auto calc(var(--group-head-height) + ${group.rows.length} * var(--student-row-height))`,
   };
   return (
-    <section aria-labelledby={headingId} style={style}>
+    <section
+      aria-labelledby={headingId}
+      style={style}
+      className="[--group-head-height:64px] [--student-row-height:92px] md:[--group-head-height:44px] md:[--student-row-height:60px]"
+    >
       <h2
         id={headingId}
         className="sticky top-16 z-10 flex flex-wrap items-center gap-x-2 gap-y-0.5 border-y border-slate-200 bg-slate-50/95 px-4 py-2 text-sm backdrop-blur-sm"

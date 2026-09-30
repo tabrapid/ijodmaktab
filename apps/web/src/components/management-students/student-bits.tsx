@@ -66,9 +66,8 @@ export function HomeroomTeacher({
       <Avatar name={teacher.fullName} src={teacher.avatarUrl} size={size} />
       <div className="min-w-0">
         <p className="text-xs text-slate-500">Sinf rahbari</p>
-        <p className="truncate text-sm font-medium text-slate-900" title={teacher.fullName}>
-          {teacher.fullName}
-        </p>
+        {/* To‘liq ism — kartochkaning asosiy ma’lumoti: kesilmaydi, kerak bo‘lsa ikki qatorga o‘tadi. */}
+        <p className="text-sm font-medium break-words text-slate-900">{teacher.fullName}</p>
       </div>
     </div>
   );

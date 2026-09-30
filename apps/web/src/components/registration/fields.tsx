@@ -154,10 +154,11 @@ export function BirthDateField({
   };
   const years = Array.from({ length: fromYear - toYear + 1 }, (_, index) => fromYear - index);
   const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
-  // Tor ekranda (360 px) oy nomi to‘liq ko‘rinishi uchun ichki bo‘shliq kichikroq.
+  // Brauzerning o‘z strelkasi uchun joy bor: ichki bo‘shliq kichik bo‘lsa, “2011” va “Kun” to‘liq ko‘rinadi
+  // (tor ekranda — 360 px — ham).
   const common = {
     onBlur,
-    className: 'pr-7 pl-2.5',
+    className: 'pr-1.5 pl-2',
     'aria-invalid': error ? true : undefined,
     'aria-describedby': describedBy,
   } as const;
@@ -171,7 +172,7 @@ export function BirthDateField({
           *
         </span>
       </legend>
-      <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_5.25rem] gap-2">
+      <div className="grid grid-cols-[4.75rem_minmax(0,1fr)_6rem] gap-2">
         <Select
           ref={inputRef}
           aria-label="Tug‘ilgan kun"
