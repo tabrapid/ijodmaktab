@@ -7,6 +7,7 @@ import { AssessmentModule } from './assessment.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { AuthModule } from './auth/auth.module.js';
+import { PinflModule } from './common/pinfl-vault.js';
 import { StorageModule } from './common/storage.module.js';
 import { UserThrottlerGuard } from './common/throttler.guard.js';
 import { ConfigModule } from './config/config.module.js';
@@ -30,6 +31,7 @@ import { UsersModule } from './users/users.module.js';
     AuthModule,
     AccessModule,
     StorageModule,
+    PinflModule,
     NotificationsModule,
     UsersModule,
     StructureModule,
