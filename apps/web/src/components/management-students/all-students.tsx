@@ -21,8 +21,8 @@ import { classHref } from './class-cards';
 import { managementKeys, useManagementClasses } from './queries';
 import { isNewRegistration, NewBadge, PortfolioCounts } from './student-bits';
 
-/** Butun maktab (~500 o‘quvchi) bitta sahifaga sig‘adi. */
-const PAGE_SIZE = 500;
+/** Butun maktab (~500 o‘quvchi) bitta sahifaga sig‘adi (API ruxsat bergan eng katta qiymat). */
+const PAGE_SIZE = 1000;
 
 const FILTER_DEFAULTS = { q: '', class: '', grade: '', status: '', source: '', noClass: '', page: '1' };
 
@@ -63,8 +63,10 @@ function groupRows(page: ManagementStudentPage): Group[] {
 const StudentRow = memo(function StudentRow({ row, now }: { row: ManagementStudentRow; now: number }) {
   return (
     <li>
+      {/* Yuzlab qator: har biri ko‘ringanda sahifani oldindan yuklash so‘rovlari yuborilmasin. */}
       <Link
         href={`/management/students/${row.id}`}
+        prefetch={false}
         className={cn(
           ROW_GRID,
           'items-center gap-y-1.5 px-4 py-2.5 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:-outline-offset-2',
@@ -99,7 +101,7 @@ function GroupSection({ group, now }: { group: Group; now: number }) {
   };
   return (
     <section aria-labelledby={headingId} style={style}>
-      <h3
+      <h2
         id={headingId}
         className="sticky top-16 z-10 flex flex-wrap items-center gap-x-2 gap-y-0.5 border-y border-slate-200 bg-slate-50/95 px-4 py-2 text-sm backdrop-blur-sm"
       >
@@ -134,7 +136,7 @@ function GroupSection({ group, now }: { group: Group; now: number }) {
             Sinf sahifasi
           </Link>
         )}
-      </h3>
+      </h2>
       <ul className="divide-y divide-slate-100">
         {group.rows.map((row) => (
           <StudentRow key={row.id} row={row} now={now} />

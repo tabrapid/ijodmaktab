@@ -2,8 +2,7 @@
  * O‘qituvchi ma’lumotnomasi: xalqaro sertifikat turlari va o‘quvchi sertifikatlariga ustozlik
  * (qaysi sertifikat qaysi fanga tegishli ekani).
  */
-import type { MentorshipKind, PortfolioItemType } from './enums.js';
-import { TEACHER_CATEGORY_VALID_YEARS } from './enums.js';
+import { TEACHER_CATEGORY_VALID_YEARS, type MentorshipKind, type PortfolioItemType } from './enums.js';
 import { normalizeForSearch } from './text.js';
 
 /**

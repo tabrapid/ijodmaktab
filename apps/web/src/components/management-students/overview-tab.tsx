@@ -32,6 +32,8 @@ export function OverviewTab({
   onOpenPortfolio: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  // Tahrirlashdan keyin ochib qo‘yilgan (eski) JSHSHIR ko‘rinib qolmasligi uchun maydon qayta yaratiladi.
+  const [edits, setEdits] = useState(0);
   const birth = profile.birthDate
     ? `${formatDate(profile.birthDate)} (${ageOf(profile.birthDate)} yosh)`
     : 'Kiritilmagan';
@@ -68,7 +70,14 @@ export function OverviewTab({
                 },
                 {
                   label: 'JSHSHIR',
-                  value: <PinflValue studentId={profile.id} masked={profile.pinflMasked} hasPinfl={profile.hasPinfl} />,
+                  value: (
+                    <PinflValue
+                      key={edits}
+                      studentId={profile.id}
+                      masked={profile.pinflMasked}
+                      hasPinfl={profile.hasPinfl}
+                    />
+                  ),
                 },
               ]}
             />
@@ -192,7 +201,15 @@ export function OverviewTab({
         </Card>
       </div>
 
-      {editing && <IdentityDialog profile={profile} onClose={() => setEditing(false)} />}
+      {editing && (
+        <IdentityDialog
+          profile={profile}
+          onClose={() => {
+            setEditing(false);
+            setEdits((count) => count + 1);
+          }}
+        />
+      )}
     </div>
   );
 }

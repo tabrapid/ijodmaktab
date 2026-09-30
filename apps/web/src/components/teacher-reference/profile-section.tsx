@@ -146,7 +146,11 @@ export function ProfileForm({ data }: { data: TeacherReferenceView }) {
   // Saqlanmagan o‘zgarish bilan sahifani yopish yoki yangilashda brauzer ogohlantiradi.
   useEffect(() => {
     if (!isDirty) return;
-    const onBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Eski brauzerlar ogohlantirishni faqat shu qiymat bilan ko‘rsatadi.
+      event.returnValue = '';
+    };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [isDirty]);

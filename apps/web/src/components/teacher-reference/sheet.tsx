@@ -55,7 +55,7 @@ export function SectionHeading({
   as?: 'h2' | 'h3';
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex min-w-0 flex-1 gap-3">
         <SectionNumber value={number} className="mt-px" />
         <div className="min-w-0">
@@ -66,7 +66,8 @@ export function SectionHeading({
           {description && <div className="mt-0.5 text-sm text-slate-500">{description}</div>}
         </div>
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {/* Telefonda tugma sarlavha ostida, matn bilan bir chiziqda. */}
+      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2 pl-10 sm:pl-0">{actions}</div>}
     </div>
   );
 }

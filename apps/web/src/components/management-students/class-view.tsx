@@ -87,6 +87,7 @@ function Roster({ students }: { students: ManagementClassStudent[] }) {
               <li key={student.id}>
                 <Link
                   href={studentHref(student.id)}
+                  prefetch={false}
                   className="flex gap-3 px-4 py-3 hover:bg-slate-50 focus-visible:outline-2 focus-visible:-outline-offset-2"
                 >
                   <Avatar name={student.fullName} src={student.avatarUrl} size="md" />
@@ -130,6 +131,7 @@ function Roster({ students }: { students: ManagementClassStudent[] }) {
                         <Avatar name={student.fullName} src={student.avatarUrl} size="sm" />
                         <Link
                           href={studentHref(student.id)}
+                          prefetch={false}
                           onClick={(event) => event.stopPropagation()}
                           className="font-medium text-slate-900 hover:text-brand-700 hover:underline"
                         >

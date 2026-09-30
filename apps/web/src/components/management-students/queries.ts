@@ -27,19 +27,27 @@ export function useManagementClasses() {
   });
 }
 
+/** O‘quvchi yoki sinf o‘zgarganda eskiradigan boshqa bo‘limlar so‘rovlari (faqat ochiqlari qayta yuklanadi). */
+const RELATED_KEYS = [
+  adminKeys.users,
+  adminKeys.classes,
+  // O‘qituvchining sinf sahifasi, portfolio va natijalardagi F.I.Sh. va sinf nomi.
+  ['class'],
+  ['portfolio'],
+  ['student-results'],
+  // O‘zini sinf rahbari etib tayinlagan rahbar (o‘qituvchi ham) menyusi.
+  ME_KEY,
+] as const;
+
 /**
  * O‘quvchi, sinf yoki sinf rahbari o‘zgargach: bo‘lim so‘rovlari hamda boshqa bo‘limlardagi bog‘liq
- * ro‘yxatlar (foydalanuvchilar, sinflar, o‘qituvchining sinf sahifasi, joriy foydalanuvchi) yangilanadi.
+ * ro‘yxatlar yangilanadi.
  */
 export function useRefreshStudents() {
   const queryClient = useQueryClient();
   return useCallback(
     () =>
-      Promise.all(
-        [managementKeys.all, adminKeys.users, adminKeys.classes, ['class'], ME_KEY].map((queryKey) =>
-          queryClient.invalidateQueries({ queryKey }),
-        ),
-      ),
+      Promise.all([managementKeys.all, ...RELATED_KEYS].map((queryKey) => queryClient.invalidateQueries({ queryKey }))),
     [queryClient],
   );
 }
