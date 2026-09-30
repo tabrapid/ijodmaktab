@@ -27,6 +27,54 @@ enum UserStatus {
   ACTIVE
   DEACTIVATED
   ARCHIVED
+  /// O‘zi ro‘yxatdan o‘tgan o‘qituvchi: direktor o‘rinbosari tasdiqlaguncha kira olmaydi.
+  PENDING
+}
+
+/// Hisob qanday yaratilgan.
+enum RegistrationSource {
+  ADMIN
+  IMPORT
+  SELF
+}
+
+/// Ilmiy daraja (O‘zbekiston: fan nomzodi — eski tizim, PhD — falsafa doktori, DSc — fan doktori).
+enum AcademicDegree {
+  NONE
+  CANDIDATE
+  PHD
+  DSC
+}
+
+/// Pedagogning malaka toifasi (attestatsiya natijasi; 5 yil amal qiladi).
+enum TeacherCategory {
+  NONE
+  SPECIALIST
+  SECOND
+  FIRST
+  HIGHEST
+}
+
+/// O‘qituvchi ma’lumotnomasidagi hujjat turlari.
+enum TeacherCredentialKind {
+  /// Mutaxassislik fani bo‘yicha milliy sertifikat.
+  SPECIALTY_NATIONAL
+  /// Mutaxassislik bo‘yicha xalqaro sertifikat.
+  SPECIALTY_INTERNATIONAL
+  /// Nomutaxassislik fanlari bo‘yicha (milliy) sertifikat.
+  OTHER_NATIONAL
+  /// Nomutaxassislik fanlari bo‘yicha xalqaro sertifikat.
+  OTHER_INTERNATIONAL
+  /// Mustaqil malaka oshirish kurslari.
+  PROFESSIONAL_DEVELOPMENT
+  /// Tanlov, ko‘rgazma, ko‘rik-tanlov va musobaqalarda ishtirok.
+  CONTEST
+}
+
+/// O‘qituvchi o‘quvchi sertifikatiga ustozlik qilgani (milliy yoki xalqaro).
+enum MentorshipKind {
+  NATIONAL
+  INTERNATIONAL
 }
 
 enum AuthRealm {
@@ -192,28 +240,32 @@ enum EnrollmentEndReason {
 
 /// Dastlabki faraz: bitta maktab. Jadval maktab sozlamalarini saqlaydi (bitta qator).
 model School {
-  id        Int      @id @default(1)
-  name      String
-  shortName String?
-  timeZone  String   @default("Asia/Tashkent")
-  updatedAt DateTime @updatedAt
+  id                      Int      @id @default(1)
+  name                    String
+  shortName               String?
+  timeZone                String   @default("Asia/Tashkent")
+  /// O‘quvchilar o‘zi ro‘yxatdan o‘ta oladimi (direktor o‘rinbosari yopib qo‘yishi mumkin).
+  studentRegistrationOpen Boolean  @default(true)
+  /// O‘qituvchilar o‘zi ro‘yxatdan o‘ta oladimi (hisob o‘rinbosar tasdig‘idan keyin ishlaydi).
+  teacherRegistrationOpen Boolean  @default(true)
+  updatedAt               DateTime @updatedAt
 }
 
 model User {
-  id                 String     @id @default(uuid(7)) @db.Uuid
+  id                 String             @id @default(uuid(7)) @db.Uuid
   /// O‘zgarmas ichki ID raqami (hujjat raqami yoki JSHSHIR bilan bir xil maydon emas).
-  internalId         Int        @unique @default(autoincrement())
-  login              String     @unique
+  internalId         Int                @unique @default(autoincrement())
+  login              String             @unique
   passwordHash       String
-  mustChangePassword Boolean    @default(true)
+  mustChangePassword Boolean            @default(true)
   lastName           String
   firstName          String
   middleName         String?
   /// Qidiruv uchun normallashtirilgan matn (apostrof variantlari moslashtirilgan).
   searchText         String
-  status             UserStatus @default(ACTIVE)
+  status             UserStatus         @default(ACTIVE)
   statusReason       String?
-  failedLoginCount   Int        @default(0)
+  failedLoginCount   Int                @default(0)
   lockedUntil        DateTime?
   lastLoginAt        DateTime?
   lastActiveAt       DateTime?
@@ -225,9 +277,23 @@ model User {
   /// Oxirgi ishlatilgan TOTP qadami: bitta kodni ikki marta ishlatib bo‘lmaydi.
   totpLastStep       Int?
   /// Profil rasmi (kichraytirilgan, EXIF’siz WEBP).
-  avatarFileId       String?    @unique @db.Uuid
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  avatarFileId       String?            @unique @db.Uuid
+  /// Tug‘ilgan sana (o‘quvchi — hujjatdagi aniq sana).
+  birthDate          DateTime?          @db.Date
+  /// Tug‘ilgan yil (o‘qituvchi ro‘yxatdan o‘tganda faqat yil so‘raladi; sana bo‘lsa undan olinadi).
+  birthYear          Int?
+  /// JSHSHIR (PINFL) — faqat shifrlangan holda saqlanadi.
+  pinflEncrypted     String?
+  /// JSHSHIR xeshi (HMAC): bitta shaxs ikki marta ro‘yxatdan o‘tmasligi uchun.
+  pinflHash          String?            @unique
+  /// O‘qituvchining mutaxassislik fani.
+  specialtySubjectId String?            @db.Uuid
+  registrationSource RegistrationSource @default(ADMIN)
+  /// O‘zi ro‘yxatdan o‘tgan hisobni tasdiqlash (o‘qituvchi).
+  approvedAt         DateTime?
+  approvedById       String?            @db.Uuid
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
   archivedAt         DateTime?
 
   roles                  RoleAssignment[]     @relation("RoleOwner")
@@ -257,6 +323,12 @@ model User {
   files                  FileAsset[]          @relation("FileOwner")
   avatarFile             FileAsset?           @relation("UserAvatar", fields: [avatarFileId], references: [id], onDelete: SetNull)
   unlockedAttempts       Attempt[]            @relation("AttemptUnlocker")
+  specialtySubject       Subject?             @relation("SpecialtySubject", fields: [specialtySubjectId], references: [id], onDelete: SetNull)
+  approvedBy             User?                @relation("UserApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedUsers          User[]               @relation("UserApprover")
+  teacherProfile         TeacherProfile?
+  teacherCredentials     TeacherCredential[]
+  mentorships            TeacherMentorship[]
   notifications          Notification[]
   exportJobs             ExportJob[]
   importBatches          ImportBatch[]
@@ -264,6 +336,7 @@ model User {
 
   @@index([status])
   @@index([lastName, firstName])
+  @@index([registrationSource, createdAt])
 }
 
 /// Bir odamga zarur bo‘lsa bir nechta rol biriktiriladi.
@@ -355,6 +428,8 @@ model Subject {
   tests               TestTemplate[]
   sessions            AssessmentSession[]
   portfolioItems      PortfolioItem[]
+  specialists         User[]               @relation("SpecialtySubject")
+  teacherCredentials  TeacherCredential[]
 }
 
 /// Sinfga a’zolik o‘quv yili va amal qilish sanalari bilan yuritiladi.
@@ -779,11 +854,12 @@ model PortfolioItem {
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
-  owner        User              @relation("PortfolioOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  reviewer     User?             @relation("PortfolioReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
-  subject      Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  evidenceFile FileAsset?        @relation(fields: [evidenceFileId], references: [id], onDelete: SetNull)
+  owner        User                @relation("PortfolioOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  reviewer     User?               @relation("PortfolioReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  subject      Subject?            @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  evidenceFile FileAsset?          @relation(fields: [evidenceFileId], references: [id], onDelete: SetNull)
   reviews      PortfolioReview[]
+  mentorships  TeacherMentorship[]
 
   @@index([ownerId, status])
   @@index([status])
@@ -818,9 +894,84 @@ model FileAsset {
   createdAt    DateTime   @default(now())
   deletedAt    DateTime?
 
-  owner          User            @relation("FileOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  owner          User               @relation("FileOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   portfolioItems PortfolioItem[]
-  avatarOf       User?           @relation("UserAvatar")
+  avatarOf       User?              @relation("UserAvatar")
+  /// O‘qituvchi ma’lumotnomasidagi hujjatlar (toifa, ilmiy daraja diplomi, sertifikatlar).
+  categoryOf     TeacherProfile?    @relation("TeacherCategoryFile")
+  degreeOf       TeacherProfile?    @relation("TeacherDegreeFile")
+  credentialOf   TeacherCredential?
+}
+
+// ============================================================ O‘qituvchi ma’lumotnomasi
+
+/// O‘qituvchining ma’lumotnomasi: ma’lumoti, ilmiy darajasi va malaka toifasi.
+model TeacherProfile {
+  userId            String          @id @db.Uuid
+  /// Tamomlagan oliy ta’lim muassasasi (qo‘lda yoziladi).
+  university        String?
+  graduationYear    Int?
+  academicDegree    AcademicDegree  @default(NONE)
+  /// Ilmiy daraja diplomi (ixtiyoriy).
+  degreeFileId      String?         @unique @db.Uuid
+  category          TeacherCategory @default(NONE)
+  /// Toifa berilgan sana (toifa 5 yil amal qiladi).
+  categoryAwardedOn DateTime?       @db.Date
+  /// Toifa to‘g‘risidagi hujjat — toifa belgilangan bo‘lsa majburiy.
+  categoryFileId    String?         @unique @db.Uuid
+  updatedAt         DateTime        @updatedAt
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  degreeFile   FileAsset? @relation("TeacherDegreeFile", fields: [degreeFileId], references: [id], onDelete: SetNull)
+  categoryFile FileAsset? @relation("TeacherCategoryFile", fields: [categoryFileId], references: [id], onDelete: SetNull)
+}
+
+/// Ma’lumotnomadagi sertifikat, kurs yoki tanlov yozuvi.
+model TeacherCredential {
+  id                String                @id @default(uuid(7)) @db.Uuid
+  teacherId         String                @db.Uuid
+  kind              TeacherCredentialKind
+  /// Masalan: “IELTS”, “Milliy sertifikat”, kurs yoki tanlov nomi.
+  title             String
+  /// Milliy sertifikat fani.
+  subjectId         String?               @db.Uuid
+  /// Beruvchi tashkilot.
+  provider          String?
+  /// Daraja yoki natija: “A+”, “C1”, “7.5”, “Band 4”, “1-o‘rin”.
+  level             String?
+  /// Ball (milliy sertifikat, IELTS/TOEFL va h.k.).
+  score             Decimal?              @db.Decimal(7, 2)
+  certificateNumber String?
+  issuedOn          DateTime?             @db.Date
+  validUntil        DateTime?             @db.Date
+  /// Turga xos qo‘shimcha maydonlar (masalan, xalqaro sertifikat turi).
+  details           Json?
+  /// Tasdiqlovchi hujjat (sertifikat/diplom) — sertifikatlarda majburiy.
+  fileId            String?               @unique @db.Uuid
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  teacher User       @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject?   @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  file    FileAsset? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([teacherId, kind])
+}
+
+/// O‘qituvchi o‘quvchi sertifikatiga ustozlik qilgani — bir tugma bilan, tekshiruvsiz qayd etiladi
+/// (sertifikat o‘quvchi portfoliosida tasdiqlangan va o‘qituvchi mutaxassisligiga mos bo‘lsa).
+model TeacherMentorship {
+  id              String         @id @default(uuid(7)) @db.Uuid
+  teacherId       String         @db.Uuid
+  portfolioItemId String         @db.Uuid
+  kind            MentorshipKind
+  createdAt       DateTime       @default(now())
+
+  teacher       User          @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  portfolioItem PortfolioItem @relation(fields: [portfolioItemId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, portfolioItemId])
+  @@index([portfolioItemId])
 }
 
 // ============================================================ Bildirishnoma, eksport, import, audit

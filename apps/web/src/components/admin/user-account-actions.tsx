@@ -6,7 +6,7 @@ import { Archive, ImageOff, KeyRound, LockOpen, LogOut, Power, PowerOff, Trash2 
 import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { USER_STATUSES, setUserStatusSchema, type UserStatus } from '@ijod/shared';
+import { MANUAL_USER_STATUSES, setUserStatusSchema } from '@ijod/shared';
 import type { z } from 'zod';
 import { UserStatusBadge } from '@/components/status';
 import { Button } from '@/components/ui/button';
@@ -21,8 +21,11 @@ import { FormDialog, applyServerErrors } from './form-dialog';
 import { adminKeys, useInvalidate } from './queries';
 import { TemporaryPasswordDialog, accountRoleLabel } from './temporary-password-dialog';
 
+/** Qo‘lda o‘zgartiriladigan holatlar (“tasdiq kutilmoqda” — faqat ro‘yxatdan o‘tishda). */
+export type ManualStatus = (typeof MANUAL_USER_STATUSES)[number];
+
 const STATUS_ACTIONS: Record<
-  UserStatus,
+  ManualStatus,
   { verb: string; title: string; explain: string; tone: 'primary' | 'danger'; icon: typeof Power }
 > = {
   ACTIVE: {
@@ -69,7 +72,7 @@ function StatusForm({
   onSubmit,
 }: {
   formId: string;
-  status: UserStatus;
+  status: ManualStatus;
   onSubmit: (values: z.output<typeof setUserStatusSchema>) => Promise<unknown>;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +106,7 @@ export function StatusDialog({
   onClose,
 }: {
   user: UserDetail;
-  status: UserStatus | null;
+  status: ManualStatus | null;
   onClose: () => void;
 }) {
   const formId = useId();
@@ -142,7 +145,7 @@ export function StatusCard({
 }: {
   user: UserDetail;
   disabled: boolean;
-  onChange: (status: UserStatus) => void;
+  onChange: (status: ManualStatus) => void;
 }) {
   return (
     <Card>
@@ -158,7 +161,7 @@ export function StatusCard({
           </p>
         )}
         <div className="flex flex-col gap-2">
-          {USER_STATUSES.filter((status) => status !== user.status).map((status) => {
+          {MANUAL_USER_STATUSES.filter((status) => status !== user.status).map((status) => {
             const action = STATUS_ACTIONS[status];
             const Icon = action.icon;
             return (

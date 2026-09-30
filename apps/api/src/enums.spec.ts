@@ -25,6 +25,11 @@ const pairs: [string, readonly string[], Record<string, string>][] = [
   ['ExportStatus', shared.EXPORT_STATUSES, prisma.ExportStatus],
   ['TestVisibility', shared.TEST_VISIBILITIES, prisma.TestVisibility],
   ['AttemptLockReason', shared.ATTEMPT_LOCK_REASONS, prisma.AttemptLockReason],
+  ['RegistrationSource', shared.REGISTRATION_SOURCES, prisma.RegistrationSource],
+  ['AcademicDegree', shared.ACADEMIC_DEGREES, prisma.AcademicDegree],
+  ['TeacherCategory', shared.TEACHER_CATEGORIES, prisma.TeacherCategory],
+  ['TeacherCredentialKind', shared.TEACHER_CREDENTIAL_KINDS, prisma.TeacherCredentialKind],
+  ['MentorshipKind', shared.MENTORSHIP_KINDS, prisma.MentorshipKind],
 ];
 
 describe('enumlar mosligi', () => {

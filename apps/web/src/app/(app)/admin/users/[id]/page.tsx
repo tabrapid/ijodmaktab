@@ -15,7 +15,6 @@ import {
   grantableRolesFor,
   updateUserSchema,
   type Role,
-  type UserStatus,
 } from '@ijod/shared';
 import type { z } from 'zod';
 import { EndEnrollmentDialog, EnrollDialog, TransferDialog } from '@/components/admin/enrollment-dialogs';
@@ -30,6 +29,7 @@ import {
   SecurityCard,
   StatusCard,
   StatusDialog,
+  type ManualStatus,
 } from '@/components/admin/user-account-actions';
 import { RequireRole } from '@/components/app-shell';
 import { Avatar } from '@/components/avatar';
@@ -474,7 +474,7 @@ function CredentialInfo({ user }: { user: UserDetail }) {
 function UserDetailView() {
   const { id } = useParams<{ id: string }>();
   const { data: me } = useMe();
-  const [statusTarget, setStatusTarget] = useState<UserStatus | null>(null);
+  const [statusTarget, setStatusTarget] = useState<ManualStatus | null>(null);
   const query = useQuery({ queryKey: adminKeys.user(id), queryFn: () => api.get<UserDetail>(`/users/${id}`) });
 
   if (query.isPending) return <PageLoader />;

@@ -20,8 +20,19 @@ import {
   ROLES,
   SCORE_VISIBILITIES,
   SHARE_PERMISSIONS,
+  MANUAL_USER_STATUSES,
+  REGISTRATION_SOURCES,
+  ACADEMIC_DEGREES,
+  TEACHER_CATEGORIES,
+  TEACHER_CREDENTIAL_KINDS,
+  TEACHER_CREDENTIAL_FILE_REQUIRED,
+  NATIONAL_TEACHER_CREDENTIAL_KINDS,
+  INTERNATIONAL_TEACHER_CREDENTIAL_KINDS,
   USER_STATUSES,
 } from './enums.js';
+import { UZBEK_NAME_MESSAGE, checkPinfl, cleanPinfl, isUzbekLatinName, normalizeUzbekName } from './identity.js';
+import { NATIONAL_CERTIFICATE_GRADES } from './portfolio.js';
+import { INTERNATIONAL_CERTIFICATE_TYPES } from './teacher.js';
 import { PORTFOLIO_CATEGORIES, isLegacyPortfolioDetails, parsePortfolioDetails } from './portfolio.js';
 import { hasAtMostTwoDecimals } from './scoring.js';
 import { MAX_QUESTION_POINTS } from './validation.js';
@@ -162,7 +173,8 @@ export const setRolesSchema = z.object({
 });
 
 export const setUserStatusSchema = z.object({
-  status: z.enum(USER_STATUSES),
+  /** “Tasdiq kutilmoqda” holati qo‘lda qo‘yilmaydi — faqat ro‘yxatdan o‘tishda. */
+  status: z.enum(MANUAL_USER_STATUSES),
   reason: optionalText(300),
 });
 
@@ -204,6 +216,232 @@ export const importMappingSchema = z.object({
   skipRows: z.array(z.number().int().min(1)).default([]),
 });
 export type ImportMappingInput = z.input<typeof importMappingSchema>;
+
+// ---------------------------------------------------------------- Ro‘yxatdan o‘tish
+
+/** Hujjatdagi ism, familiya yoki otasining ismi: o‘zbek lotin alifbosida, yagona ko‘rinishga keltiriladi. */
+export const uzbekNameField = (max = 80) =>
+  z
+    .string({ error: REQUIRED })
+    .transform(normalizeUzbekName)
+    .pipe(
+      z
+        .string()
+        .min(2, 'Kamida 2 ta harf')
+        .max(max, `Ko‘pi bilan ${max} ta belgi`)
+        .refine(isUzbekLatinName, UZBEK_NAME_MESSAGE),
+    );
+
+/** Ixtiyoriy ism maydoni (otasining ismi): bo‘sh satr `null`. */
+export const optionalUzbekNameField = (max = 80) =>
+  z
+    .string()
+    .nullish()
+    .transform((value) => (value && value.trim() ? normalizeUzbekName(value) : null))
+    .refine((value) => value === null || (value.length <= max && isUzbekLatinName(value)), UZBEK_NAME_MESSAGE);
+
+/** JSHSHIR: ID-karta bo‘lsa kiritiladi, tug‘ilganlik haqidagi guvohnoma bo‘lsa — bo‘sh qoldiriladi. */
+export const optionalPinfl = () =>
+  z
+    .string()
+    .nullish()
+    .transform((value) => (value && cleanPinfl(value) ? cleanPinfl(value) : null));
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const yearsAgoIso = (years: number) => {
+  const date = new Date();
+  date.setUTCFullYear(date.getUTCFullYear() - years);
+  return date.toISOString().slice(0, 10);
+};
+
+const passwordPair = {
+  password: newPasswordSchema,
+  confirmPassword: z.string({ error: REQUIRED }).min(1, REQUIRED),
+};
+
+/** O‘quvchining o‘zi ro‘yxatdan o‘tishi (ID-karta yoki tug‘ilganlik haqidagi guvohnoma asosida). */
+export const studentRegistrationSchema = z
+  .object({
+    lastName: uzbekNameField(),
+    firstName: uzbekNameField(),
+    middleName: optionalUzbekNameField(),
+    birthDate: isoDate(),
+    pinfl: optionalPinfl(),
+    classId: id(),
+    login: loginValue(),
+    ...passwordPair,
+  })
+  .superRefine((data, ctx) => {
+    if (data.password !== data.confirmPassword) {
+      ctx.addIssue({ code: 'custom', path: ['confirmPassword'], message: 'Parollar bir xil emas' });
+    }
+    if (data.birthDate > todayIso() || data.birthDate < yearsAgoIso(30) || data.birthDate > yearsAgoIso(8)) {
+      ctx.addIssue({ code: 'custom', path: ['birthDate'], message: 'Tug‘ilgan sana o‘quvchi yoshiga mos emas' });
+    }
+    if (data.pinfl) {
+      const check = checkPinfl(data.pinfl, data.birthDate);
+      if (!check.ok) ctx.addIssue({ code: 'custom', path: ['pinfl'], message: check.message });
+    }
+  });
+export type StudentRegistrationInput = z.input<typeof studentRegistrationSchema>;
+
+/** O‘qituvchining o‘zi ro‘yxatdan o‘tishi: hisob direktor o‘rinbosari tasdiqlagach ishlaydi. */
+export const teacherRegistrationSchema = z
+  .object({
+    lastName: uzbekNameField(),
+    firstName: uzbekNameField(),
+    middleName: optionalUzbekNameField(),
+    birthYear: z.coerce
+      .number({ error: 'Tug‘ilgan yilni kiriting' })
+      .int('Yil butun son bo‘lishi kerak')
+      .min(1940, 'Yil noto‘g‘ri')
+      .refine((year) => year <= new Date().getUTCFullYear() - 18, 'Yil noto‘g‘ri'),
+    specialtySubjectId: id(),
+    login: loginValue(),
+    ...passwordPair,
+  })
+  .superRefine((data, ctx) => {
+    if (data.password !== data.confirmPassword) {
+      ctx.addIssue({ code: 'custom', path: ['confirmPassword'], message: 'Parollar bir xil emas' });
+    }
+  });
+export type TeacherRegistrationInput = z.input<typeof teacherRegistrationSchema>;
+
+export const loginAvailabilityQuerySchema = z.object({ login: loginValue() });
+
+/** Ro‘yxatdan o‘tishni ochish yoki yopish (direktor o‘rinbosari). */
+export const registrationSettingsSchema = z
+  .object({
+    studentRegistrationOpen: z.boolean().optional(),
+    teacherRegistrationOpen: z.boolean().optional(),
+  })
+  .refine((data) => data.studentRegistrationOpen !== undefined || data.teacherRegistrationOpen !== undefined, {
+    message: 'Hech narsa o‘zgartirilmadi',
+  });
+
+/** Ro‘yxatdan o‘tgan o‘qituvchi arizasini rad etish (hisob o‘chiriladi). */
+export const registrationRejectSchema = z.object({ reason: optionalText(300) });
+
+export const registrationListQuerySchema = z.object({
+  /** Qaysi arizalar: tasdiq kutayotgan o‘qituvchilar yoki so‘nggi ro‘yxatdan o‘tgan o‘quvchilar. */
+  view: z.enum(['pending', 'students', 'teachers']).default('pending'),
+  /** So‘nggi necha kun ichida ro‘yxatdan o‘tganlar (o‘quvchi va o‘qituvchi ro‘yxatlari uchun). */
+  days: z.coerce.number().int().min(1).max(365).default(30),
+  ...paging,
+});
+
+// ---------------------------------------------------------------- O‘quvchilar (rahbariyat)
+
+/** Rahbariyatning “O‘quvchilar” bo‘limi: butun maktab o‘quvchilari (11-sinfdan 7-sinfgacha). */
+export const managementStudentsQuerySchema = z.object({
+  q: z.string().trim().max(100).optional(),
+  classId: id().optional(),
+  gradeLevel: z.coerce.number().int().min(1).max(11).optional(),
+  status: z.enum(USER_STATUSES).optional(),
+  source: z.enum(REGISTRATION_SOURCES).optional(),
+  /** Sinfga biriktirilmagan (joriy o‘quv yilida) o‘quvchilar. */
+  noClass: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(500),
+});
+export type ManagementStudentsQuery = z.input<typeof managementStudentsQuerySchema>;
+
+/** Sinf rahbarini tayinlash yoki olib tashlash (`null`). */
+export const homeroomAssignSchema = z.object({ teacherId: id().nullable() });
+
+/** O‘quvchining shaxsiy ma’lumotlarini tuzatish (rahbariyat): hujjatdagidek. */
+export const studentIdentityUpdateSchema = z
+  .object({
+    lastName: uzbekNameField().optional(),
+    firstName: uzbekNameField().optional(),
+    middleName: optionalUzbekNameField(),
+    birthDate: isoDate().nullish(),
+    /** `null` — o‘chirish; berilmasa o‘zgarmaydi. */
+    pinfl: optionalPinfl(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.pinfl) {
+      const check = checkPinfl(data.pinfl, data.birthDate ?? undefined);
+      if (!check.ok) ctx.addIssue({ code: 'custom', path: ['pinfl'], message: check.message });
+    }
+  });
+
+// ---------------------------------------------------------------- O‘qituvchi ma’lumotnomasi
+
+/** Ma’lumotnomaning asosiy qismi: ma’lumoti, ilmiy darajasi, malaka toifasi, mutaxassislik fani. */
+export const teacherProfileSchema = z
+  .object({
+    university: optionalText(300),
+    graduationYear: z.number().int().min(1950).max(2100).nullish(),
+    academicDegree: z.enum(ACADEMIC_DEGREES).default('NONE'),
+    degreeFileId: id().nullish(),
+    category: z.enum(TEACHER_CATEGORIES).default('NONE'),
+    categoryAwardedOn: isoDate().nullish(),
+    categoryFileId: id().nullish(),
+    specialtySubjectId: id().nullish(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.category !== 'NONE' && !data.categoryFileId) {
+      ctx.addIssue({ code: 'custom', path: ['categoryFileId'], message: 'Toifa to‘g‘risidagi hujjatni yuklang' });
+    }
+    if (data.categoryAwardedOn && data.categoryAwardedOn > todayIso()) {
+      ctx.addIssue({ code: 'custom', path: ['categoryAwardedOn'], message: 'Sana kelajakda bo‘lmaydi' });
+    }
+  });
+export type TeacherProfileInput = z.input<typeof teacherProfileSchema>;
+
+/** Ma’lumotnomadagi sertifikat, kurs yoki tanlov yozuvi (4–9-bandlar). */
+export const teacherCredentialSchema = z
+  .object({
+    kind: z.enum(TEACHER_CREDENTIAL_KINDS),
+    title: requiredText(200),
+    subjectId: id().nullish(),
+    provider: optionalText(200),
+    level: optionalText(60),
+    score: z.number().min(0).max(10_000).nullish(),
+    certificateNumber: optionalText(100),
+    issuedOn: isoDate().nullish(),
+    validUntil: isoDate().nullish(),
+    /** Xalqaro sertifikat turi (IELTS, CEFR, TKT …). */
+    certificateType: z.enum(INTERNATIONAL_CERTIFICATE_TYPES).nullish(),
+    fileId: id().nullish(),
+  })
+  .superRefine((data, ctx) => {
+    if (TEACHER_CREDENTIAL_FILE_REQUIRED[data.kind] && !data.fileId) {
+      ctx.addIssue({ code: 'custom', path: ['fileId'], message: 'Sertifikat yoki diplom faylini yuklang' });
+    }
+    if (NATIONAL_TEACHER_CREDENTIAL_KINDS.includes(data.kind)) {
+      if (!data.subjectId) ctx.addIssue({ code: 'custom', path: ['subjectId'], message: 'Fanni tanlang' });
+      if (!data.level || !(NATIONAL_CERTIFICATE_GRADES as readonly string[]).includes(data.level)) {
+        ctx.addIssue({ code: 'custom', path: ['level'], message: 'Darajani tanlang (A+ … C)' });
+      }
+    }
+    if (INTERNATIONAL_TEACHER_CREDENTIAL_KINDS.includes(data.kind) && !data.certificateType) {
+      ctx.addIssue({ code: 'custom', path: ['certificateType'], message: 'Sertifikat turini tanlang' });
+    }
+    if (data.issuedOn && data.issuedOn > todayIso()) {
+      ctx.addIssue({ code: 'custom', path: ['issuedOn'], message: 'Sana kelajakda bo‘lmaydi' });
+    }
+    if (data.issuedOn && data.validUntil && data.validUntil < data.issuedOn) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['validUntil'],
+        message: 'Amal qilish muddati berilgan sanadan keyin bo‘lsin',
+      });
+    }
+  });
+export type TeacherCredentialInput = z.input<typeof teacherCredentialSchema>;
+
+/** O‘quvchi sertifikatiga ustozlik qilganini bir tugma bilan qayd etish. */
+export const mentorshipCreateSchema = z.object({ portfolioItemId: id() });
+
+/** Ustozlik uchun o‘quvchi qidirish. */
+export const mentorshipStudentSearchSchema = z.object({
+  q: z.string().trim().min(2, 'Kamida 2 ta harf').max(100),
+});
 
 // ---------------------------------------------------------------- Maktab tuzilmasi
 

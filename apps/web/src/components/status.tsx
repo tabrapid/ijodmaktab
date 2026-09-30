@@ -55,7 +55,12 @@ export const PortfolioStatusBadge = ({ status }: { status: PortfolioStatus }) =>
   <Badge tone={PORTFOLIO_TONES[status]}>{PORTFOLIO_STATUS_LABELS[status]}</Badge>
 );
 
-const USER_TONES: Record<UserStatus, BadgeTone> = { ACTIVE: 'green', DEACTIVATED: 'amber', ARCHIVED: 'gray' };
+const USER_TONES: Record<UserStatus, BadgeTone> = {
+  ACTIVE: 'green',
+  DEACTIVATED: 'amber',
+  ARCHIVED: 'gray',
+  PENDING: 'violet',
+};
 
 export const UserStatusBadge = ({ status }: { status: UserStatus }) => (
   <Badge tone={USER_TONES[status]}>{USER_STATUS_LABELS[status]}</Badge>

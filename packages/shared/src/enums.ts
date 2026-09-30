@@ -20,14 +20,31 @@ export const ROLE_LABELS: Record<Role, string> = {
 /** Rahbariyat va administrator bitta paneldan foydalanadi, lekin ruxsatlari alohida. */
 export const STAFF_ROLES: readonly Role[] = ['TEACHER', 'DEPUTY', 'ADMIN', 'SUPER_ADMIN'];
 
-export const USER_STATUSES = ['ACTIVE', 'DEACTIVATED', 'ARCHIVED'] as const;
+export const USER_STATUSES = ['ACTIVE', 'DEACTIVATED', 'ARCHIVED', 'PENDING'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
 export const USER_STATUS_LABELS: Record<UserStatus, string> = {
   ACTIVE: 'Faol',
   DEACTIVATED: 'Faolsizlantirilgan',
   ARCHIVED: 'Arxivlangan',
+  PENDING: 'Tasdiq kutilmoqda',
 };
+
+/** Qo‘lda tanlanadigan holatlar: “tasdiq kutilmoqda” faqat ro‘yxatdan o‘tishda paydo bo‘ladi. */
+export const MANUAL_USER_STATUSES = ['ACTIVE', 'DEACTIVATED', 'ARCHIVED'] as const satisfies readonly UserStatus[];
+
+/** Hisob qanday yaratilgan. */
+export const REGISTRATION_SOURCES = ['ADMIN', 'IMPORT', 'SELF'] as const;
+export type RegistrationSource = (typeof REGISTRATION_SOURCES)[number];
+export const REGISTRATION_SOURCE_LABELS: Record<RegistrationSource, string> = {
+  ADMIN: 'Rahbariyat yoki administrator yaratgan',
+  IMPORT: 'Excel import',
+  SELF: 'O‘zi ro‘yxatdan o‘tgan',
+};
+
+/** Maktab sinflari: 7–11-sinflar, har yili uchta parallel (A, B, D — o‘zbek alifbosi tartibida). */
+export const SCHOOL_GRADE_LEVELS = [7, 8, 9, 10, 11] as const;
+export const SCHOOL_CLASS_SECTIONS = ['A', 'B', 'D'] as const;
 
 // ---------------------------------------------------------------- Savollar
 
@@ -348,8 +365,85 @@ export const NOTIFICATION_TYPES = [
   'ATTEMPT_LOCKED',
   'QUESTION_SCHOOL_APPROVED',
   'QUESTION_SCHOOL_REJECTED',
+  /** O‘qituvchi ro‘yxatdan o‘tdi — o‘rinbosar tasdig‘i kerak. */
+  'REGISTRATION_PENDING',
+  /** O‘qituvchi hisobi tasdiqlandi. */
+  'ACCOUNT_APPROVED',
+  /** O‘qituvchi o‘quvchi sertifikatiga ustoz sifatida qayd etildi. */
+  'MENTORSHIP_ADDED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// ---------------------------------------------------------------- O‘qituvchi ma’lumotnomasi
+
+/** Ilmiy daraja. 2017-yildan: falsafa doktori (PhD) va fan doktori (DSc); fan nomzodi — avvalgi tizim. */
+export const ACADEMIC_DEGREES = ['NONE', 'CANDIDATE', 'PHD', 'DSC'] as const;
+export type AcademicDegree = (typeof ACADEMIC_DEGREES)[number];
+export const ACADEMIC_DEGREE_LABELS: Record<AcademicDegree, string> = {
+  NONE: 'Ilmiy darajasi yo‘q',
+  CANDIDATE: 'Fan nomzodi',
+  PHD: 'Falsafa doktori (PhD)',
+  DSC: 'Fan doktori (DSc)',
+};
+
+/** Pedagogning malaka toifasi (attestatsiya: oliy — 80+, birinchi — 70+, ikkinchi — 60+, mutaxassis — 55–59 ball). */
+export const TEACHER_CATEGORIES = ['NONE', 'SPECIALIST', 'SECOND', 'FIRST', 'HIGHEST'] as const;
+export type TeacherCategory = (typeof TEACHER_CATEGORIES)[number];
+export const TEACHER_CATEGORY_LABELS: Record<TeacherCategory, string> = {
+  NONE: 'Toifasiz',
+  SPECIALIST: 'Mutaxassis',
+  SECOND: 'Ikkinchi toifa',
+  FIRST: 'Birinchi toifa',
+  HIGHEST: 'Oliy toifa',
+};
+/** Malaka toifasi amal qilish muddati (yil). */
+export const TEACHER_CATEGORY_VALID_YEARS = 5;
+
+/** Ma’lumotnomadagi hujjat turlari — o‘rinbosar talab qilgan tartibda (4–9-bandlar). */
+export const TEACHER_CREDENTIAL_KINDS = [
+  'SPECIALTY_NATIONAL',
+  'SPECIALTY_INTERNATIONAL',
+  'OTHER_NATIONAL',
+  'OTHER_INTERNATIONAL',
+  'PROFESSIONAL_DEVELOPMENT',
+  'CONTEST',
+] as const;
+export type TeacherCredentialKind = (typeof TEACHER_CREDENTIAL_KINDS)[number];
+export const TEACHER_CREDENTIAL_KIND_LABELS: Record<TeacherCredentialKind, string> = {
+  SPECIALTY_NATIONAL: 'Mutaxassislik bo‘yicha milliy sertifikat',
+  SPECIALTY_INTERNATIONAL: 'Mutaxassislik bo‘yicha xalqaro sertifikat',
+  OTHER_NATIONAL: 'Nomutaxassislik fanlari bo‘yicha sertifikat',
+  OTHER_INTERNATIONAL: 'Nomutaxassislik fanlari bo‘yicha xalqaro sertifikat',
+  PROFESSIONAL_DEVELOPMENT: 'Mustaqil malaka oshirish kurslarida ishtirok',
+  CONTEST: 'Tanlov, ko‘rgazma, ko‘rik-tanlov va musobaqalarda ishtirok',
+};
+/** Tasdiqlovchi hujjat (sertifikat yoki diplom) majburiy bo‘lgan turlar. */
+export const TEACHER_CREDENTIAL_FILE_REQUIRED: Record<TeacherCredentialKind, boolean> = {
+  SPECIALTY_NATIONAL: true,
+  SPECIALTY_INTERNATIONAL: true,
+  OTHER_NATIONAL: true,
+  OTHER_INTERNATIONAL: true,
+  PROFESSIONAL_DEVELOPMENT: false,
+  CONTEST: false,
+};
+/** Milliy sertifikat turlari (fani va darajasi A+…C bilan). */
+export const NATIONAL_TEACHER_CREDENTIAL_KINDS: readonly TeacherCredentialKind[] = [
+  'SPECIALTY_NATIONAL',
+  'OTHER_NATIONAL',
+];
+/** Xalqaro sertifikat turlari (IELTS, CEFR, TKT va h.k.). */
+export const INTERNATIONAL_TEACHER_CREDENTIAL_KINDS: readonly TeacherCredentialKind[] = [
+  'SPECIALTY_INTERNATIONAL',
+  'OTHER_INTERNATIONAL',
+];
+
+/** O‘qituvchi ustozlik qilgan o‘quvchi sertifikati turi. */
+export const MENTORSHIP_KINDS = ['NATIONAL', 'INTERNATIONAL'] as const;
+export type MentorshipKind = (typeof MENTORSHIP_KINDS)[number];
+export const MENTORSHIP_KIND_LABELS: Record<MentorshipKind, string> = {
+  NATIONAL: 'O‘quvchilarining milliy sertifikatlari',
+  INTERNATIONAL: 'O‘quvchilarining xalqaro sertifikatlari',
+};
 
 // ---------------------------------------------------------------- Hisoblar va profil rasmlari
 

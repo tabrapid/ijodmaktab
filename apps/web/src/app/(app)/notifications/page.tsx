@@ -14,10 +14,13 @@ import {
   ClipboardList,
   Download,
   FolderUp,
+  GraduationCap,
   RefreshCw,
   ShieldAlert,
   Timer,
   Undo2,
+  UserCheck,
+  UserPlus,
   type LucideIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -58,6 +61,9 @@ const ICONS: Record<NotificationType, LucideIcon> = {
   QUESTION_SCHOOL_APPROVED: BadgeCheck,
   QUESTION_SCHOOL_REJECTED: Undo2,
   ATTEMPT_LOCKED: ShieldAlert,
+  REGISTRATION_PENDING: UserPlus,
+  ACCOUNT_APPROVED: UserCheck,
+  MENTORSHIP_ADDED: GraduationCap,
 };
 
 const iconFor = (type: string): LucideIcon => (Object.hasOwn(ICONS, type) ? ICONS[type as NotificationType] : Bell);
