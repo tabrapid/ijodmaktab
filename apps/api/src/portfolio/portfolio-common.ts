@@ -32,6 +32,11 @@ export const itemInclude = {
   reviewer: { select: { id: true, lastName: true, firstName: true, middleName: true } },
   subject: { select: { id: true, name: true } },
   evidenceFile: { select: { id: true, originalName: true, mimeType: true, sizeBytes: true } },
+  /** Sertifikatga ustozlik qilgan o‘qituvchilar (ma’lumotnomaning 10–11-bandlari). */
+  mentorships: {
+    select: { teacher: { select: { id: true, lastName: true, firstName: true, middleName: true } } },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  },
 } satisfies Prisma.PortfolioItemInclude;
 
 export type ItemWithRelations = Prisma.PortfolioItemGetPayload<{ include: typeof itemInclude }>;

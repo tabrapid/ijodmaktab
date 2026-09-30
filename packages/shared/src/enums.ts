@@ -46,6 +46,11 @@ export const REGISTRATION_SOURCE_LABELS: Record<RegistrationSource, string> = {
 export const SCHOOL_GRADE_LEVELS = [7, 8, 9, 10, 11] as const;
 export const SCHOOL_CLASS_SECTIONS = ['A', 'B', 'D'] as const;
 
+/** O‘zi ro‘yxatdan o‘tgan o‘quvchi ro‘yxatlarda shuncha kun “Yangi” belgisi bilan ko‘rsatiladi. */
+export const NEW_STUDENT_BADGE_DAYS = 14;
+/** Sinf kartasidagi “+N yangi”: so‘nggi shuncha kunda o‘zi ro‘yxatdan o‘tgan o‘quvchilar. */
+export const NEW_STUDENT_CLASS_DAYS = 30;
+
 // ---------------------------------------------------------------- Savollar
 
 export const CATEGORIES = ['KNOWLEDGE', 'APPLICATION', 'REASONING'] as const;
@@ -371,6 +376,8 @@ export const NOTIFICATION_TYPES = [
   'ACCOUNT_APPROVED',
   /** O‘qituvchi o‘quvchi sertifikatiga ustoz sifatida qayd etildi. */
   'MENTORSHIP_ADDED',
+  /** O‘qituvchi sinf rahbari etib tayinlandi. */
+  'HOMEROOM_ASSIGNED',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

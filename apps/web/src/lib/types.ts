@@ -26,6 +26,7 @@ import type {
   QuestionType,
   QuestionVisibility,
   Ratio,
+  RegistrationSource,
   ReviewVisibility,
   Role,
   ScoreVisibility,
@@ -1041,4 +1042,62 @@ export interface StudentResultsView {
     categories: ({ category: Category } & Ratio)[];
   };
   results: StudentResultItem[];
+}
+
+// ------------------------------------------------------------ Ro‘yxatdan o‘tish
+
+export interface RegistrationClassOption {
+  id: string;
+  name: string;
+  gradeLevel: number;
+  section: string;
+}
+
+/** Ochiq ro‘yxatdan o‘tish sahifasi uchun: joriy o‘quv yili sinflari (11 → 7) va faol fanlar. */
+export interface RegistrationOptions {
+  school: { name: string };
+  student: { open: boolean; classes: RegistrationClassOption[] };
+  teacher: { open: boolean; subjects: Ref[] };
+}
+
+export interface LoginAvailability {
+  available: boolean;
+  /** Login band bo‘lsa — bo‘sh variant, masalan “ali.valiyev2”. */
+  suggestion?: string;
+}
+
+export interface RegistrationSettings {
+  studentRegistrationOpen: boolean;
+  teacherRegistrationOpen: boolean;
+}
+
+interface RegisteredAccountBase {
+  id: string;
+  fullName: string;
+  status: UserStatus;
+  createdAt: string;
+  /** Direktor o‘rinbosari bu hisobni boshqara oladimi (parol, holat). */
+  manageable: boolean;
+  /** Faqat boshqara oladigan hisoblarda. */
+  login: string | null;
+}
+
+/** O‘zi ro‘yxatdan o‘tgan o‘quvchi (JSHSHIRning o‘zi emas, faqat kiritilgan-kiritilmagani). */
+export interface RegisteredStudentItem extends RegisteredAccountBase {
+  classId: string | null;
+  className: string | null;
+  birthDate: string | null;
+  hasPinfl: boolean;
+}
+
+/** O‘zi ro‘yxatdan o‘tgan o‘qituvchi (tasdiq kutayotgan yoki tasdiqlangan). */
+export interface RegisteredTeacherItem extends RegisteredAccountBase {
+  birthYear: number | null;
+  specialtySubject: Ref | null;
+  approvedAt: string | null;
+  approvedBy: PersonRef | null;
+}
+
+export interface RegistrationPage<T> extends Page<T> {
+  counts: { pending: number };
 }

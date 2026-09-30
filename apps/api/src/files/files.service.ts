@@ -5,7 +5,7 @@ import type { Response } from 'express';
 import { fileTypeFromBuffer } from 'file-type';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
-import { isStaff } from '../common/auth-user.js';
+import { isLeadership, isStaff } from '../common/auth-user.js';
 import { badRequest, notFound } from '../common/errors.js';
 import { StorageService } from '../common/storage.service.js';
 import { AppConfig } from '../config/app-config.js';
@@ -54,7 +54,7 @@ export class FilesService {
 
   /**
    * Hech bir portfolio yozuviga biriktirilmagan eski fayllarni ombordan o‘chiradi (yozuv “o‘chirilgan” deb belgilanadi).
-   * Joriy profil rasmlari yetim hisoblanmaydi.
+   * Joriy profil rasmlari va o‘qituvchi ma’lumotnomasidagi hujjatlar yetim hisoblanmaydi.
    */
   async cleanupOrphans(now = new Date()) {
     const orphans = await this.prisma.fileAsset.findMany({
@@ -62,6 +62,9 @@ export class FilesService {
         deletedAt: null,
         portfolioItems: { none: {} },
         avatarOf: null,
+        categoryOf: null,
+        degreeOf: null,
+        credentialOf: null,
         OR: [
           { status: 'CLEAN', createdAt: { lt: new Date(now.getTime() - ORPHAN_TTL_MS) } },
           { status: 'QUARANTINED', createdAt: { lt: new Date(now.getTime() - QUARANTINE_TTL_MS) } },
@@ -141,8 +144,10 @@ export class FilesService {
    * aks holda fayl biriktirilgan portfolio yozuvlaridan birini ko‘ra oladigan kishi (portfolio ko‘rish
    * qoidasining o‘zi: qoralama faqat egasiga, tekshiruvchi — qolganlarini, boshqa xodim — tasdiqlangan
    * “maktab xodimlari” yozuvini). Hech bir yozuvga biriktirilmagan yuklamani faqat egasi ko‘radi.
+   * O‘qituvchi ma’lumotnomasidagi hujjat (toifa, diplom, sertifikat) — faqat egasi va rahbariyatga.
    */
-  private async canRead(viewer: AuthUser, fileId: string, ownerId: string, isAvatar: boolean) {
+  private async canRead(viewer: AuthUser, fileId: string, ownerId: string, isAvatar: boolean, isReference = false) {
+    if (isReference) return ownerId === viewer.id || isLeadership(viewer);
     if (isAvatar) return true;
     if (ownerId === viewer.id) return true;
     if (!isStaff(viewer)) return false;
@@ -155,14 +160,20 @@ export class FilesService {
   async download(viewer: AuthUser, id: string, res: Response) {
     const asset = await this.prisma.fileAsset.findUnique({
       where: { id },
-      include: { avatarOf: { select: { id: true } } },
+      include: {
+        avatarOf: { select: { id: true } },
+        categoryOf: { select: { userId: true } },
+        degreeOf: { select: { userId: true } },
+        credentialOf: { select: { id: true } },
+      },
     });
     const isAvatar = Boolean(asset?.avatarOf);
+    const isReference = Boolean(asset?.categoryOf || asset?.degreeOf || asset?.credentialOf);
     if (
       !asset ||
       asset.deletedAt ||
       asset.status !== 'CLEAN' ||
-      !(await this.canRead(viewer, id, asset.ownerId, isAvatar))
+      !(await this.canRead(viewer, id, asset.ownerId, isAvatar, isReference))
     ) {
       throw notFound('Fayl');
     }

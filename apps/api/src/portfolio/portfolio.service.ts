@@ -138,6 +138,8 @@ export class PortfolioService {
         roles: owner.roles.map((entry) => entry.role as Role),
         avatarUrl: avatarUrlOf(owner.avatarFileId),
       },
+      /** Ustoz sifatida qayd etilgan o‘qituvchilar. */
+      mentors: item.mentorships.map((entry) => ({ id: entry.teacher.id, fullName: fullName(entry.teacher) })),
       isMine: item.ownerId === scope.viewer.id,
       canReview: item.status === 'SUBMITTED' && this.portfolioAccess.canReview(scope, item),
       createdAt: item.createdAt,
@@ -466,10 +468,20 @@ export class PortfolioService {
     if (input.evidenceFileId) {
       const file = await this.prisma.fileAsset.findUnique({
         where: { id: input.evidenceFileId },
-        select: { ownerId: true, status: true, deletedAt: true, avatarOf: { select: { id: true } } },
+        select: {
+          ownerId: true,
+          status: true,
+          deletedAt: true,
+          avatarOf: { select: { id: true } },
+          categoryOf: { select: { userId: true } },
+          degreeOf: { select: { userId: true } },
+          credentialOf: { select: { id: true } },
+        },
       });
-      // Profil rasmi dalil sifatida ishlatilmaydi (u boshqa ruxsat qoidalari bilan ochiladi).
-      if (!file || file.ownerId !== viewer.id || file.status !== 'CLEAN' || file.deletedAt || file.avatarOf) {
+      // Profil rasmi va o‘qituvchi ma’lumotnomasidagi hujjat dalil sifatida ishlatilmaydi (ular boshqa
+      // ruxsat qoidalari bilan ochiladi).
+      const reference = Boolean(file?.categoryOf || file?.degreeOf || file?.credentialOf);
+      if (!file || file.ownerId !== viewer.id || file.status !== 'CLEAN' || file.deletedAt || file.avatarOf || reference) {
         throw notFound('Fayl');
       }
     }

@@ -3,6 +3,7 @@
  * (qaysi sertifikat qaysi fanga tegishli ekani).
  */
 import type { MentorshipKind, PortfolioItemType } from './enums.js';
+import { TEACHER_CATEGORY_VALID_YEARS } from './enums.js';
 import { normalizeForSearch } from './text.js';
 
 /**
@@ -95,4 +96,48 @@ export function certificateSubjectNames(type: PortfolioItemType, details: unknow
 export function certificateMatchesSpecialty(type: PortfolioItemType, details: unknown, specialty: string): boolean {
   if (!mentorshipKindOf(type)) return false;
   return certificateSubjectNames(type, details).some((name) => subjectNamesMatch(name, specialty));
+}
+
+// ---------------------------------------------------------------- Malaka toifasi muddati
+
+/** Toifa muddati tugashidan shuncha oy oldin ogohlantiriladi. */
+export const TEACHER_CATEGORY_WARNING_MONTHS = 6;
+
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+/**
+ * “YYYY-MM-DD” sanaga oy qo‘shadi (manfiy — ayiradi). Oyda bunday kun bo‘lmasa, oyning oxirgi kuni
+ * olinadi: 29-fevral + 1 yil → 28-fevral.
+ */
+export function addMonthsToIsoDate(value: string, months: number): string {
+  const match = ISO_DATE.exec(value);
+  if (!match) throw new Error(`Sana YYYY-MM-DD ko‘rinishida emas: ${value}`);
+  const total = Number(match[1]) * 12 + (Number(match[2]) - 1) + months;
+  const year = Math.floor(total / 12);
+  const month = total - year * 12 + 1;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${year}-${pad2(month)}-${pad2(Math.min(Number(match[3]), lastDay))}`;
+}
+
+/** Toifa amal qilish muddati: berilgan sanadan 5 yil (“YYYY-MM-DD”). */
+export function teacherCategoryValidUntil(awardedOn: string): string {
+  return addMonthsToIsoDate(awardedOn, TEACHER_CATEGORY_VALID_YEARS * 12);
+}
+
+export interface TeacherCategoryValidity {
+  /** Oxirgi amal qiladigan kun. */
+  validUntil: string;
+  /** Muddati o‘tgan (bugun `validUntil` dan keyin). */
+  expired: boolean;
+  /** Muddati tugashiga 6 oydan kam qolgan (hali o‘tmagan). */
+  expiresSoon: boolean;
+}
+
+/** Toifa holati berilgan kunga (“YYYY-MM-DD”, maktab vaqti bo‘yicha) nisbatan. */
+export function teacherCategoryValidity(awardedOn: string, today: string): TeacherCategoryValidity {
+  const validUntil = teacherCategoryValidUntil(awardedOn);
+  const expired = today > validUntil;
+  const expiresSoon = !expired && today >= addMonthsToIsoDate(validUntil, -TEACHER_CATEGORY_WARNING_MONTHS);
+  return { validUntil, expired, expiresSoon };
 }

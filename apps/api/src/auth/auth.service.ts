@@ -72,7 +72,8 @@ export class AuthService {
     }
 
     const roles = user.roles.map((assignment) => assignment.role as Role);
-    const actor = { id: user.id, roles };
+    // Tasdiq kutayotgan hisob audit yozuvlarida muallif bo‘lmaydi: ariza rad etilsa, hisob o‘chiriladi.
+    const actor = user.status === 'PENDING' ? null : { id: user.id, roles };
     const isSuperAdmin = roles.includes('SUPER_ADMIN');
 
     // Super admin hisobi faqat alohida kirish manzilidan, boshqalar esa faqat oddiy kirishdan.
@@ -109,6 +110,20 @@ export class AuthService {
       );
       if (lockedUntil) throw accountLocked(lockedUntil);
       throw invalidCredentials();
+    }
+
+    // Holat faqat parol to‘g‘ri bo‘lgandan keyin aytiladi (noto‘g‘ri parolda — umumiy xabar).
+    if (user.status === 'PENDING') {
+      await this.audit.log(
+        'auth.login_failed',
+        { type: 'User', id: user.id },
+        { realm, reason: 'pending' },
+        { actor },
+      );
+      throw forbidden(
+        'Hisobingiz direktor o‘rinbosari tasdig‘ini kutmoqda. Tasdiqlangach kira olasiz.',
+        'ACCOUNT_PENDING',
+      );
     }
 
     if (user.status !== 'ACTIVE') {

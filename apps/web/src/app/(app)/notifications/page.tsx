@@ -16,6 +16,7 @@ import {
   FolderUp,
   GraduationCap,
   RefreshCw,
+  School,
   ShieldAlert,
   Timer,
   Undo2,
@@ -64,6 +65,7 @@ const ICONS: Record<NotificationType, LucideIcon> = {
   REGISTRATION_PENDING: UserPlus,
   ACCOUNT_APPROVED: UserCheck,
   MENTORSHIP_ADDED: GraduationCap,
+  HOMEROOM_ASSIGNED: School,
 };
 
 const iconFor = (type: string): LucideIcon => (Object.hasOwn(ICONS, type) ? ICONS[type as NotificationType] : Bell);

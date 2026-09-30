@@ -357,10 +357,11 @@ export const studentIdentityUpdateSchema = z
   .object({
     lastName: uzbekNameField().optional(),
     firstName: uzbekNameField().optional(),
-    middleName: optionalUzbekNameField(),
+    // `.optional()`: berilmagan maydon natijada ham bo‘lmaydi (aks holda `null` bo‘lib, o‘chirib yuborardi).
+    middleName: optionalUzbekNameField().optional(),
     birthDate: isoDate().nullish(),
     /** `null` — o‘chirish; berilmasa o‘zgarmaydi. */
-    pinfl: optionalPinfl(),
+    pinfl: optionalPinfl().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.pinfl) {
